@@ -45,12 +45,16 @@ public final class MedicalProfile {
     /** Client-provided targeting hint (nullable): the limb the player selected in the UI. Transient. */
     private transient LimbType preferredLimb;
 
-    // --- Transient overdose-blackout tracking. Deliberately NOT written to / read from NBT: a blackout is
-    //     a live timed state driven by the engine each tick and must never survive a save/reload or clone.
-    //     drugLoad (above) IS persisted; the derived blackout is recomputed from it on the next injection.
-    /** Game time at which the current blackout ends ({@code 0} = not blacked out). Transient. */
+    // --- Transient overdose-blackout tracking. These are the INTERNAL "overdose" CAUSE markers of the single
+    //     externally-visible UNCONSCIOUS state (as opposed to a bleeding-out knockdown, marked by
+    //     knockdownSinceTick): while blackoutActive is set, Physiology raises the state to UNCONSCIOUS and the
+    //     engine runs a WAKE timer (recover) rather than a death timer. Deliberately NOT written to / read
+    //     from NBT: a blackout is a live timed state driven by the engine each tick and must never survive a
+    //     save/reload or clone. drugLoad (above) IS persisted; the derived blackout is recomputed from it on
+    //     the next injection.
+    /** Game time at which the current overdose blackout ends ({@code 0} = not blacked out). Transient. */
     private transient long blackoutUntilTick;
-    /** Whether the player is currently blacked out; set by the engine each tick, read by Physiology. Transient. */
+    /** Whether the player is currently overdose-unconscious; set by the engine each tick, read by Physiology. Transient. */
     private transient boolean blackoutActive;
 
     // --- Transient downed-broadcast bookkeeping. Deliberately NOT written to / read from NBT: it mirrors
@@ -118,7 +122,7 @@ public final class MedicalProfile {
 
     /**
      * The admin-forced health-state override (nullable). When set, {@link Physiology} pins the derived
-     * state to at least this severity, so an operator-pinned {@link HealthState#KNOCKED_DOWN}/
+     * state to at least this severity, so an operator-pinned {@link HealthState#UNCONSCIOUS}/
      * {@link HealthState#CRITICAL} on a player whose blood/trauma would not independently produce it is not
      * clobbered back to {@link HealthState#HEALTHY} on the next recompute. Transient, never persisted.
      */
@@ -131,15 +135,17 @@ public final class MedicalProfile {
     }
 
     /**
-     * Whether the player is "downed" — passed out and unable to act — which is true for BOTH an opioid
-     * overdose blackout ({@link #isBlackoutActive()}) AND a bleeding-out knockdown
-     * ({@link #getState()} == {@link HealthState#KNOCKED_DOWN}). This single predicate composes the two
-     * unconscious states so the downed visual experience triggers uniformly for either cause.
+     * Whether the player is "downed" — passed out and unable to act. After the merge this is simply the
+     * single {@link HealthState#UNCONSCIOUS} state, which is entered from either internal cause (a bleeding-
+     * out knockdown OR an opioid overdose blackout). The overdose cause raises the state to UNCONSCIOUS via
+     * {@link Physiology}, so checking {@link #isBlackoutActive()} as well is belt-and-braces for the tick in
+     * which the overdose marker is set but the state has not yet been recomputed. The downed visual
+     * experience triggers uniformly for either cause off this one predicate.
      *
-     * @return {@code true} while the player is blacked out or knocked down
+     * @return {@code true} while the player is unconscious (bleed-out or overdose)
      */
     public boolean isDowned() {
-        return blackoutActive || state == HealthState.KNOCKED_DOWN;
+        return blackoutActive || state == HealthState.UNCONSCIOUS;
     }
 
     public long getKnockdownSinceTick() {

@@ -1,7 +1,6 @@
 package com.warfactory.medical.client;
 
 import com.warfactory.medical.WFMedical;
-import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.network.ClientMedicalCache;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import net.minecraft.client.Minecraft;
@@ -12,9 +11,9 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * CLIENT-ONLY registry of which player ENTITY IDs are currently "downed" (passed out — either blacked
- * out from an opioid overdose or knocked down while bleeding out; see
- * {@link com.warfactory.medical.core.MedicalProfile#isDowned()}).
+ * CLIENT-ONLY registry of which player ENTITY IDs are currently "downed" (passed out — the single merged
+ * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state, entered from either an opioid overdose
+ * or a bleeding-out knockdown; see {@link com.warfactory.medical.core.MedicalProfile#isDowned()}).
  *
  * <p>The server is authoritative: {@link com.warfactory.medical.network.DownedStatePacket} fans the flag
  * out to every tracking client (and the subject itself), and its {@code handleClient()} routes here via
@@ -24,7 +23,7 @@ import net.minecraftforge.fml.common.Mod;
  *
  * <h2>Local-player fold-in</h2>
  * <p>{@link #isDowned(int)} also returns {@code true} for the LOCAL player whenever the synced
- * {@link ClientMedicalCache} says the local body is blacked out or knocked down, even before a
+ * {@link ClientMedicalCache} says the local body is unconscious, even before a
  * self-broadcast round-trips. This keeps the first-person effect gate and the third-person (F5) body pose
  * consistent with the HUD the instant the local snapshot flips.</p>
  *
@@ -64,8 +63,8 @@ public final class ClientDownedTracker {
      * @param entityId a player entity network id
      * @return {@code true} if that player is currently downed. Any entity id the server has broadcast as
      *         downed reports {@code true}; additionally the LOCAL player reports {@code true} whenever the
-     *         synced snapshot says it is blacked out or knocked down (see the class javadoc). Unknown ids
-     *         default to {@code false}.
+     *         synced snapshot says it is unconscious (the single merged passed-out state, for either the
+     *         overdose or bleed-out cause; see the class javadoc). Unknown ids default to {@code false}.
      */
     public static boolean isDowned(int entityId) {
         synchronized (LOCK) {
@@ -77,8 +76,7 @@ public final class ClientDownedTracker {
         // self-broadcast arrives. Reads the (volatile) synced snapshot; never allocates.
         LocalPlayer self = Minecraft.getInstance().player;
         if (self != null && self.getId() == entityId) {
-            return ClientMedicalCache.stats().blackout()
-                    || ClientMedicalCache.stats().state() == HealthState.KNOCKED_DOWN;
+            return ClientMedicalCache.stats().unconscious();
         }
         return false;
     }

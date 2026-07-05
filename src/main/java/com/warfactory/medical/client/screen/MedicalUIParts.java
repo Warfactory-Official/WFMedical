@@ -99,7 +99,7 @@ public final class MedicalUIParts {
         return switch (state) {
             case HEALTHY -> 0xFF33CC33;
             case CRITICAL -> 0xFFE0A020;
-            case KNOCKED_DOWN -> 0xFFCC3030;
+            case UNCONSCIOUS -> 0xFFCC3030;
             case DEAD -> 0xFF404040;
         };
     }

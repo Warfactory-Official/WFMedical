@@ -12,7 +12,7 @@ import net.minecraft.world.entity.player.Player;
  *
  * <p>Consumed by mixins (sprint/jump/movement) and item/effect logic on both the client and server.
  * Every accessor is null-safe and returns a benign default (unblocked / multiplier {@code 1.0} /
- * not knocked down) when the capability is missing, so it never NPEs for non-players or on a client
+ * not unconscious) when the capability is missing, so it never NPEs for non-players or on a client
  * that has not yet received a sync.</p>
  */
 public final class MedicalState {
@@ -55,9 +55,9 @@ public final class MedicalState {
         return s != null ? s.movementMultiplier() : 1.0F;
     }
 
-    /** @return true when the player is in the knocked-down state. */
-    public static boolean isKnockedDown(Player player) {
+    /** @return true when the player is unconscious (bleed-out knockdown OR overdose blackout — the single merged state). */
+    public static boolean isUnconscious(Player player) {
         DerivedStats s = stats(player);
-        return s != null && s.state() == HealthState.KNOCKED_DOWN;
+        return s != null && s.state() == HealthState.UNCONSCIOUS;
     }
 }

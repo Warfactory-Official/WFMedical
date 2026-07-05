@@ -31,7 +31,7 @@ public final class MedicalEffects {
 
     /**
      * Push the derived snapshot onto the vanilla body: transient MAX_HEALTH / MOVEMENT_SPEED modifiers and
-     * a health clamp. Keeps a knocked-down player alive (death interception lives in the event handler).
+     * a health clamp. Keeps an unconscious player alive (death interception lives in the event handler).
      *
      * <p>Convenience overload that never raises current health (normal ticking behaviour).</p>
      */
@@ -41,7 +41,7 @@ public final class MedicalEffects {
 
     /**
      * Push the derived snapshot onto the vanilla body: transient MAX_HEALTH / MOVEMENT_SPEED modifiers and
-     * a health reconciliation. Keeps a knocked-down player alive (death interception lives in the event
+     * a health reconciliation. Keeps an unconscious player alive (death interception lives in the event
      * handler).
      *
      * <p>When {@code allowRaise} is {@code false} current health is only clamped DOWNWARD toward the
@@ -74,8 +74,8 @@ public final class MedicalEffects {
             }
         }
 
-        // --- Movement: MULTIPLY_TOTAL from movementMultiplier; forced to zero while knocked down.
-        double movementMultiplier = state == HealthState.KNOCKED_DOWN ? 0.0D : stats.movementMultiplier();
+        // --- Movement: MULTIPLY_TOTAL from movementMultiplier; forced to zero while unconscious.
+        double movementMultiplier = state == HealthState.UNCONSCIOUS ? 0.0D : stats.movementMultiplier();
         AttributeInstance speed = player.getAttribute(Attributes.MOVEMENT_SPEED);
         if (speed != null) {
             speed.removeModifier(MOVEMENT_MODIFIER_ID);
@@ -89,12 +89,16 @@ public final class MedicalEffects {
             }
         }
 
-        // --- Health clamp: never exceed the derived current health; keep the knocked-down player alive.
+        // --- Health clamp: never exceed the derived current health; keep the UNCONSCIOUS player alive.
+        // The >= 1 pin below applies to BOTH unconscious causes (bleed-out AND non-lethal overdose) so they
+        // stay alive at ~1 HP. A LETHAL cause (bleed-out timer expiry OR lethal overdose drain) must NOT be
+        // held alive here: the engine transitions such a player to DEAD + setHealth(0) explicitly, and the
+        // early-return for DEAD below stops the pin from running, letting vanilla death proceed.
         if (state == HealthState.DEAD) {
             return; // let the death event handler resolve lethality
         }
         float target = stats.effectiveCurrentHealth();
-        if (state == HealthState.KNOCKED_DOWN) {
+        if (state == HealthState.UNCONSCIOUS) {
             target = Math.max(target, 1.0F);
         }
         if (target > attrTarget) {
@@ -104,7 +108,7 @@ public final class MedicalEffects {
         // Normal ticking only clamps downward (never heals); join/respawn sets health exactly to the
         // derived target so a pristine player spawns full instead of stuck at the old vanilla value.
         float clamped = allowRaise ? target : Math.min(current, target);
-        if (state == HealthState.KNOCKED_DOWN && clamped < 1.0F) {
+        if (state == HealthState.UNCONSCIOUS && clamped < 1.0F) {
             clamped = 1.0F;
         }
         if (clamped < 0.0F) {

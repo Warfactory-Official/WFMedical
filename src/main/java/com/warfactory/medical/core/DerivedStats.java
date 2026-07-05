@@ -15,15 +15,25 @@ public record DerivedStats(
         float jumpMultiplier,
         HealthState state,
         boolean anyLegFracture,
-        boolean anyArmFracture,
-        boolean blackout
+        boolean anyArmFracture
 ) {
     private static final DerivedStats HEALTHY = new DerivedStats(
             30.0F, 0.0F, 30.0F, 0.0D, 0.0F, 1.0F, false, 1.0F,
-            HealthState.HEALTHY, false, false, false);
+            HealthState.HEALTHY, false, false);
 
     /** A no-injury snapshot (30 health points, full mobility). */
     public static DerivedStats healthy() {
         return HEALTHY;
+    }
+
+    /**
+     * Whether the player is unconscious ("passed out"), for ANY cause (bleed-out knockdown OR opioid
+     * overdose blackout — both merged into {@link HealthState#UNCONSCIOUS}). Derived from {@link #state()}
+     * rather than stored, so it costs nothing in the sync packet.
+     *
+     * @return {@code true} when {@link #state()} is {@link HealthState#UNCONSCIOUS}
+     */
+    public boolean unconscious() {
+        return state() == HealthState.UNCONSCIOUS;
     }
 }

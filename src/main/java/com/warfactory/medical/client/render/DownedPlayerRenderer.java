@@ -11,10 +11,11 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * CLIENT-ONLY body pose for DOWNED players. When a player is passed out (blacked out from an opioid
- * overdose or knocked down while bleeding out — see {@link ClientDownedTracker#isDowned(int)}), this lays
- * their rendered model FACE-UP on the ground instead of the upright standing pose. Purely presentational;
- * it reads only the synced client tracker and never mutates medical state.
+ * CLIENT-ONLY body pose for DOWNED players. When a player is passed out — the single merged
+ * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state (either an opioid overdose or a
+ * bleeding-out knockdown; see {@link ClientDownedTracker#isDowned(int)}) — this lays their rendered model
+ * FACE-UP on the ground instead of the upright standing pose. Purely presentational; it reads only the
+ * synced client tracker and never mutates medical state.
  *
  * <p>Self-registers on the FORGE bus, {@link Dist#CLIENT} only, so a dedicated server never classloads the
  * client render types referenced here. Because the local player is not drawn in first person, this affects

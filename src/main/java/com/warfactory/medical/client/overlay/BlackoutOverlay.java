@@ -2,7 +2,6 @@ package com.warfactory.medical.client.overlay;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.warfactory.medical.WFMedical;
-import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -17,11 +16,12 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * CLIENT-ONLY screen effect: a CLOSING DARK VIGNETTE shown while the local player is PASSED OUT — either
- * blacked out from an injectable overdose ({@link ClientMedicalCache#stats()}.{@code blackout()}) or knocked
- * down / bleeding out ({@code state() == }{@link HealthState#KNOCKED_DOWN}). Gated purely on that
- * server-authoritative synced state; this overlay never mutates medical state and only ever reads synced
- * client state.
+ * CLIENT-ONLY screen effect: a CLOSING DARK VIGNETTE shown while the local player is PASSED OUT. This is the
+ * generic "unconscious" overlay: it gates on the SINGLE merged
+ * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state
+ * ({@link ClientMedicalCache#stats()}.{@code unconscious()}), which covers BOTH internal causes — an opioid
+ * overdose blackout and a bleeding-out knockdown. Gated purely on that server-authoritative synced state;
+ * this overlay never mutates medical state and only ever reads synced client state.
  *
  * <p>Rather than a hard cut to black, it renders "losing consciousness": the screen edges close in with a
  * dark vignette (the vanilla {@code textures/misc/vignette.png} tinted black, NON-pulsing, unlike the red
@@ -32,8 +32,8 @@ import net.minecraftforge.fml.common.Mod;
  *
  * <p>The transition never snaps: a static client-side {@link #fade} value is eased toward {@code 1.0} while
  * passed out and toward {@code 0.0} otherwise (matching {@link PassoutBlurEffect}'s fade rate), so the edges
- * close in and open back up gradually (e.g. after a {@code NALOXONE} injection ends a blackout, or on
- * revive from a knockdown).</p>
+ * close in and open back up gradually (e.g. after a {@code NALOXONE} injection ends an overdose blackout, or
+ * on revive from a bleeding-out knockdown).</p>
  *
  * <p>Cost is ~zero for a conscious player whose fade has settled: {@link #render} early-returns before any
  * draw call once {@code fade <= 0.001}. It guards every nullable, restores all {@link RenderSystem} state it
@@ -94,8 +94,7 @@ public final class BlackoutOverlay implements IGuiOverlay {
         }
 
         // PASSED OUT = blacked out (overdose) OR knocked down (bleeding out); mirrors server-side isDowned.
-        boolean passedOut = ClientMedicalCache.stats().blackout()
-                || ClientMedicalCache.stats().state() == HealthState.KNOCKED_DOWN;
+        boolean passedOut = ClientMedicalCache.stats().unconscious();
         float target = passedOut ? 1.0F : 0.0F;
 
         // Ease toward the target and clamp; the vignette closes in and opens back up smoothly.

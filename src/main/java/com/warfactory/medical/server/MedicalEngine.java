@@ -179,16 +179,38 @@ public final class MedicalEngine {
             profile.setDrugLoad(decayed);
         }
 
-        // Severe overdose: respiratory-depression drain while blacked out (guarded by the lethal threshold, so
-        // it never runs for a stable, non-overdosed player, but keeps running for the whole time the load stays
-        // lethal — not just the fixed timer window). Reaching 0 health flows through the vanilla LivingDeath ->
-        // knockdown/death pipeline like any other lethal cause.
-        if (severeOverdose && profile.isBlackoutActive()) {
+        // Severe overdose: respiratory-depression drain while overdose-unconscious (guarded by the lethal
+        // threshold, so it never runs for a stable, non-overdosed player, but keeps running for the whole time
+        // the load stays lethal — not just the fixed timer window).
+        //
+        // CRITICAL post-merge interaction: an overdose now raises the state to UNCONSCIOUS, and MedicalEffects
+        // pins an UNCONSCIOUS player's health to >= 1 (so a bleed-out / non-lethal overdose stays alive at ~1).
+        // A naive "drain toward 0" would therefore be cancelled by that pin and a lethal overdose could never
+        // kill. So the drain descends VISIBLY while it stays above the 1-HP pin floor, and the tick on which it
+        // would cross that floor is treated as the fatal tick: we transition to DEAD (via the forced-state
+        // override so THIS pass's recompute yields DEAD and MedicalEffects stops pinning / early-returns),
+        // clear the overdose + bleed-out markers and drop health to 0 — mirroring the bleed-out timer death so
+        // the vanilla death pipeline resolves the rest.
+        if (severeOverdose && profile.isBlackoutActive() && profile.getState() != HealthState.DEAD) {
             float drain = (float) (MedicalConfig.overdoseLethalDrainPerTick() * interval);
             if (drain > 0.0F) {
                 float current = player.getHealth();
-                if (current > 0.0F) {
-                    player.setHealth(Math.max(0.0F, current - drain));
+                float next = current - drain;
+                if (next > 1.0F) {
+                    // Still above the unconscious pin floor: show the gradual respiratory-depression descent.
+                    player.setHealth(next);
+                } else {
+                    // Fatal tick: the drain would cross the 1-HP UNCONSCIOUS pin floor -> die now.
+                    profile.setForcedState(HealthState.DEAD);
+                    profile.setState(HealthState.DEAD);
+                    profile.setBlackoutActive(false);
+                    profile.setBlackoutUntilTick(0L);
+                    profile.setKnockdownSinceTick(-1L);
+                    if (profile.hasActiveTreatment()) {
+                        MedicalActionService.cancel(player, "dead");
+                    }
+                    profile.markDirty();
+                    player.setHealth(0.0F); // vanilla death pipeline resolves the rest
                 }
             }
         }
@@ -277,17 +299,36 @@ public final class MedicalEngine {
         }
     }
 
-    /** Track how long a player has been knocked down and bleed them out once the limit is reached. */
+    /**
+     * Advance the BLEED-OUT death timer for an unconscious player, and only for a bleed-out cause.
+     *
+     * <p>After the merge, {@link HealthState#UNCONSCIOUS} is entered from two internal causes: a bleeding-out
+     * knockdown (lethal damage / blood loss / admin-forced knockdown), which must DIE once the timer expires,
+     * and an opioid overdose blackout, which must WAKE (handled in {@link #advanceSubstances}) and must NEVER
+     * bleed out here. The two are distinguished by the {@code knockdownSinceTick} bleed-out marker: it is set
+     * when entering via lethal damage ({@code onLivingDeath}) or an admin {@code /wfmedical knockdown}, and it
+     * is started here for a gradual bleed-out (blood at/below the death volume, or major trauma zeroing the
+     * effective max health) that never fired a damage event. An overdose leaves the marker at {@code -1}, so
+     * its timer never starts and it recovers instead of dying.</p>
+     */
     private static void advanceKnockdown(ServerPlayer player, MedicalProfile profile,
                                          PhysiologyParams params, long nowTick) {
-        if (params.knockdownEnabled() && profile.getState() == HealthState.KNOCKED_DOWN) {
+        if (params.knockdownEnabled() && profile.getState() == HealthState.UNCONSCIOUS) {
             long since = profile.getKnockdownSinceTick();
             if (since < 0L) {
-                profile.setKnockdownSinceTick(nowTick);
+                // Only START a bleed-out timer for a genuine bleed-out cause. An overdose-only unconsciousness
+                // (which recovers via the wake timer) has a healthy underlying physiology and no marker, so it
+                // is left untouched here; a gradual bleed-out with a lethal underlying condition gets its
+                // marker (and thus its death timer) started now.
+                boolean lethalBleedout = profile.getBloodMl() <= params.bloodDeathMl()
+                        || profile.cached().effectiveMaxHealth() <= 0.0F;
+                if (lethalBleedout) {
+                    profile.setKnockdownSinceTick(nowTick);
+                }
             } else if (nowTick - since >= params.knockdownBleedoutTicks()) {
                 profile.setState(HealthState.DEAD);
-                // Drop any admin-forced knockdown so the DEAD state isn't immediately re-forced back to
-                // KNOCKED_DOWN by the physiology override on the next recompute (which would block the death).
+                // Drop any admin-forced unconsciousness so the DEAD state isn't immediately re-forced back to
+                // UNCONSCIOUS by the physiology override on the next recompute (which would block the death).
                 profile.setForcedState(null);
                 profile.setKnockdownSinceTick(-1L);
                 if (profile.hasActiveTreatment()) {
@@ -315,8 +356,42 @@ public final class MedicalEngine {
      * vanilla 20/30 — and a freshly-injured one is clamped straight to its lower derived health) unless the
      * player is creative/spectator-immune, bumps the revision, pushes a full snapshot, and finally
      * edge-reconciles the downed broadcast so trackers start/stop rendering the downed pose to match.</p>
+     *
+     * <p>This entry point derives creative-immunity from the LIVE {@code player.isCreative()/isSpectator()}
+     * gamemode, which is correct for the tick/join/command callers (where the gamemode is already settled).
+     * A gamemode-transition caller, where those flags still reflect the pre-switch mode, must instead use
+     * {@link #resync(ServerPlayer, boolean)} with an immunity decision computed from the NEW mode.</p>
      */
     public static void resync(ServerPlayer player) {
+        if (player == null) {
+            return;
+        }
+        boolean applyEffects = !((player.isCreative() || player.isSpectator())
+                && MedicalConfig.effectImmuneInCreative());
+        resync(player, applyEffects);
+    }
+
+    /**
+     * Authoritative full re-sync with an EXPLICIT decision on whether to reconcile the vanilla body with the
+     * derived stats, bypassing the internal {@code isCreative()/isSpectator()} probe.
+     *
+     * <p>Needed by the gamemode-change handler: {@link net.minecraftforge.event.entity.player.PlayerEvent.PlayerChangeGameModeEvent}
+     * fires BEFORE the switch is applied, so at that moment {@code player.isCreative()/isSpectator()} still
+     * report the OLD mode. On a creative/spectator&nbsp;-&gt;&nbsp;survival transition the caller has already
+     * computed the authoritative immunity from {@code getNewGameMode()} and passes {@code applyEffects=true};
+     * the stale live-mode probe used by {@link #resync(ServerPlayer)} would instead wrongly keep treating the
+     * player as creative-immune and skip re-adding the +10 MAX_HEALTH modifier, leaving max health stuck at
+     * the vanilla 20 for the rest of the session (a healthy player is then skipped by the engine fast-path).</p>
+     *
+     * <p>When {@code applyEffects} is false the effects are NOT applied (the caller has determined the player
+     * is creative/spectator-immune), matching {@link MedicalEffects#clear}-based immunity; the snapshot and
+     * downed-broadcast reconciliation still run so the client and trackers stay consistent either way.</p>
+     *
+     * @param player       the server player to re-sync; a {@code null} player is a safe no-op
+     * @param applyEffects {@code true} to reconcile the vanilla body with the derived stats
+     *                     ({@code allowRaise=true}); {@code false} to leave the body untouched (immune)
+     */
+    public static void resync(ServerPlayer player, boolean applyEffects) {
         if (player == null) {
             return;
         }
@@ -326,7 +401,7 @@ public final class MedicalEngine {
         }
         MedicalProfile profile = data.getProfile();
         DerivedStats stats = profile.recompute(MedicalConfig.toPhysiologyParams());
-        if (!((player.isCreative() || player.isSpectator()) && MedicalConfig.effectImmuneInCreative())) {
+        if (applyEffects) {
             // allowRaise=true: set health EXACTLY to the derived current health so a pristine/healed player
             // reads full (30/30) and a freshly-injured one is clamped down to its new derived value.
             MedicalEffects.apply(player, stats, true);

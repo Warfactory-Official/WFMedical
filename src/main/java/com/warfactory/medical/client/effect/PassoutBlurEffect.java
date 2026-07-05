@@ -2,7 +2,6 @@ package com.warfactory.medical.client.effect;
 
 import com.mojang.blaze3d.shaders.AbstractUniform;
 import com.warfactory.medical.WFMedical;
-import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.mixin.PostChainAccessor;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
@@ -21,9 +20,10 @@ import java.util.List;
 
 /**
  * CLIENT-ONLY "passed-out" blur. Drives a real full-screen {@link PostChain} post-processing effect that
- * blurs the 3D scene while the LOCAL player is passed out — either blacked out from an injectable overdose
- * ({@link ClientMedicalCache#stats()}.{@code blackout()}) or knocked down / bleeding out
- * ({@code state() == }{@link HealthState#KNOCKED_DOWN}). It composes with the separate blood-loss
+ * blurs the 3D scene while the LOCAL player is passed out — gated on the SINGLE merged
+ * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state
+ * ({@link ClientMedicalCache#stats()}.{@code unconscious()}), which covers both internal causes (an opioid
+ * overdose blackout and a bleeding-out knockdown). It composes with the separate blood-loss
  * desaturation pass and the reworked {@link com.warfactory.medical.client.overlay.BlackoutOverlay closing
  * vignette}: together they read as "losing consciousness" (blurry, dimmed, edges closing in) rather than a
  * hard cut to black. Purely presentational: it reads synced client state and never mutates medical state.
@@ -133,12 +133,12 @@ public final class PassoutBlurEffect {
     // ------------------------------------------------------------------ internals
 
     /**
-     * @return {@code true} while the LOCAL player is passed out — blacked out (opioid overdose) OR knocked
-     *         down (bleeding out). Mirrors the server-side {@code isDowned} definition on the client.
+     * @return {@code true} while the LOCAL player is passed out — the single merged
+     *         {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state (either overdose or bleed-out
+     *         cause). Mirrors the server-side {@code isDowned} definition on the client.
      */
     private static boolean isLocalPlayerPassedOut() {
-        return ClientMedicalCache.stats().blackout()
-                || ClientMedicalCache.stats().state() == HealthState.KNOCKED_DOWN;
+        return ClientMedicalCache.stats().unconscious();
     }
 
     /**

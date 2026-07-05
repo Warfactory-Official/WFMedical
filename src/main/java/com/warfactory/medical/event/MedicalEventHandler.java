@@ -18,6 +18,7 @@ import com.warfactory.medical.core.trauma.Trauma;
 import com.warfactory.medical.core.trauma.TraumaRegistry;
 import com.warfactory.medical.network.MedicalNetworking;
 import com.warfactory.medical.server.MedicalActionService;
+import com.warfactory.medical.server.MedicalEffects;
 import com.warfactory.medical.server.MedicalEngine;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -26,6 +27,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.GameType;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
@@ -170,9 +172,10 @@ public final class MedicalEventHandler {
 
     /**
      * Intercept lethal damage: rather than dying instantly the player transitions to
-     * {@link HealthState#KNOCKED_DOWN} and is pinned at ~1 health. Real death is only permitted once the
-     * engine's bleed-out timer expires (it sets the state to {@link HealthState#DEAD} and drops health to
-     * zero); such a death is allowed straight through. Gated on {@link MedicalConfig#enableKnockdown()}.
+     * {@link HealthState#UNCONSCIOUS} (via the bleed-out cause — {@code knockdownSinceTick} is set as the
+     * bleed-out marker) and is pinned at ~1 health. Real death is only permitted once the engine's bleed-out
+     * timer expires (it sets the state to {@link HealthState#DEAD} and drops health to zero); such a death is
+     * allowed straight through. Gated on {@link MedicalConfig#enableKnockdown()}.
      */
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
@@ -231,7 +234,7 @@ public final class MedicalEventHandler {
 
         // Still have knockdown budget: cancel death, crawl, keep bleeding until the timer runs out.
         event.setCanceled(true);
-        profile.setState(HealthState.KNOCKED_DOWN);
+        profile.setState(HealthState.UNCONSCIOUS);
         if (profile.getKnockdownSinceTick() < 0L) {
             profile.setKnockdownSinceTick(player.level().getGameTime());
         }
@@ -267,6 +270,42 @@ public final class MedicalEventHandler {
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             MedicalEngine.onPlayerLeave(player);
+        }
+    }
+
+    /**
+     * Keep the medical attribute modifiers (notably the +10 MAX_HEALTH lift) consistent across a gamemode
+     * switch. Without this, entering creative/spectator strips our modifiers (creative immunity calls
+     * {@link MedicalEffects#clear}), and returning to survival never re-adds them because a healthy player is
+     * skipped by the engine's dirty fast-path — leaving max-health rolled back to the vanilla 20.
+     *
+     * <p>The event fires BEFORE the switch is applied, so {@code player.isCreative()} still reflects the OLD
+     * mode; the decision is made purely on {@link PlayerEvent.PlayerChangeGameModeEvent#getNewGameMode()}. If
+     * the NEW mode is creative/spectator and creative-immunity is enabled we strip our modifiers; otherwise we
+     * fully re-sync (re-adds the modifier, sets health to the derived target, pushes a snapshot). Server-only
+     * and null-safe against a missing capability.</p>
+     */
+    @SubscribeEvent
+    public static void onChangeGameMode(PlayerEvent.PlayerChangeGameModeEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        IMedicalData data = MedicalCapabilities.get(player);
+        if (data == null) {
+            return;
+        }
+        GameType next = event.getNewGameMode();
+        boolean immuneNext = (next == GameType.CREATIVE || next == GameType.SPECTATOR)
+                && MedicalConfig.effectImmuneInCreative();
+        if (immuneNext) {
+            MedicalEffects.clear(player);
+        } else {
+            // The event fires BEFORE the switch, so player.isCreative()/isSpectator() still report the OLD
+            // mode; the parameterless resync() would re-consult those stale flags and, on a
+            // creative/spectator -> survival transition, wrongly keep treating the player as creative-immune
+            // and skip re-adding the +10 MAX_HEALTH modifier. Pass the authoritative decision (immuneNext is
+            // false in this branch, so effects MUST be applied) computed from getNewGameMode() above.
+            MedicalEngine.resync(player, true);
         }
     }
 

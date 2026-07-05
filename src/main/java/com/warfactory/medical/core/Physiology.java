@@ -84,22 +84,31 @@ public final class Physiology {
         // In this model current health tracks the derived max; integration may clamp it lower.
         float effectiveCurrentHealth = effectiveMaxHealth;
 
-        // Determine lethal / knockdown condition up front so mobility can react to it.
+        // Determine the lethal (bleed-out) condition up front so mobility can react to it.
         boolean lethal = bloodMl <= deathMl || effectiveMaxHealth <= 0.0F;
-        boolean knockdown = lethal && cfg.knockdownEnabled();
 
-        // Health-based state progression (Healthy -> Critical -> Knocked Down -> Dead), derived purely from
-        // blood / trauma / pain. Computed here (rather than at the tail) so mobility can react to a forced
-        // knockdown too.
+        // Health-based state progression (Healthy -> Critical -> Unconscious -> Dead), derived purely from
+        // blood / trauma / pain. Computed here (rather than at the tail) so mobility can react to a forced /
+        // overdose unconsciousness too. A lethal bleed-out becomes UNCONSCIOUS (the engine's bleed-out timer
+        // then decides death) when knockdown is enabled, otherwise it is immediately DEAD.
         HealthState state;
         if (lethal) {
-            state = cfg.knockdownEnabled() ? HealthState.KNOCKED_DOWN : HealthState.DEAD;
+            state = cfg.knockdownEnabled() ? HealthState.UNCONSCIOUS : HealthState.DEAD;
         } else if (effectiveCurrentHealth <= cfg.maxHealthPoints() * cfg.bloodCriticalFraction()
                 || bloodMl <= cfg.bloodCriticalFraction() * cfg.maxBloodMl()) {
             state = HealthState.CRITICAL;
         } else {
             state = HealthState.HEALTHY;
         }
+
+        // Overdose blackout: now a CAUSE of the single unified UNCONSCIOUS state rather than a separate flag.
+        // Raise the state to UNCONSCIOUS while an opioid overdose has the player blacked out, but never
+        // DOWNGRADE a strictly-worse derived condition (DEAD). The engine's wake timer clears the overdose
+        // marker, after which this no longer applies (unless a bleed-out condition independently holds).
+        if (p.isBlackoutActive() && state.ordinal() < HealthState.UNCONSCIOUS.ordinal()) {
+            state = HealthState.UNCONSCIOUS;
+        }
+
         // Admin-forced override: honour an operator-pinned state (e.g. /wfmedical knockdown on an uninjured
         // player) that the pure physiology would not itself derive, but never DOWNGRADE a genuinely worse
         // derived condition. This keeps the forced state, its mobility lock and the downed pose stable across
@@ -109,11 +118,10 @@ public final class Physiology {
             state = forced;
         }
 
-        // Overdose blackout: an orthogonal incapacitation (unconscious). Treated like knockdown for mobility
-        // (movement 0, sprint blocked, no jump) but it does NOT change the health-based HealthState. A
-        // knocked-down player (derived OR admin-forced) is likewise incapacitated for mobility purposes.
-        boolean blackout = p.isBlackoutActive();
-        boolean incapacitated = knockdown || blackout || state == HealthState.KNOCKED_DOWN;
+        // Incapacitation (movement 0, sprint blocked, no jump) applies uniformly whenever the player is
+        // UNCONSCIOUS — covering every cause (bleed-out knockdown, overdose blackout, admin-forced) through
+        // the single merged state.
+        boolean incapacitated = state == HealthState.UNCONSCIOUS;
 
         // Movement: leg-fracture multipliers * pain slowdown, floored.
         float movement = movementFromLimbs;
@@ -154,8 +162,7 @@ public final class Physiology {
                 jumpMultiplier,
                 state,
                 legFracture,
-                armFracture,
-                blackout
+                armFracture
         );
     }
 }

@@ -113,7 +113,6 @@ public final class MedicalSyncPacket {
         buf.writeEnum(stats.state());
         buf.writeBoolean(stats.anyLegFracture());
         buf.writeBoolean(stats.anyArmFracture());
-        buf.writeBoolean(stats.blackout());
         // Blood + high-level state
         buf.writeDouble(bloodMl);
         buf.writeDouble(maxBloodMl);
@@ -142,7 +141,6 @@ public final class MedicalSyncPacket {
                 buf.readBoolean(),
                 buf.readFloat(),
                 buf.readEnum(HealthState.class),
-                buf.readBoolean(),
                 buf.readBoolean(),
                 buf.readBoolean());
         double bloodMl = buf.readDouble();

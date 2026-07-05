@@ -306,7 +306,7 @@ public final class CharacterSheetUI {
         y += DEBUG_LINE_H;
         addDebugLine(group, y, () -> "Drug Load: " + fmt(ClientMedicalCache.drugLoad()));
         y += DEBUG_LINE_H;
-        addDebugLine(group, y, () -> "Blackout: " + ClientMedicalCache.stats().blackout());
+        addDebugLine(group, y, () -> "Unconscious: " + ClientMedicalCache.stats().unconscious());
         y += DEBUG_LINE_H;
         addDebugLine(group, y, () -> "highLevelState=" + ClientMedicalCache.state());
         y += DEBUG_LINE_H;

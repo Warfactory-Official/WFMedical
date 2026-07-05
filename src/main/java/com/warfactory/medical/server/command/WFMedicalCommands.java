@@ -372,7 +372,7 @@ public final class WFMedicalCommands {
      * Bring a knocked-down / blacked-out player back UP and keep them up. A real bleed-out knockdown is
      * driven by the underlying lethal physiology (blood at/below the death volume, or major trauma zeroing
      * the effective max health, or a severe overdose blackout); simply flipping the transient downed flags
-     * would be re-derived straight back to {@link HealthState#KNOCKED_DOWN} by the resync's recompute. So
+     * would be re-derived straight back to {@link HealthState#UNCONSCIOUS} by the resync's recompute. So
      * this reverses the lethal CAUSE before resyncing: it clears any admin-forced override, ends the
      * overdose/blackout, evacuates the major (max-health-reducing, heavily bleeding) trauma while leaving
      * minor wounds, and tops blood back above the low-penalty threshold. After the resync the player reads a
@@ -587,15 +587,16 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Force the knocked-down state. Pins it through the admin-forced-state override so the pure physiology
-     * pass (which only derives KNOCKED_DOWN from real blood/trauma) does not clobber it back to HEALTHY on
-     * the resync's recompute; the override also drives the mobility lock and the downed pose, and the
-     * engine's bleed-out timer advances exactly as for a combat knockdown.
+     * Force a bleed-out UNCONSCIOUS state (the knockdown cause). Pins it through the admin-forced-state
+     * override so the pure physiology pass (which only derives UNCONSCIOUS from real blood/trauma/overdose)
+     * does not clobber it back to HEALTHY on the resync's recompute; the override also drives the mobility
+     * lock and the downed pose, and — because {@code knockdownSinceTick} is set as the bleed-out marker — the
+     * engine's bleed-out death timer advances exactly as for a combat knockdown.
      */
     private static int cmdKnockdown(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
-            profile.setForcedState(HealthState.KNOCKED_DOWN);
-            profile.setState(HealthState.KNOCKED_DOWN);
+            profile.setForcedState(HealthState.UNCONSCIOUS);
+            profile.setState(HealthState.UNCONSCIOUS);
             profile.setKnockdownSinceTick(p.level().getGameTime());
             profile.markDirty();
             MedicalEngine.resync(p);
@@ -621,7 +622,9 @@ public final class WFMedicalCommands {
             // player returns to their real derived condition.
             profile.setForcedState(target == HealthState.HEALTHY ? null : target);
             profile.setState(target);
-            if (target == HealthState.KNOCKED_DOWN) {
+            if (target == HealthState.UNCONSCIOUS) {
+                // Forcing UNCONSCIOUS via /state is treated as a bleed-out cause (set the bleed-out marker so
+                // the engine's death timer runs), matching the dedicated /knockdown subcommand.
                 profile.setKnockdownSinceTick(p.level().getGameTime());
             } else {
                 profile.setKnockdownSinceTick(-1L);
@@ -842,8 +845,20 @@ public final class WFMedicalCommands {
                 .append("  drugLoad: ").append(fmt(profile.getDrugLoad()));
         sb.append("\n state: ").append(profile.getState())
                 .append("  isDowned: ").append(profile.isDowned());
-        sb.append("\n blackout: active=").append(profile.isBlackoutActive())
-                .append(" remaining=").append(remaining).append("t");
+        // Unified unconsciousness line: one externally-visible UNCONSCIOUS state, with an internal cause hint
+        // (overdose => wake timer; bleed-out => death timer) so the debug dump still distinguishes them.
+        if (profile.getState() == HealthState.UNCONSCIOUS) {
+            if (profile.isBlackoutActive()) {
+                sb.append("\n unconscious: cause=overdose  wake in ").append(remaining).append("t");
+            } else {
+                long since = profile.getKnockdownSinceTick();
+                long deathIn = since >= 0L
+                        ? Math.max(0L, MedicalConfig.knockdownBleedoutTicks() - (now - since))
+                        : -1L;
+                sb.append("\n unconscious: cause=bleed-out  death in ")
+                        .append(deathIn >= 0L ? (deathIn + "t") : "(timer not started)");
+            }
+        }
         sb.append("\n movement x").append(fmt(stats.movementMultiplier()))
                 .append("  sprintBlocked=").append(stats.sprintBlocked())
                 .append("  jump x").append(fmt(stats.jumpMultiplier()));
