@@ -32,8 +32,8 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.BooleanValue ENABLE_FRACTURES;
     private static final ForgeConfigSpec.BooleanValue ENABLE_BLEEDING;
     private static final ForgeConfigSpec.BooleanValue ENABLE_PAIN;
-    private static final ForgeConfigSpec.BooleanValue ENABLE_KNOCKDOWN;
-    private static final ForgeConfigSpec.IntValue KNOCKDOWN_BLEEDOUT_TICKS;
+    private static final ForgeConfigSpec.BooleanValue ENABLE_BLEEDOUT;
+    private static final ForgeConfigSpec.IntValue BLEEDOUT_TICKS;
     private static final ForgeConfigSpec.BooleanValue EFFECT_IMMUNE_IN_CREATIVE;
     private static final ForgeConfigSpec.IntValue MAX_TRAUMA_PER_LIMB;
     private static final ForgeConfigSpec.DoubleValue LEG_FRACTURE_SPEED_MULTIPLIER;
@@ -42,6 +42,12 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.BooleanValue OVERDOSE_LETHAL_ENABLED;
     private static final ForgeConfigSpec.DoubleValue OVERDOSE_LETHAL_THRESHOLD;
     private static final ForgeConfigSpec.DoubleValue OVERDOSE_LETHAL_DRAIN_PER_TICK;
+    private static final ForgeConfigSpec.BooleanValue ASPHYXIA_ENABLED;
+    private static final ForgeConfigSpec.DoubleValue ASPHYXIA_THRESHOLD;
+    private static final ForgeConfigSpec.DoubleValue ASPHYXIA_CHANCE;
+    private static final ForgeConfigSpec.IntValue ASPHYXIA_AIR_LOSS_PER_TICK;
+    private static final ForgeConfigSpec.IntValue ASPHYXIA_UNCONSCIOUS_TICKS;
+    private static final ForgeConfigSpec.IntValue ASPHYXIA_WEAKNESS_AMPLIFIER;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -71,15 +77,20 @@ public final class MedicalConfig {
         ENABLE_FRACTURES = b.comment("Master toggle for fracture trauma.").define("enableFractures", true);
         ENABLE_BLEEDING = b.comment("Master toggle for bleeding / blood loss.").define("enableBleeding", true);
         ENABLE_PAIN = b.comment("Master toggle for the pain system.").define("enablePain", true);
-        ENABLE_KNOCKDOWN = b.comment("If true, lethal conditions knock the player down instead of instant death.").define("enableKnockdown", true);
+        ENABLE_BLEEDOUT = b.comment("If true, lethal conditions render the player unconscious (bleed-out) instead of instant death.").define("enableBleedout", true);
         EFFECT_IMMUNE_IN_CREATIVE = b.comment("Creative-mode players ignore medical penalties.").define("effectImmuneInCreative", true);
         ENABLE_INJECTABLES = b.comment("Master toggle for the injectable/opioid substance system (morphine, naloxone, ...).").define("enableInjectables", true);
+        ASPHYXIA_ENABLED = b
+                .comment("If true, a heavy opioid overdose can trigger ASPHYXIA (respiratory depression) before "
+                        + "unconsciousness: air drains rapidly (sped-up drowning) with weakness, no sprint and "
+                        + "blurred vision, ending in consciousness loss when the air runs out.")
+                .define("enableAsphyxia", true);
         b.pop();
 
         b.push("balance");
-        KNOCKDOWN_BLEEDOUT_TICKS = b
-                .comment("Ticks a player may remain knocked down before bleeding out and dying.")
-                .defineInRange("knockdownBleedoutTicks", 2400, 20, 72000);
+        BLEEDOUT_TICKS = b
+                .comment("Ticks a player may remain unconscious from bleeding out before dying.")
+                .defineInRange("bleedoutTicks", 2400, 20, 72000);
         MAX_TRAUMA_PER_LIMB = b
                 .comment("Hard cap on distinct trauma objects per limb; excess compatible trauma is merged.")
                 .defineInRange("maxTraumaPerLimb", 8, 1, 64);
@@ -90,16 +101,36 @@ public final class MedicalConfig {
                 .comment("How much injectable drug load decays per tick (higher = shorter dosing window before it clears).")
                 .defineInRange("drugDecayPerTick", 0.0005D, 0.0D, 1.0D);
         OVERDOSE_LETHAL_ENABLED = b
-                .comment("If true, a severe overdose (drug load >= overdoseLethalThreshold) drains health during blackout.")
+                .comment("If true, a severe overdose (drug load >= overdoseLethalThreshold) drains health during the overdose unconsciousness.")
                 .define("overdoseLethalEnabled", true);
         OVERDOSE_LETHAL_THRESHOLD = b
-                .comment("Drug load at/above which a blackout also causes a slow respiratory-depression health drain.")
+                .comment("Drug load at/above which an overdose unconsciousness also causes a slow respiratory-depression health drain.")
                 .defineInRange("overdoseLethalThreshold", 1.6D, 0.0D, 100.0D);
         OVERDOSE_LETHAL_DRAIN_PER_TICK = b
-                .comment("Health points drained per tick during a severe (lethal-threshold) overdose blackout. "
+                .comment("Health points drained per tick during a severe (lethal-threshold) overdose unconsciousness. "
                         + "Tuned so a single severe dose-stack (drug load ~2.0) drains a full-health player before "
                         + "the load decays back below the lethal threshold, yet leaves time for naloxone to reverse it.")
                 .defineInRange("overdoseLethalDrainPerTick", 0.05D, 0.0D, 20.0D);
+        ASPHYXIA_THRESHOLD = b
+                .comment("Drug load at/above which an overdose can trigger asphyxia. Keep it at or below the "
+                        + "substance overdose threshold (default 1.0 = morphine's) so the overdose that crosses "
+                        + "it is eligible; raising it means only heavier overshoots asphyxiate. A severe overdose "
+                        + "(>= overdoseLethalThreshold) always skips asphyxia and blacks out immediately.")
+                .defineInRange("asphyxiaThreshold", 1.0D, 0.0D, 100.0D);
+        ASPHYXIA_CHANCE = b
+                .comment("Probability (0..1) that crossing the asphyxia threshold on an injection triggers asphyxia "
+                        + "instead of an immediate overdose unconsciousness.")
+                .defineInRange("asphyxiaChance", 0.35D, 0.0D, 1.0D);
+        ASPHYXIA_AIR_LOSS_PER_TICK = b
+                .comment("Air supply units drained per tick while asphyxiating (vanilla max air is 300). Higher = a "
+                        + "faster suffocation; net drain also has to overcome vanilla's on-land air regen.")
+                .defineInRange("asphyxiaAirLossPerTick", 12, 1, 300);
+        ASPHYXIA_UNCONSCIOUS_TICKS = b
+                .comment("Ticks the player stays unconscious after passing out from asphyxia.")
+                .defineInRange("asphyxiaUnconsciousTicks", 200, 1, 72000);
+        ASPHYXIA_WEAKNESS_AMPLIFIER = b
+                .comment("Amplifier of the Weakness effect applied while asphyxiating (0 = Weakness I, 1 = Weakness II, ...).")
+                .defineInRange("asphyxiaWeaknessAmplifier", 1, 0, 9);
         b.pop();
 
         SPEC = b.build();
@@ -160,12 +191,12 @@ public final class MedicalConfig {
         return ENABLE_PAIN.get();
     }
 
-    public static boolean enableKnockdown() {
-        return ENABLE_KNOCKDOWN.get();
+    public static boolean enableBleedout() {
+        return ENABLE_BLEEDOUT.get();
     }
 
-    public static int knockdownBleedoutTicks() {
-        return KNOCKDOWN_BLEEDOUT_TICKS.get();
+    public static int bleedoutTicks() {
+        return BLEEDOUT_TICKS.get();
     }
 
     public static boolean effectImmuneInCreative() {
@@ -195,24 +226,66 @@ public final class MedicalConfig {
     }
 
     /**
-     * If true, a severe overdose drains health during blackout.
+     * If true, a severe overdose drains health during the overdose unconsciousness.
      */
     public static boolean overdoseLethalEnabled() {
         return OVERDOSE_LETHAL_ENABLED.get();
     }
 
     /**
-     * Drug load at/above which a blackout also causes a respiratory-depression health drain.
+     * Drug load at/above which an overdose unconsciousness also causes a respiratory-depression health drain.
      */
     public static double overdoseLethalThreshold() {
         return OVERDOSE_LETHAL_THRESHOLD.get();
     }
 
     /**
-     * Health points drained per tick during a severe overdose blackout.
+     * Health points drained per tick during a severe overdose unconsciousness.
      */
     public static double overdoseLethalDrainPerTick() {
         return OVERDOSE_LETHAL_DRAIN_PER_TICK.get();
+    }
+
+    /**
+     * Master toggle for the overdose asphyxia (respiratory-depression) phase.
+     */
+    public static boolean asphyxiaEnabled() {
+        return ASPHYXIA_ENABLED.get();
+    }
+
+    /**
+     * Drug load at/above which a heavy overdose can trigger asphyxia.
+     */
+    public static double asphyxiaThreshold() {
+        return ASPHYXIA_THRESHOLD.get();
+    }
+
+    /**
+     * Probability (0..1) that a qualifying overdose injection triggers asphyxia instead of instant unconsciousness.
+     */
+    public static double asphyxiaChance() {
+        return ASPHYXIA_CHANCE.get();
+    }
+
+    /**
+     * Air supply units drained per tick while asphyxiating (sped-up drowning).
+     */
+    public static int asphyxiaAirLossPerTick() {
+        return ASPHYXIA_AIR_LOSS_PER_TICK.get();
+    }
+
+    /**
+     * Ticks the player stays unconscious after passing out from asphyxia.
+     */
+    public static int asphyxiaUnconsciousTicks() {
+        return ASPHYXIA_UNCONSCIOUS_TICKS.get();
+    }
+
+    /**
+     * Amplifier of the Weakness effect applied while asphyxiating (0 = Weakness I).
+     */
+    public static int asphyxiaWeaknessAmplifier() {
+        return ASPHYXIA_WEAKNESS_AMPLIFIER.get();
     }
 
     /**
@@ -231,8 +304,8 @@ public final class MedicalConfig {
                 d.painMaxHealthPenalty(),
                 legFractureSpeedMultiplier(),
                 d.painSpeedFloor(),
-                enableKnockdown(),
-                knockdownBleedoutTicks()
+                enableBleedout(),
+                bleedoutTicks()
         );
     }
 }

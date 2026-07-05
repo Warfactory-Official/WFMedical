@@ -13,7 +13,7 @@ import net.minecraftforge.fml.common.Mod;
 /**
  * CLIENT-ONLY body pose for DOWNED players. When a player is passed out — the single merged
  * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state (either an opioid overdose or a
- * bleeding-out knockdown; see {@link ClientDownedTracker#isDowned(int)}) — this lays their rendered model
+ * bleed-out unconsciousness; see {@link ClientDownedTracker#isDowned(int)}) — this lays their rendered model
  * FACE-UP on the ground instead of the upright standing pose. Purely presentational; it reads only the
  * synced client tracker and never mutates medical state.
  *

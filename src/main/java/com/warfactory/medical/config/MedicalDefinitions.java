@@ -188,7 +188,7 @@ public final class MedicalDefinitions {
                 flt(t, "painSuppression", 0.0F),
                 flt(t, "doseLoad", 0.0F),
                 flt(t, "overdoseThreshold", 1.0F),
-                intOf(t, "blackoutTicks", 200),
+                intOf(t, "unconsciousTicks", intOf(t, "blackoutTicks", 200)),
                 flt(t, "lethalThreshold", 0.0F),
                 bool(t, "antidote", false),
                 flt(t, "reversalAmount", 0.0F),

@@ -62,6 +62,7 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
                 buf.readFloat(),
                 buf.readEnum(HealthState.class),
                 buf.readBoolean(),
+                buf.readBoolean(),
                 buf.readBoolean());
         double bloodMl = buf.readDouble();
         double maxBloodMl = buf.readDouble();
@@ -110,6 +111,7 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
         buf.writeEnum(stats.state());
         buf.writeBoolean(stats.anyLegFracture());
         buf.writeBoolean(stats.anyArmFracture());
+        buf.writeBoolean(stats.asphyxiating());
         // Blood + high-level state
         buf.writeDouble(bloodMl);
         buf.writeDouble(maxBloodMl);

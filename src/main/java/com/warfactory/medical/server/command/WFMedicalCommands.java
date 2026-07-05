@@ -67,9 +67,10 @@ import java.util.List;
 public final class WFMedicalCommands {
 
     /**
-     * Default forced-blackout / command-injected overdose blackout duration (ticks).
+     * Command-injected overdose unconsciousness duration (ticks), applied when a {@code /wfmedical drug} set/add
+     * crosses the lethal overdose threshold.
      */
-    private static final int DEFAULT_BLACKOUT_TICKS = 200;
+    private static final int DEFAULT_OVERDOSE_TICKS = 200;
     /**
      * Suggest the six {@link LimbType} enum names.
      */
@@ -228,18 +229,22 @@ public final class WFMedicalCommands {
                                 .executes(ctx -> cmdSubstance(ctx.getSource(), players(ctx),
                                         StringArgumentType.getString(ctx, "substanceId"))))));
 
-        // --- blackout <targets> [ticks]
-        root.then(Commands.literal("blackout")
+        // --- unconscious <targets> [ticks]
+        //   Replaces the removed `bleedout` and `overdose` subcommands with a single command for the one
+        //   unified UNCONSCIOUS state, exposing both of its internal causes:
+        //     no ticks   -> bleed-out unconscious (death timer runs)      -- the old bleed-out cause
+        //     with ticks -> timed overdose unconscious (wake timer runs)  -- the old overdose cause
+        root.then(Commands.literal("unconscious")
                 .then(Commands.argument("targets", EntityArgument.players())
-                        .executes(ctx -> cmdBlackout(ctx.getSource(), players(ctx), DEFAULT_BLACKOUT_TICKS))
+                        .executes(ctx -> cmdUnconscious(ctx.getSource(), players(ctx), -1))
                         .then(Commands.argument("ticks", IntegerArgumentType.integer(1))
-                                .executes(ctx -> cmdBlackout(ctx.getSource(), players(ctx),
+                                .executes(ctx -> cmdUnconscious(ctx.getSource(), players(ctx),
                                         IntegerArgumentType.getInteger(ctx, "ticks"))))));
 
-        // --- knockdown <targets>
-        root.then(Commands.literal("knockdown")
+        // --- asphyxia <targets>
+        root.then(Commands.literal("asphyxia")
                 .then(Commands.argument("targets", EntityArgument.players())
-                        .executes(ctx -> cmdKnockdown(ctx.getSource(), players(ctx)))));
+                        .executes(ctx -> cmdAsphyxia(ctx.getSource(), players(ctx)))));
 
         // --- state <targets> <state>
         root.then(Commands.literal("state")
@@ -315,7 +320,7 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Full heal: clear all trauma, top up blood, drop pain/drug/blackout/knockdown, back to full health.
+     * Full heal: clear all trauma, top up blood, drop pain/drug/overdose/bleed-out, back to full health.
      */
     private static int cmdHeal(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
@@ -323,9 +328,10 @@ public final class WFMedicalCommands {
             profile.setBloodMl(profile.getMaxBloodMl());
             profile.setPainSuppression(0.0F);
             profile.setDrugLoad(0.0F);
-            profile.setBlackoutActive(false);
-            profile.setBlackoutUntilTick(0L);
-            profile.setKnockdownSinceTick(-1L);
+            profile.setOverdoseUnconscious(false);
+            profile.setOverdoseUntilTick(0L);
+            profile.setAsphyxiating(false);
+            profile.setBleedoutSinceTick(-1L);
             profile.setForcedState(null);
             profile.setState(HealthState.HEALTHY);
             profile.markDirty();
@@ -344,7 +350,7 @@ public final class WFMedicalCommands {
             MedicalProfile fresh = new MedicalProfile(MedicalConfig.maxBloodMl());
             // Carry the last broadcast-downed mirror onto the fresh profile so the resync's edge-detection
             // sees the true->false transition and pushes a downed=false packet. Without this, a player who
-            // was knocked down / blacked out when reset would keep a stale downed pose on all trackers (the
+            // was bleeding out / overdose-unconscious when reset would keep a stale downed pose on all trackers (the
             // fresh profile's mirror defaults to false, matching the now-false state, so nothing is sent).
             fresh.setLastBroadcastDowned(profile.isLastBroadcastDowned());
             data.setProfile(fresh);
@@ -357,18 +363,19 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Properly kill each target regardless of the knockdown feature. Clears the transient downed/blackout
+     * Properly kill each target regardless of the bleed-out feature. Clears the transient downed/overdose
      * state so trackers stop rendering a downed pose, marks the profile {@link HealthState#DEAD} (so the
-     * knockdown interception in the death handler stands down), then routes a {@code genericKill} through
+     * bleed-out interception in the death handler stands down), then routes a {@code genericKill} through
      * the vanilla {@code hurt() -> die()} pipeline. {@code genericKill} bypasses invulnerability, so the
      * death handler lets it through and the real death (LivingDeathEvent, death screen, respawn) resolves —
      * unlike a bare {@code setHealth(0)}, which never invokes {@code die()}.
      */
     private static int cmdKill(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
-            profile.setBlackoutActive(false);
-            profile.setBlackoutUntilTick(0L);
-            profile.setKnockdownSinceTick(-1L);
+            profile.setOverdoseUnconscious(false);
+            profile.setOverdoseUntilTick(0L);
+            profile.setAsphyxiating(false);
+            profile.setBleedoutSinceTick(-1L);
             profile.setForcedState(null);
             profile.setState(HealthState.DEAD);
             if (profile.isLastBroadcastDowned()) {
@@ -377,7 +384,7 @@ public final class WFMedicalCommands {
             }
             profile.markDirty();
             data.bumpRevision();
-            p.kill(); // hurt(genericKill, MAX) -> die(); bypasses the knockdown interception via the /kill fix.
+            p.kill(); // hurt(genericKill, MAX) -> die(); bypasses the bleed-out interception via the /kill fix.
             return true;
         });
         src.sendSuccess(() -> Component.literal("[wfmedical] Killed " + n + " player(s)."), true);
@@ -385,12 +392,13 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Bring a knocked-down / blacked-out player back UP and keep them up. A real bleed-out knockdown is
-     * driven by the underlying lethal physiology (blood at/below the death volume, or major trauma zeroing
-     * the effective max health, or a severe overdose blackout); simply flipping the transient downed flags
-     * would be re-derived straight back to {@link HealthState#UNCONSCIOUS} by the resync's recompute. So
-     * this reverses the lethal CAUSE before resyncing: it clears any admin-forced override, ends the
-     * overdose/blackout, evacuates the major (max-health-reducing, heavily bleeding) trauma while leaving
+     * Bring a bleeding-out / overdose-unconscious player back UP and keep them up. A real bleed-out
+     * unconsciousness is driven by the underlying lethal physiology (blood at/below the death volume, or major
+     * trauma zeroing the effective max health, or a severe overdose unconsciousness); simply flipping the
+     * transient downed flags would be re-derived straight back to {@link HealthState#UNCONSCIOUS} by the
+     * resync's recompute. So this reverses the lethal CAUSE before resyncing: it clears any admin-forced
+     * override, ends the overdose unconsciousness, evacuates the major (max-health-reducing, heavily bleeding)
+     * trauma while leaving
      * minor wounds, and tops blood back above the low-penalty threshold. After the resync the player reads a
      * healthy derived state, and health is raised to at least half the (now restored) derived max. Never
      * resurrects a truly dead/removed entity.
@@ -404,10 +412,11 @@ public final class WFMedicalCommands {
             // Clear every downed CAUSE, not just the state label.
             profile.setForcedState(null);
             profile.setState(HealthState.HEALTHY);
-            profile.setKnockdownSinceTick(-1L);
-            profile.setBlackoutActive(false);
-            profile.setBlackoutUntilTick(0L);
-            profile.setDrugLoad(0.0F); // otherwise a severe overdose would immediately re-black-out on the next pass
+            profile.setBleedoutSinceTick(-1L);
+            profile.setOverdoseUnconscious(false);
+            profile.setOverdoseUntilTick(0L);
+            profile.setAsphyxiating(false);
+            profile.setDrugLoad(0.0F); // otherwise a severe overdose would immediately re-knock-out on the next pass
             // Evacuate the life-threatening trauma that drives effectiveMaxHealth to 0 (major wounds only;
             // minor scratches are left in place so this stays a revive, not a full heal).
             clearMajorTrauma(profile);
@@ -547,7 +556,7 @@ public final class WFMedicalCommands {
 
     /**
      * Set / add / clear the accumulating drug load. To keep the command immediately testable, when the
-     * resulting load reaches the configured lethal overdose threshold a blackout is forced right away
+     * resulting load reaches the configured lethal overdose threshold an unconsciousness is forced right away
      * (otherwise the engine would only trigger it on the next physiology pass); the engine's own
      * overdose-drain / decay logic then takes over from there.
      */
@@ -560,13 +569,13 @@ public final class WFMedicalCommands {
             };
             profile.setDrugLoad(next);
             if (mode == DrugMode.CLEAR) {
-                profile.setBlackoutActive(false);
-                profile.setBlackoutUntilTick(0L);
+                profile.setOverdoseUnconscious(false);
+                profile.setOverdoseUntilTick(0L);
             } else {
                 double lethal = MedicalConfig.overdoseLethalThreshold();
                 if (lethal > 0.0D && profile.getDrugLoad() >= lethal) {
-                    profile.setBlackoutUntilTick(p.level().getGameTime() + DEFAULT_BLACKOUT_TICKS);
-                    profile.setBlackoutActive(true);
+                    profile.setOverdoseUntilTick(p.level().getGameTime() + DEFAULT_OVERDOSE_TICKS);
+                    profile.setOverdoseUnconscious(true);
                 }
             }
             profile.markDirty();
@@ -589,7 +598,7 @@ public final class WFMedicalCommands {
         }
         int n = forEach(src, targets, (s, p, data, profile) -> {
             boolean injected = SubstanceService.inject(p, substance);
-            // Reconcile the downed broadcast (a blackout may have started) and re-push the snapshot.
+            // Reconcile the downed broadcast (an overdose unconsciousness may have started) and re-push the snapshot.
             MedicalEngine.resync(p);
             return injected;
         });
@@ -599,38 +608,66 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Force a blackout for {@code ticks} ticks.
+     * Force the single unified {@link HealthState#UNCONSCIOUS} state. Replaces the removed {@code bleedout}
+     * and {@code overdose} subcommands by exposing both of the state's internal causes through one command:
+     *
+     * <ul>
+     *     <li>{@code ticks < 1} (no argument): a bleed-out unconsciousness — the old bleed-out cause. Pinned
+     *     through the admin-forced-state override so the pure physiology pass (which only derives UNCONSCIOUS
+     *     from real blood/trauma/overdose) does not clobber it back to HEALTHY on the resync's recompute; the
+     *     override also drives the mobility lock and the downed pose, and — because {@code bleedoutSinceTick}
+     *     is set as the bleed-out marker — the engine's bleed-out death timer advances exactly as for a combat
+     *     bleed-out, so the player dies if untreated.</li>
+     *     <li>{@code ticks >= 1}: a timed overdose unconsciousness — the old overdose cause. Sets the transient
+     *     overdose markers so {@link com.warfactory.medical.core.Physiology} raises the state to UNCONSCIOUS,
+     *     and the engine's wake timer brings the player back up after {@code ticks} (no bleed-out marker, so it
+     *     recovers rather than dying).</li>
+     * </ul>
      */
-    private static int cmdBlackout(CommandSourceStack src, Collection<ServerPlayer> targets, int ticks) {
+    private static int cmdUnconscious(CommandSourceStack src, Collection<ServerPlayer> targets, int ticks) {
+        boolean timed = ticks >= 1;
         int n = forEach(src, targets, (s, p, data, profile) -> {
-            profile.setBlackoutUntilTick(p.level().getGameTime() + ticks);
-            profile.setBlackoutActive(true);
+            if (timed) {
+                profile.setOverdoseUntilTick(p.level().getGameTime() + ticks);
+                profile.setOverdoseUnconscious(true);
+            } else {
+                profile.setForcedState(HealthState.UNCONSCIOUS);
+                profile.setState(HealthState.UNCONSCIOUS);
+                profile.setBleedoutSinceTick(p.level().getGameTime());
+            }
             profile.markDirty();
             MedicalEngine.resync(p);
             return true;
         });
-        src.sendSuccess(() -> Component.literal("[wfmedical] Forced a " + ticks + "-tick blackout on "
-                + n + " player(s)."), true);
+        src.sendSuccess(() -> Component.literal("[wfmedical] Rendered " + n + " player(s) unconscious"
+                + (timed ? " for " + ticks + " tick(s) (overdose wake timer)." : " (bleed-out death timer).")), true);
         return n;
     }
 
     /**
-     * Force a bleed-out UNCONSCIOUS state (the knockdown cause). Pins it through the admin-forced-state
-     * override so the pure physiology pass (which only derives UNCONSCIOUS from real blood/trauma/overdose)
-     * does not clobber it back to HEALTHY on the resync's recompute; the override also drives the mobility
-     * lock and the downed pose, and — because {@code knockdownSinceTick} is set as the bleed-out marker — the
-     * engine's bleed-out death timer advances exactly as for a combat knockdown.
+     * Force the overdose ASPHYXIA phase for testing (otherwise it only triggers probabilistically on a heavy
+     * overdose). Raises the drug load to at least the asphyxia threshold so the state is consistent, then flips
+     * the asphyxiating marker: the per-tick engine hook then drains the player's air (weakness / no sprint /
+     * blurred vision) and tips them into overdose unconsciousness when it runs out.
      */
-    private static int cmdKnockdown(CommandSourceStack src, Collection<ServerPlayer> targets) {
+    private static int cmdAsphyxia(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
-            profile.setForcedState(HealthState.UNCONSCIOUS);
-            profile.setState(HealthState.UNCONSCIOUS);
-            profile.setKnockdownSinceTick(p.level().getGameTime());
+            if (!MedicalConfig.asphyxiaEnabled()) {
+                src.sendFailure(Component.literal("[wfmedical] Asphyxia is disabled in the config."));
+                return false;
+            }
+            float floor = (float) MedicalConfig.asphyxiaThreshold();
+            if (profile.getDrugLoad() < floor) {
+                profile.setDrugLoad(floor);
+            }
+            profile.setOverdoseUnconscious(false);
+            profile.setOverdoseUntilTick(0L);
+            profile.setAsphyxiating(true);
             profile.markDirty();
             MedicalEngine.resync(p);
             return true;
         });
-        src.sendSuccess(() -> Component.literal("[wfmedical] Knocked down " + n + " player(s)."), true);
+        src.sendSuccess(() -> Component.literal("[wfmedical] Triggered asphyxia on " + n + " player(s)."), true);
         return n;
     }
 
@@ -654,13 +691,14 @@ public final class WFMedicalCommands {
             profile.setState(target);
             if (target == HealthState.UNCONSCIOUS) {
                 // Forcing UNCONSCIOUS via /state is treated as a bleed-out cause (set the bleed-out marker so
-                // the engine's death timer runs), matching the dedicated /knockdown subcommand.
-                profile.setKnockdownSinceTick(p.level().getGameTime());
+                // the engine's death timer runs), matching the dedicated /unconscious subcommand.
+                profile.setBleedoutSinceTick(p.level().getGameTime());
             } else {
-                profile.setKnockdownSinceTick(-1L);
+                profile.setBleedoutSinceTick(-1L);
                 if (target == HealthState.HEALTHY) {
-                    profile.setBlackoutActive(false);
-                    profile.setBlackoutUntilTick(0L);
+                    profile.setOverdoseUnconscious(false);
+                    profile.setOverdoseUntilTick(0L);
+                    profile.setAsphyxiating(false);
                 }
             }
             profile.markDirty();
@@ -764,7 +802,7 @@ public final class WFMedicalCommands {
     /**
      * Remove every MAJOR trauma across all limbs (the wounds that reduce effective max health and bleed
      * heavily), leaving minor trauma untouched. Used by {@link #cmdRevive} to lift the lethal condition
-     * driving a knockdown without performing a full heal.
+     * driving a bleed-out unconsciousness without performing a full heal.
      */
     private static void clearMajorTrauma(MedicalProfile profile) {
         for (LimbType lt : LimbType.VALUES) {
@@ -871,7 +909,7 @@ public final class WFMedicalCommands {
      */
     private static String buildDump(ServerPlayer p, MedicalProfile profile, DerivedStats stats) {
         long now = p.level().getGameTime();
-        long remaining = profile.getBlackoutUntilTick() > 0L ? Math.max(0L, profile.getBlackoutUntilTick() - now) : 0L;
+        long remaining = profile.getOverdoseUntilTick() > 0L ? Math.max(0L, profile.getOverdoseUntilTick() - now) : 0L;
         StringBuilder sb = new StringBuilder();
         sb.append("=== wfmedical: ").append(name(p)).append(" ===");
         sb.append("\n health(derived): ").append(fmt(stats.effectiveCurrentHealth()))
@@ -886,16 +924,20 @@ public final class WFMedicalCommands {
         // Unified unconsciousness line: one externally-visible UNCONSCIOUS state, with an internal cause hint
         // (overdose => wake timer; bleed-out => death timer) so the debug dump still distinguishes them.
         if (profile.getState() == HealthState.UNCONSCIOUS) {
-            if (profile.isBlackoutActive()) {
+            if (profile.isOverdoseUnconscious()) {
                 sb.append("\n unconscious: cause=overdose  wake in ").append(remaining).append("t");
             } else {
-                long since = profile.getKnockdownSinceTick();
+                long since = profile.getBleedoutSinceTick();
                 long deathIn = since >= 0L
-                        ? Math.max(0L, MedicalConfig.knockdownBleedoutTicks() - (now - since))
+                        ? Math.max(0L, MedicalConfig.bleedoutTicks() - (now - since))
                         : -1L;
                 sb.append("\n unconscious: cause=bleed-out  death in ")
                         .append(deathIn >= 0L ? (deathIn + "t") : "(timer not started)");
             }
+        } else if (profile.isAsphyxiating()) {
+            // Conscious overdose asphyxia precursor: air-driven, resolves to overdose unconsciousness at 0 air.
+            sb.append("\n asphyxia: overdose respiratory depression  air ")
+                    .append(p.getAirSupply()).append(" / ").append(p.getMaxAirSupply());
         }
         sb.append("\n movement x").append(fmt(stats.movementMultiplier()))
                 .append("  sprintBlocked=").append(stats.sprintBlocked())

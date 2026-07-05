@@ -20,7 +20,7 @@ import net.minecraftforge.fml.common.Mod;
  * generic "unconscious" overlay: it gates on the SINGLE merged
  * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state
  * ({@link ClientMedicalCache#stats()}.{@code unconscious()}), which covers BOTH internal causes — an opioid
- * overdose blackout and a bleeding-out knockdown. Gated purely on that server-authoritative synced state;
+ * overdose unconsciousness and a bleed-out unconsciousness. Gated purely on that server-authoritative synced state;
  * this overlay never mutates medical state and only ever reads synced client state.
  *
  * <p>Rather than a hard cut to black, it renders "losing consciousness": the screen edges close in with a
@@ -32,8 +32,8 @@ import net.minecraftforge.fml.common.Mod;
  *
  * <p>The transition never snaps: a static client-side {@link #fade} value is eased toward {@code 1.0} while
  * passed out and toward {@code 0.0} otherwise (matching {@link PassoutBlurEffect}'s fade rate), so the edges
- * close in and open back up gradually (e.g. after a {@code NALOXONE} injection ends an overdose blackout, or
- * on revive from a bleeding-out knockdown).</p>
+ * close in and open back up gradually (e.g. after a {@code NALOXONE} injection ends an overdose unconsciousness, or
+ * on revive from a bleed-out unconsciousness).</p>
  *
  * <p>Cost is ~zero for a conscious player whose fade has settled: {@link #render} early-returns before any
  * draw call once {@code fade <= 0.001}. It guards every nullable, restores all {@link RenderSystem} state it
@@ -43,17 +43,17 @@ import net.minecraftforge.fml.common.Mod;
  * and registers {@link #INSTANCE} above all other overlays, mirroring {@link PainVignetteOverlay}.</p>
  */
 @OnlyIn(Dist.CLIENT)
-public final class BlackoutOverlay implements IGuiOverlay {
+public final class UnconsciousOverlay implements IGuiOverlay {
 
     /**
      * The singleton overlay instance; registered by {@link Registrar}.
      */
-    public static final IGuiOverlay INSTANCE = new BlackoutOverlay();
+    public static final IGuiOverlay INSTANCE = new UnconsciousOverlay();
 
     /**
      * Overlay id used when registering with Forge.
      */
-    public static final String OVERLAY_ID = "wfmedical_blackout";
+    public static final String OVERLAY_ID = "wfmedical_unconscious";
 
     /**
      * Vanilla vignette sprite reused for the edge falloff (opaque edges, transparent centre).
@@ -110,7 +110,7 @@ public final class BlackoutOverlay implements IGuiOverlay {
      */
     private static float fade;
 
-    private BlackoutOverlay() {
+    private UnconsciousOverlay() {
     }
 
     @Override
@@ -121,7 +121,7 @@ public final class BlackoutOverlay implements IGuiOverlay {
             return;
         }
 
-        // PASSED OUT = blacked out (overdose) OR knocked down (bleeding out); mirrors server-side isDowned.
+        // PASSED OUT = overdose-unconscious OR bleeding out; mirrors server-side isDowned.
         boolean passedOut = ClientMedicalCache.stats().unconscious();
         float target = passedOut ? 1.0F : 0.0F;
 

@@ -13,7 +13,7 @@ import net.minecraftforge.fml.common.Mod;
 /**
  * CLIENT-ONLY registry of which player ENTITY IDs are currently "downed" (passed out — the single merged
  * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state, entered from either an opioid overdose
- * or a bleeding-out knockdown; see {@link com.warfactory.medical.core.MedicalProfile#isDowned()}).
+ * or a bleed-out unconsciousness; see {@link com.warfactory.medical.core.MedicalProfile#isDowned()}).
  *
  * <p>The server is authoritative: {@link com.warfactory.medical.network.DownedStatePacket} fans the flag
  * out to every tracking client (and the subject itself), and its {@code handleClient()} routes here via

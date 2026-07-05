@@ -42,8 +42,8 @@
 #   item              string  item id (registry name) that injects this substance
 #   painSuppression   float   perceived-pain mask (0..1) applied on injection (opioid)
 #   doseLoad          float   amount added to the player's drug load per injection (opioid)
-#   overdoseThreshold float   drug load at/above which an overdose blackout triggers
-#   blackoutTicks     int     blackout (unconscious) duration in ticks
+#   overdoseThreshold float   drug load at/above which an overdose unconsciousness triggers
+#   unconsciousTicks  int     unconscious duration in ticks
 #   lethalThreshold   float   drug load at/above which the overdose also drains health (<=0 disables)
 #   antidote          bool    true = reverses an overdose instead of causing one
 #   reversalAmount    float   drug load removed by a single antidote injection
@@ -324,22 +324,22 @@ removesTrauma = true
 
 # Morphine: strong opioid analgesic. Grants near-total pain immunity but each dose adds to an
 # accumulating drug load that decays slowly; re-dosing to stay pain-free stacks toward the overdose
-# threshold, at which point the player blacks out (unconscious, movement locked). A very high load
-# (lethalThreshold) additionally causes a slow respiratory-depression health drain during blackout.
+# threshold, at which point the player passes out (unconscious, movement locked). A very high load
+# (lethalThreshold) additionally causes a slow respiratory-depression health drain during the unconsciousness.
 [[substance]]
 id = "morphine"
 item = "wfmedical:morphine_syringe"
 painSuppression = 0.95
 doseLoad = 0.5
 overdoseThreshold = 1.0
-blackoutTicks = 200
+unconsciousTicks = 200
 lethalThreshold = 1.6
 antidote = false
 reversalAmount = 0.0
 useDurationTicks = 40
 bloodRestoreMl = 0.0
 
-# Naloxone: opioid antidote. Slams drug load down, ends the blackout immediately and drops pain
+# Naloxone: opioid antidote. Slams drug load down, ends the unconsciousness immediately and drops pain
 # suppression back to zero (all the masked pain comes rushing back) - the counter-play to an overdose.
 [[substance]]
 id = "naloxone"
@@ -347,7 +347,7 @@ item = "wfmedical:naloxone_syringe"
 painSuppression = 0.0
 doseLoad = 0.0
 overdoseThreshold = 0.0
-blackoutTicks = 0
+unconsciousTicks = 0
 lethalThreshold = 0.0
 antidote = true
 reversalAmount = 3.0

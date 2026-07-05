@@ -21,7 +21,6 @@
   "gui.wfmedical.bleeding": "Bleeding",
   "gui.wfmedical.fracture": "Fractured",
   "gui.wfmedical.drugload": "Drug Load",
-  "gui.wfmedical.blackout": "Blackout",
   "gui.wfmedical.unconscious": "Unconscious",
   "gui.wfmedical.debug": "Debug",
   "gui.wfmedical.radial.no_items": "No medical items",
@@ -34,6 +33,6 @@
   "gui.wfmedical.limb.right_leg": "Right Leg",
   "gui.wfmedical.state.healthy": "Healthy",
   "gui.wfmedical.state.critical": "Critical",
-  "gui.wfmedical.state.knocked_down": "Knocked Down",
+  "gui.wfmedical.state.unconscious": "Unconscious",
   "gui.wfmedical.state.dead": "Dead"
 }

@@ -5,17 +5,17 @@ import com.warfactory.medical.core.treatment.Treatment;
 /**
  * Immutable description of an injectable substance (opioid analgesic or antidote). Data-driven, mirroring
  * {@link Treatment}: the substance / injection modules read these
- * fields to decide how to mutate the player's {@code drugLoad}, pain suppression and blackout state.
+ * fields to decide how to mutate the player's {@code drugLoad}, pain suppression and unconsciousness state.
  *
  * <p>An opioid ({@link #antidote ()} == false) masks perceived pain by raising the profile's
  * {@code painSuppression} and adds {@link #doseLoad ()} to an accumulating {@code drugLoad}; re-dosing to
- * stay pain-free stacks {@code drugLoad} toward {@link #overdoseThreshold ()} (blackout) and, past
+ * stay pain-free stacks {@code drugLoad} toward {@link #overdoseThreshold ()} (unconsciousness) and, past
  * {@link #lethalThreshold ()}, a fatal respiratory-depression drain. An antidote
  * ({@link #antidote ()} == true) instead removes {@link #reversalAmount ()} from {@code drugLoad}, ends
- * the blackout and drops pain suppression back to zero.</p>
+ * the unconsciousness and drops pain suppression back to zero.</p>
  */
 public record Substance(String id, String itemId, float painSuppression, float doseLoad, float overdoseThreshold,
-                        int blackoutTicks, float lethalThreshold, boolean antidote, float reversalAmount,
+                        int unconsciousTicks, float lethalThreshold, boolean antidote, float reversalAmount,
                         int useDurationTicks, double bloodRestoreMl) {
 
     /**
@@ -23,8 +23,8 @@ public record Substance(String id, String itemId, float painSuppression, float d
      * @param itemId            registry-name string of the item that injects this substance
      * @param painSuppression   perceived-pain mask (0..1) applied on injection (opioid only)
      * @param doseLoad          amount added to the player's {@code drugLoad} per injection (opioid only)
-     * @param overdoseThreshold {@code drugLoad} at/above which an overdose blackout triggers
-     * @param blackoutTicks     blackout (unconscious) duration in ticks
+     * @param overdoseThreshold {@code drugLoad} at/above which an overdose unconsciousness triggers
+     * @param unconsciousTicks  unconscious duration in ticks
      * @param lethalThreshold   {@code drugLoad} at/above which the overdose also drains health ({@code <=0} disables)
      * @param antidote          true when this substance reverses an overdose instead of causing one
      * @param reversalAmount    {@code drugLoad} removed by a single antidote injection
@@ -36,7 +36,7 @@ public record Substance(String id, String itemId, float painSuppression, float d
                      float painSuppression,
                      float doseLoad,
                      float overdoseThreshold,
-                     int blackoutTicks,
+                     int unconsciousTicks,
                      float lethalThreshold,
                      boolean antidote,
                      float reversalAmount,
@@ -47,7 +47,7 @@ public record Substance(String id, String itemId, float painSuppression, float d
         this.painSuppression = clamp01(painSuppression);
         this.doseLoad = Math.max(0.0F, doseLoad);
         this.overdoseThreshold = overdoseThreshold;
-        this.blackoutTicks = Math.max(0, blackoutTicks);
+        this.unconsciousTicks = Math.max(0, unconsciousTicks);
         this.lethalThreshold = lethalThreshold;
         this.antidote = antidote;
         this.reversalAmount = Math.max(0.0F, reversalAmount);
@@ -92,7 +92,7 @@ public record Substance(String id, String itemId, float painSuppression, float d
     }
 
     /**
-     * {@code drugLoad} at/above which an overdose blackout triggers.
+     * {@code drugLoad} at/above which an overdose unconsciousness triggers.
      */
     @Override
     public float overdoseThreshold() {
@@ -100,11 +100,11 @@ public record Substance(String id, String itemId, float painSuppression, float d
     }
 
     /**
-     * Blackout (unconscious) duration in ticks.
+     * Unconscious duration in ticks.
      */
     @Override
-    public int blackoutTicks() {
-        return blackoutTicks;
+    public int unconsciousTicks() {
+        return unconsciousTicks;
     }
 
     /**

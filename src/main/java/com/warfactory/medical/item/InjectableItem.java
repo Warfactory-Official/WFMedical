@@ -20,7 +20,7 @@ import net.minecraft.world.level.Level;
  * plumbing; the substance behaviour is entirely separate from the trauma-treatment path.
  *
  * <p>The mutation is server authoritative: only {@link SubstanceService#inject(ServerPlayer, Substance)}
- * may touch drug load / blackout state, and the stack is consumed only when that call reports a change.
+ * may touch drug load / unconsciousness state, and the stack is consumed only when that call reports a change.
  * Clients merely play the use animation and swing.</p>
  */
 public class InjectableItem extends MedicalItem {

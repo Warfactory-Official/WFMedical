@@ -90,10 +90,10 @@ public final class Physiology {
         // Health-based state progression (Healthy -> Critical -> Unconscious -> Dead), derived purely from
         // blood / trauma / pain. Computed here (rather than at the tail) so mobility can react to a forced /
         // overdose unconsciousness too. A lethal bleed-out becomes UNCONSCIOUS (the engine's bleed-out timer
-        // then decides death) when knockdown is enabled, otherwise it is immediately DEAD.
+        // then decides death) when bleed-out is enabled, otherwise it is immediately DEAD.
         HealthState state;
         if (lethal) {
-            state = cfg.knockdownEnabled() ? HealthState.UNCONSCIOUS : HealthState.DEAD;
+            state = cfg.bleedoutEnabled() ? HealthState.UNCONSCIOUS : HealthState.DEAD;
         } else if (effectiveCurrentHealth <= cfg.maxHealthPoints() * cfg.bloodCriticalFraction()
                 || bloodMl <= cfg.bloodCriticalFraction() * cfg.maxBloodMl()) {
             state = HealthState.CRITICAL;
@@ -101,15 +101,15 @@ public final class Physiology {
             state = HealthState.HEALTHY;
         }
 
-        // Overdose blackout: now a CAUSE of the single unified UNCONSCIOUS state rather than a separate flag.
-        // Raise the state to UNCONSCIOUS while an opioid overdose has the player blacked out, but never
+        // Overdose unconsciousness: now a CAUSE of the single unified UNCONSCIOUS state rather than a separate
+        // flag. Raise the state to UNCONSCIOUS while an opioid overdose has the player unconscious, but never
         // DOWNGRADE a strictly-worse derived condition (DEAD). The engine's wake timer clears the overdose
         // marker, after which this no longer applies (unless a bleed-out condition independently holds).
-        if (p.isBlackoutActive() && state.ordinal() < HealthState.UNCONSCIOUS.ordinal()) {
+        if (p.isOverdoseUnconscious() && state.ordinal() < HealthState.UNCONSCIOUS.ordinal()) {
             state = HealthState.UNCONSCIOUS;
         }
 
-        // Admin-forced override: honour an operator-pinned state (e.g. /wfmedical knockdown on an uninjured
+        // Admin-forced override: honour an operator-pinned state (e.g. /wfmedical unconscious on an uninjured
         // player) that the pure physiology would not itself derive, but never DOWNGRADE a genuinely worse
         // derived condition. This keeps the forced state, its mobility lock and the downed pose stable across
         // every recompute instead of being clobbered back to the derived value.
@@ -119,9 +119,15 @@ public final class Physiology {
         }
 
         // Incapacitation (movement 0, sprint blocked, no jump) applies uniformly whenever the player is
-        // UNCONSCIOUS — covering every cause (bleed-out knockdown, overdose blackout, admin-forced) through
-        // the single merged state.
+        // UNCONSCIOUS — covering every cause (bleed-out unconsciousness, overdose unconsciousness, admin-forced)
+        // through the single merged state.
         boolean incapacitated = state == HealthState.UNCONSCIOUS;
+
+        // Overdose asphyxia: the conscious pre-unconsciousness respiratory-depression phase. The player can
+        // still walk, so it does NOT incapacitate, but it blocks sprint and drives the client blur (below). It
+        // is only meaningful while still conscious; once the state has tipped to UNCONSCIOUS/DEAD it no longer
+        // applies (the merged unconscious handling takes over).
+        boolean asphyxiating = p.isAsphyxiating() && !incapacitated && state != HealthState.DEAD;
 
         // Movement: leg-fracture multipliers * pain slowdown, floored.
         float movement = movementFromLimbs;
@@ -139,7 +145,8 @@ public final class Physiology {
         boolean sprintBlocked = legFracture
                 || totalPain > cfg.painShockThreshold()
                 || lowBlood
-                || incapacitated;
+                || incapacitated
+                || asphyxiating;
 
         float jumpMultiplier;
         if (legFracture || incapacitated) {
@@ -162,7 +169,8 @@ public final class Physiology {
                 jumpMultiplier,
                 state,
                 legFracture,
-                armFracture
+                armFracture,
+                asphyxiating
         );
     }
 }

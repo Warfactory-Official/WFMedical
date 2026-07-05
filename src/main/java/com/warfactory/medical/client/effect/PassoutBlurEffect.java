@@ -23,8 +23,8 @@ import java.util.List;
  * blurs the 3D scene while the LOCAL player is passed out — gated on the SINGLE merged
  * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state
  * ({@link ClientMedicalCache#stats()}.{@code unconscious()}), which covers both internal causes (an opioid
- * overdose blackout and a bleeding-out knockdown). It composes with the separate blood-loss
- * desaturation pass and the reworked {@link com.warfactory.medical.client.overlay.BlackoutOverlay closing
+ * overdose unconsciousness and a bleed-out unconsciousness). It composes with the separate blood-loss
+ * desaturation pass and the reworked {@link com.warfactory.medical.client.overlay.UnconsciousOverlay closing
  * vignette}: together they read as "losing consciousness" (blurry, dimmed, edges closing in) rather than a
  * hard cut to black. Purely presentational: it reads synced client state and never mutates medical state.
  *
@@ -106,8 +106,8 @@ public final class PassoutBlurEffect {
         }
 
         // Advance the fade every frame (even while conscious) so it can decay smoothly back to zero.
-        boolean passedOut = isLocalPlayerPassedOut();
-        float target = passedOut ? 1.0F : 0.0F;
+        boolean blur = shouldBlurVision();
+        float target = blur ? 1.0F : 0.0F;
         fade += (target - fade) * FADE_STEP;
         if (fade < 0.0F) {
             fade = 0.0F;
@@ -149,12 +149,13 @@ public final class PassoutBlurEffect {
     // ------------------------------------------------------------------ internals
 
     /**
-     * @return {@code true} while the LOCAL player is passed out — the single merged
-     * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state (either overdose or bleed-out
-     * cause). Mirrors the server-side {@code isDowned} definition on the client.
+     * @return {@code true} while the LOCAL player's vision should blur — either fully passed out (the single
+     * merged {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state, from an overdose or bleed-out
+     * cause) OR in the conscious overdose {@code asphyxiating()} phase (blurred vision as they suffocate).
      */
-    private static boolean isLocalPlayerPassedOut() {
-        return ClientMedicalCache.stats().unconscious();
+    private static boolean shouldBlurVision() {
+        var stats = ClientMedicalCache.stats();
+        return stats.unconscious() || stats.asphyxiating();
     }
 
     /**

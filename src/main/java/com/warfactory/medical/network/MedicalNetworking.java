@@ -89,7 +89,7 @@ public final class MedicalNetworking {
                 .add();
 
         // S2C: per-entity downed (passed-out) state, broadcast to trackers so an observer can render the
-        // downed body pose of a teammate who is blacked out or knocked down.
+        // downed body pose of a teammate who is overdose-unconscious or bleeding out.
         CHANNEL.messageBuilder(DownedStatePacket.class, 5, NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(DownedStatePacket::encode)
                 .decoder(DownedStatePacket::decode)
@@ -123,7 +123,7 @@ public final class MedicalNetworking {
 
     /**
      * Broadcast a player's downed (passed-out) state to every client tracking that player AND to the
-     * player itself. Called by the engine on each downed edge (enter / exit blackout or knockdown) so
+     * player itself. Called by the engine on each downed edge (enter / exit overdose or bleed-out) so
      * observers can render — or stop rendering — the downed body pose.
      */
     public static void broadcastDowned(ServerPlayer player, boolean downed) {

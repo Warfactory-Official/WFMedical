@@ -42,7 +42,7 @@ import java.util.List;
  * so nothing ever runs on a logical client. The heavy lifting lives in {@link MedicalEngine} (scheduled
  * physiology) and the {@code core.damage.*} pipeline (damage -> trauma); this class only wires vanilla
  * events to them and performs the two authoritative interceptions the engine cannot: translating raw
- * hurt into trauma, and converting lethal damage into a knockdown.</p>
+ * hurt into trauma, and converting lethal damage into a bleed-out unconsciousness.</p>
  */
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class MedicalEventHandler {
@@ -87,6 +87,29 @@ public final class MedicalEventHandler {
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END) {
             MedicalEngine.onServerTick(event.getServer());
+        }
+    }
+
+    /**
+     * Per-player tick hook that advances the overdose ASPHYXIA phase for any asphyxiating server player. Runs
+     * every tick (not the engine's throttled cadence) so the sped-up air drain is smooth and reliably
+     * overrides vanilla's air regen; a cheap no-op for everyone not currently asphyxiating.
+     */
+    @SubscribeEvent
+    public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        if (!(event.player instanceof ServerPlayer player)) {
+            return;
+        }
+        IMedicalData data = MedicalCapabilities.get(player);
+        if (data == null) {
+            return;
+        }
+        MedicalProfile profile = data.getProfile();
+        if (profile.isAsphyxiating()) {
+            MedicalEngine.tickAsphyxia(player, profile);
         }
     }
 
@@ -174,14 +197,14 @@ public final class MedicalEventHandler {
         }
     }
 
-    // ------------------------------------------------------------------ lethal -> knockdown
+    // ------------------------------------------------------------------ lethal -> bleed-out unconscious
 
     /**
      * Intercept lethal damage: rather than dying instantly the player transitions to
-     * {@link HealthState#UNCONSCIOUS} (via the bleed-out cause — {@code knockdownSinceTick} is set as the
+     * {@link HealthState#UNCONSCIOUS} (via the bleed-out cause — {@code bleedoutSinceTick} is set as the
      * bleed-out marker) and is pinned at ~1 health. Real death is only permitted once the engine's bleed-out
      * timer expires (it sets the state to {@link HealthState#DEAD} and drops health to zero); such a death is
-     * allowed straight through. Gated on {@link MedicalConfig#enableKnockdown()}.
+     * allowed straight through. Gated on {@link MedicalConfig#enableBleedout()}.
      */
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
@@ -191,7 +214,7 @@ public final class MedicalEventHandler {
         if (player.level().isClientSide) {
             return;
         }
-        if (!MedicalConfig.enableKnockdown()) {
+        if (!MedicalConfig.enableBleedout()) {
             return;
         }
         if ((player.isCreative() || player.isSpectator()) && MedicalConfig.effectImmuneInCreative()) {
@@ -209,18 +232,18 @@ public final class MedicalEventHandler {
             return;
         }
 
-        // Admin / void / generic kills MUST always kill, even with knockdown enabled. These sources bypass
+        // Admin / void / generic kills MUST always kill, even with bleed-out enabled. These sources bypass
         // invulnerability (/kill's genericKill, the void, our own command-suite kill); a null source is an
-        // unknown out-of-band lethal cause treated the same. Never intercept them into a knockdown — let
+        // unknown out-of-band lethal cause treated the same. Never intercept them into a bleed-out — let
         // vanilla's death (die() -> LivingDeathEvent -> respawn) proceed. First clear any transient downed
         // state and mark the profile DEAD so trackers stop rendering a downed pose on a player who is dying,
         // and any re-entrant death event short-circuits on the DEAD check above.
         DamageSource src = event.getSource();
         if (src == null || src.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
             profile.setState(HealthState.DEAD);
-            profile.setBlackoutActive(false);
-            profile.setBlackoutUntilTick(0L);
-            profile.setKnockdownSinceTick(-1L);
+            profile.setOverdoseUnconscious(false);
+            profile.setOverdoseUntilTick(0L);
+            profile.setBleedoutSinceTick(-1L);
             if (profile.hasActiveTreatment()) {
                 MedicalActionService.cancel(player, "dead");
             }
@@ -233,16 +256,16 @@ public final class MedicalEventHandler {
             return;
         }
 
-        // A knockdown interrupts any in-progress timed treatment.
+        // A bleed-out unconsciousness interrupts any in-progress timed treatment.
         if (profile.hasActiveTreatment()) {
-            MedicalActionService.cancel(player, "knocked_down");
+            MedicalActionService.cancel(player, "unconscious");
         }
 
-        // Still have knockdown budget: cancel death, crawl, keep bleeding until the timer runs out.
+        // Still have bleed-out budget: cancel death, crawl, keep bleeding until the timer runs out.
         event.setCanceled(true);
         profile.setState(HealthState.UNCONSCIOUS);
-        if (profile.getKnockdownSinceTick() < 0L) {
-            profile.setKnockdownSinceTick(player.level().getGameTime());
+        if (profile.getBleedoutSinceTick() < 0L) {
+            profile.setBleedoutSinceTick(player.level().getGameTime());
         }
         profile.markDirty();
         data.bumpRevision();

@@ -50,7 +50,7 @@ public final class SubstanceRegistry {
                 0.95F,   // painSuppression
                 0.5F,    // doseLoad
                 1.0F,    // overdoseThreshold
-                200,     // blackoutTicks
+                200,     // unconsciousTicks
                 1.6F,    // lethalThreshold
                 false,   // antidote
                 0.0F,    // reversalAmount (unused for opioid)
@@ -67,7 +67,7 @@ public final class SubstanceRegistry {
                 0.0F,    // painSuppression (irrelevant for antidote)
                 0.0F,    // doseLoad
                 0.0F,    // overdoseThreshold (unused)
-                0,       // blackoutTicks (unused)
+                0,       // unconsciousTicks (unused)
                 0.0F,    // lethalThreshold (disabled)
                 true,    // antidote
                 3.0F,    // reversalAmount

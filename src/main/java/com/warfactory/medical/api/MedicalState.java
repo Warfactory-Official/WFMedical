@@ -38,7 +38,7 @@ public final class MedicalState {
     }
 
     /**
-     * @return true when leg fracture / knockdown forbids sprinting.
+     * @return true when leg fracture / unconsciousness forbids sprinting.
      */
     public static boolean isSprintBlocked(Player player) {
         DerivedStats s = stats(player);
@@ -62,7 +62,7 @@ public final class MedicalState {
     }
 
     /**
-     * @return true when the player is unconscious (bleed-out knockdown OR overdose blackout — the single merged state).
+     * @return true when the player is unconscious (bleed-out OR overdose unconsciousness — the single merged state).
      */
     public static boolean isUnconscious(Player player) {
         DerivedStats s = stats(player);

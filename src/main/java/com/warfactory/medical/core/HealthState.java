@@ -5,9 +5,9 @@ package com.warfactory.medical.core;
  * progression described in the design.
  *
  * <p>{@link #UNCONSCIOUS} is the SINGLE externally-visible "passed out" state. It is entered from two
- * internally-distinct causes that the engine keeps apart so the outcomes stay correct: a bleeding-out
- * knockdown (lethal damage / blood loss, which runs a death timer and kills if untreated) and an opioid
- * overdose blackout (which runs a wake timer and recovers automatically, unless the overdose is lethal).
+ * internally-distinct causes that the engine keeps apart so the outcomes stay correct: a bleed-out
+ * unconsciousness (lethal damage / blood loss, which runs a death timer and kills if untreated) and an opioid
+ * overdose unconsciousness (which runs a wake timer and recovers automatically, unless the overdose is lethal).
  * From the outside — HUD, overlays, downed pose, commands, API — there is exactly one unconscious state.</p>
  *
  * <p>The declaration ORDER is significant: {@link #ordinal()} is used for severity comparisons (a worse

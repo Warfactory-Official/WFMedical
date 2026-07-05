@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Restricts sprint and jump for players with leg fractures or in the knocked-down state.
+ * Restricts sprint and jump for players with leg fractures or in the unconscious state.
  * All decisions are read from the server-authoritative {@link MedicalState} facade, which is
  * null-safe for non-players and pre-sync clients.
  */

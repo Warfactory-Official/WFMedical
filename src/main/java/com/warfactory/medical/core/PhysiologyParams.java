@@ -8,13 +8,13 @@ package com.warfactory.medical.core;
  * @param maxBloodMl                 total blood volume in ml.
  * @param bloodLowFraction           fraction below which blood-loss penalties begin.
  * @param bloodCriticalFraction      fraction below which the player is critical.
- * @param bloodDeathMl               blood volume (ml) at or below which death/knockdown occurs.
+ * @param bloodDeathMl               blood volume (ml) at or below which death/bleed-out occurs.
  * @param painShockThreshold         pain (0..1) above which pain-shock penalties begin.
  * @param painMaxHealthPenalty       max health points removed by full pain shock.
  * @param legFractureSpeedMultiplier movement multiplier applied per fractured leg.
  * @param painSpeedFloor             lower bound on the movement multiplier.
- * @param knockdownEnabled           if true, lethal conditions knock down instead of instant death.
- * @param knockdownBleedoutTicks     ticks a player may remain knocked down before dying.
+ * @param bleedoutEnabled            if true, lethal conditions render unconscious (bleed-out) instead of instant death.
+ * @param bleedoutTicks              ticks a player may remain unconscious from bleeding out before dying.
  */
 public record PhysiologyParams(
         float maxHealthPoints,
@@ -26,8 +26,8 @@ public record PhysiologyParams(
         float painMaxHealthPenalty,
         float legFractureSpeedMultiplier,
         float painSpeedFloor,
-        boolean knockdownEnabled,
-        int knockdownBleedoutTicks
+        boolean bleedoutEnabled,
+        int bleedoutTicks
 ) {
     public static PhysiologyParams defaults() {
         return new PhysiologyParams(
@@ -40,8 +40,8 @@ public record PhysiologyParams(
                 10.0F,      // painMaxHealthPenalty
                 0.40F,      // legFractureSpeedMultiplier
                 0.30F,      // painSpeedFloor
-                true,       // knockdownEnabled
-                600         // knockdownBleedoutTicks
+                true,       // bleedoutEnabled
+                600         // bleedoutTicks
         );
     }
 }
