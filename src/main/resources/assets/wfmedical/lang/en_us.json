@@ -1,0 +1,13 @@
+{
+  "itemGroup.wfmedical.medical": "Warfactory Medical",
+
+  "item.wfmedical.bandage": "Bandage",
+  "item.wfmedical.splint": "Splint",
+  "item.wfmedical.suture_kit": "Suture Kit",
+  "item.wfmedical.blood_bag": "Blood Bag",
+  "item.wfmedical.painkillers": "Painkillers",
+  "item.wfmedical.tourniquet": "Tourniquet",
+  "item.wfmedical.medkit": "Medkit",
+  "item.wfmedical.burn_ointment": "Burn Ointment",
+  "item.wfmedical.antirad_shot": "Anti-Radiation Shot"
+}

@@ -1,0 +1,307 @@
+# =============================================================================
+# Warfactory Medical - Data-driven trauma & treatment definitions
+# =============================================================================
+# This file is copied to <config>/wfmedical_definitions.toml on first launch and
+# then parsed by MedicalDefinitions.java. Edit the copy in your config folder to
+# customise injuries and medical items without touching code.
+#
+# Schema
+# ------
+# [[trauma]] tables (one per injury type):
+#   id                          string  unique trauma id
+#   category                    string  TraumaCategory enum name (BRUISE, LACERATION,
+#                                       FRACTURE, BURN, INTERNAL_BLEEDING, PUNCTURE,
+#                                       CRUSH_INJURY, RADIATION_BURN, CHEMICAL_BURN)
+#   major                       bool    permanently reduces max health until treated
+#   severityContribution        float   base severity added when this trauma is created
+#   painPerSeverity             float   pain (0..1 scale) contributed per unit severity
+#   bleedingPerSeverity         float   blood loss in ml/tick per unit severity
+#   healSpeedPerTick            float   natural severity healed per tick (0 = never)
+#   canReopen                   bool    can start bleeding again after treatment
+#   permanent                   bool    never heals naturally (needs treatment)
+#   movementModifier            float   movement speed multiplier while active (1.0 = none)
+#   healthReductionPerSeverity  float   max-health points removed per unit severity (major)
+#   maxSeverity                 float   clamp for merged/aggregated severity
+#   mergeable                   bool    compatible instances may merge to bound counts
+#   treatmentActions            array   TreatmentAction enum names this trauma responds to
+#                                       (REDUCE_BLEEDING, SUTURE_WOUND, STABILIZE_FRACTURE,
+#                                        RESTORE_BLOOD, REDUCE_PAIN, HEAL_TRAUMA,
+#                                        TREAT_BURN, TREAT_RADIATION)
+#
+# [[treatment]] tables (one per medical item):
+#   item              string  item id (registry name) the treatment is bound to
+#   action            string  TreatmentAction enum name
+#   categories        array   TraumaCategory names this item may act on ([] = any)
+#   magnitude         float   generic strength (bleeding reduction, heal amount, etc.)
+#   bloodRestoreMl    float   blood restored on use, in ml
+#   useDurationTicks  int     item use / channel duration in ticks
+#   removesTrauma     bool    whether a successful application removes the trauma
+# =============================================================================
+
+
+# ------------------------------ TRAUMA TYPES ---------------------------------
+
+# Minor bruise: regenerates on its own, no bleeding, tiny pain.
+[[trauma]]
+id = "bruise"
+category = "BRUISE"
+major = false
+severityContribution = 0.3
+painPerSeverity = 0.15
+bleedingPerSeverity = 0.0
+healSpeedPerTick = 0.0008
+canReopen = false
+permanent = false
+movementModifier = 1.0
+healthReductionPerSeverity = 0.0
+maxSeverity = 1.0
+mergeable = true
+treatmentActions = ["HEAL_TRAUMA"]
+
+# Small laceration: light bleeding, closes with a bandage or suture.
+[[trauma]]
+id = "laceration_small"
+category = "LACERATION"
+major = false
+severityContribution = 0.4
+painPerSeverity = 0.2
+bleedingPerSeverity = 0.4
+healSpeedPerTick = 0.0004
+canReopen = true
+permanent = false
+movementModifier = 1.0
+healthReductionPerSeverity = 1.0
+maxSeverity = 1.0
+mergeable = true
+treatmentActions = ["REDUCE_BLEEDING", "SUTURE_WOUND", "HEAL_TRAUMA"]
+
+# Large laceration: heavy bleeding, can reopen, best closed with a suture kit.
+[[trauma]]
+id = "laceration_large"
+category = "LACERATION"
+major = true
+severityContribution = 0.8
+painPerSeverity = 0.6
+bleedingPerSeverity = 1.2
+healSpeedPerTick = 0.0001
+canReopen = true
+permanent = false
+movementModifier = 1.0
+healthReductionPerSeverity = 4.0
+maxSeverity = 1.0
+mergeable = true
+treatmentActions = ["REDUCE_BLEEDING", "SUTURE_WOUND", "HEAL_TRAUMA"]
+
+# Fracture: no bleeding but strong movement penalty; stabilised with a splint. The leg-fracture speed
+# penalty is applied by the engine (legFractureSpeedMultiplier) and only affects legs, so movementModifier
+# stays 1.0 here to avoid double-slowing legs and to keep arm fractures from slowing walking.
+[[trauma]]
+id = "fracture"
+category = "FRACTURE"
+major = true
+severityContribution = 0.9
+painPerSeverity = 0.5
+bleedingPerSeverity = 0.0
+healSpeedPerTick = 0.00005
+canReopen = false
+permanent = false
+movementModifier = 1.0
+healthReductionPerSeverity = 3.0
+maxSeverity = 1.0
+mergeable = false
+treatmentActions = ["STABILIZE_FRACTURE", "HEAL_TRAUMA"]
+
+# Burn: painful, slight bleeding, treated with ointment.
+[[trauma]]
+id = "burn"
+category = "BURN"
+major = true
+severityContribution = 0.6
+painPerSeverity = 0.55
+bleedingPerSeverity = 0.1
+healSpeedPerTick = 0.0002
+canReopen = false
+permanent = false
+movementModifier = 1.0
+healthReductionPerSeverity = 3.0
+maxSeverity = 1.0
+mergeable = true
+treatmentActions = ["TREAT_BURN", "HEAL_TRAUMA"]
+
+# Internal bleeding: severe, hidden, high blood loss; needs surgery/medkit.
+[[trauma]]
+id = "internal_bleeding"
+category = "INTERNAL_BLEEDING"
+major = true
+severityContribution = 0.9
+painPerSeverity = 0.4
+bleedingPerSeverity = 2.0
+healSpeedPerTick = 0.0
+canReopen = false
+permanent = true
+movementModifier = 1.0
+healthReductionPerSeverity = 5.0
+maxSeverity = 1.0
+mergeable = true
+treatmentActions = ["REDUCE_BLEEDING", "HEAL_TRAUMA"]
+
+# Puncture: deep wound, bleeds, can reopen.
+[[trauma]]
+id = "puncture"
+category = "PUNCTURE"
+major = true
+severityContribution = 0.7
+painPerSeverity = 0.5
+bleedingPerSeverity = 0.9
+healSpeedPerTick = 0.0002
+canReopen = true
+permanent = false
+movementModifier = 1.0
+healthReductionPerSeverity = 3.5
+maxSeverity = 1.0
+mergeable = true
+treatmentActions = ["REDUCE_BLEEDING", "SUTURE_WOUND", "HEAL_TRAUMA"]
+
+# Crush injury: blunt trauma, big health hit, mild bleeding.
+[[trauma]]
+id = "crush_injury"
+category = "CRUSH_INJURY"
+major = true
+severityContribution = 0.8
+painPerSeverity = 0.6
+bleedingPerSeverity = 0.3
+healSpeedPerTick = 0.00008
+canReopen = false
+permanent = false
+movementModifier = 0.85
+healthReductionPerSeverity = 4.0
+maxSeverity = 1.0
+mergeable = true
+treatmentActions = ["HEAL_TRAUMA"]
+
+# Radiation burn: permanent until treated with anti-rad, ongoing damage.
+[[trauma]]
+id = "radiation_burn"
+category = "RADIATION_BURN"
+major = true
+severityContribution = 0.7
+painPerSeverity = 0.45
+bleedingPerSeverity = 0.0
+healSpeedPerTick = 0.0
+canReopen = false
+permanent = true
+movementModifier = 1.0
+healthReductionPerSeverity = 4.0
+maxSeverity = 1.0
+mergeable = true
+treatmentActions = ["TREAT_RADIATION", "HEAL_TRAUMA"]
+
+# Chemical burn: corrosive, painful, treated with ointment.
+[[trauma]]
+id = "chemical_burn"
+category = "CHEMICAL_BURN"
+major = true
+severityContribution = 0.65
+painPerSeverity = 0.5
+bleedingPerSeverity = 0.2
+healSpeedPerTick = 0.0001
+canReopen = false
+permanent = false
+movementModifier = 1.0
+healthReductionPerSeverity = 3.5
+maxSeverity = 1.0
+mergeable = true
+treatmentActions = ["TREAT_BURN", "HEAL_TRAUMA"]
+
+
+# ------------------------------- TREATMENTS ----------------------------------
+
+# Bandage: slows bleeding on open wounds.
+[[treatment]]
+item = "wfmedical:bandage"
+action = "REDUCE_BLEEDING"
+categories = ["LACERATION", "PUNCTURE"]
+magnitude = 0.5
+bloodRestoreMl = 0.0
+useDurationTicks = 40
+removesTrauma = false
+
+# Splint: stabilises a fracture so it can heal.
+[[treatment]]
+item = "wfmedical:splint"
+action = "STABILIZE_FRACTURE"
+categories = ["FRACTURE"]
+magnitude = 1.0
+bloodRestoreMl = 0.0
+useDurationTicks = 60
+removesTrauma = false
+
+# Suture kit: closes lacerations/punctures so they cannot reopen easily.
+[[treatment]]
+item = "wfmedical:suture_kit"
+action = "SUTURE_WOUND"
+categories = ["LACERATION", "PUNCTURE"]
+magnitude = 1.0
+bloodRestoreMl = 0.0
+useDurationTicks = 100
+removesTrauma = false
+
+# Blood bag: restores blood volume, no trauma effect.
+[[treatment]]
+item = "wfmedical:blood_bag"
+action = "RESTORE_BLOOD"
+categories = []
+magnitude = 0.0
+bloodRestoreMl = 1000.0
+useDurationTicks = 120
+removesTrauma = false
+
+# Painkillers: reduces perceived pain without healing injuries.
+[[treatment]]
+item = "wfmedical:painkillers"
+action = "REDUCE_PAIN"
+categories = []
+magnitude = 0.5
+bloodRestoreMl = 0.0
+useDurationTicks = 30
+removesTrauma = false
+
+# Tourniquet: strong bleeding stop on limbs.
+[[treatment]]
+item = "wfmedical:tourniquet"
+action = "REDUCE_BLEEDING"
+categories = ["LACERATION", "PUNCTURE", "INTERNAL_BLEEDING"]
+magnitude = 0.9
+bloodRestoreMl = 0.0
+useDurationTicks = 60
+removesTrauma = false
+
+# Medkit: general-purpose, fully heals (removes) most trauma.
+[[treatment]]
+item = "wfmedical:medkit"
+action = "HEAL_TRAUMA"
+categories = []
+magnitude = 1.0
+bloodRestoreMl = 250.0
+useDurationTicks = 160
+removesTrauma = true
+
+# Burn ointment: treats burns and chemical burns.
+[[treatment]]
+item = "wfmedical:burn_ointment"
+action = "TREAT_BURN"
+categories = ["BURN", "CHEMICAL_BURN"]
+magnitude = 0.8
+bloodRestoreMl = 0.0
+useDurationTicks = 80
+removesTrauma = false
+
+# Anti-rad shot: treats radiation burns.
+[[treatment]]
+item = "wfmedical:antirad_shot"
+action = "TREAT_RADIATION"
+categories = ["RADIATION_BURN"]
+magnitude = 1.0
+bloodRestoreMl = 0.0
+useDurationTicks = 40
+removesTrauma = true
