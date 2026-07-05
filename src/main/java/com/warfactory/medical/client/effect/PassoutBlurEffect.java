@@ -50,25 +50,39 @@ import java.util.List;
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class PassoutBlurEffect {
 
-    /** Per-frame easing factor toward the fade target; small so the blur eases in/out smoothly. */
+    /**
+     * Per-frame easing factor toward the fade target; small so the blur eases in/out smoothly.
+     */
     private static final float FADE_STEP = 0.06F;
-    /** Below this fade the effect is a no-op; the early return keeps a conscious player off the hot path. */
+    /**
+     * Below this fade the effect is a no-op; the early return keeps a conscious player off the hot path.
+     */
     private static final float EPSILON = 0.001F;
-    /** Blur radius (in texels along each axis) at full fade; keeps the tap count bounded and cheap. */
+    /**
+     * Blur radius (in texels along each axis) at full fade; keeps the tap count bounded and cheap.
+     */
     private static final float MAX_RADIUS = 6.0F;
 
     private static final ResourceLocation SHADER =
             new ResourceLocation(WFMedical.MOD_ID, "shaders/post/passout_blur.json");
 
-    /** Cached post-processing chain; {@code null} until first needed or after teardown. */
+    /**
+     * Cached post-processing chain; {@code null} until first needed or after teardown.
+     */
     private static PostChain chain;
-    /** Window dimensions the cached {@link #chain} was last sized for. */
+    /**
+     * Window dimensions the cached {@link #chain} was last sized for.
+     */
     private static int chainWidth = -1;
     private static int chainHeight = -1;
-    /** Set once on unrecoverable failure; blocks all further processing for the session. */
+    /**
+     * Set once on unrecoverable failure; blocks all further processing for the session.
+     */
     private static boolean disabled;
 
-    /** Smoothed client-side fade toward the current passed-out target; persists across frames. */
+    /**
+     * Smoothed client-side fade toward the current passed-out target; persists across frames.
+     */
     private static float fade;
 
     private PassoutBlurEffect() {
@@ -123,7 +137,9 @@ public final class PassoutBlurEffect {
         }
     }
 
-    /** Tear down the chain and reset the fade when leaving a world so we never leak or reuse stale GL state. */
+    /**
+     * Tear down the chain and reset the fade when leaving a world so we never leak or reuse stale GL state.
+     */
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         fade = 0.0F;
@@ -134,8 +150,8 @@ public final class PassoutBlurEffect {
 
     /**
      * @return {@code true} while the LOCAL player is passed out — the single merged
-     *         {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state (either overdose or bleed-out
-     *         cause). Mirrors the server-side {@code isDowned} definition on the client.
+     * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state (either overdose or bleed-out
+     * cause). Mirrors the server-side {@code isDowned} definition on the client.
      */
     private static boolean isLocalPlayerPassedOut() {
         return ClientMedicalCache.stats().unconscious();
@@ -192,7 +208,9 @@ public final class PassoutBlurEffect {
         }
     }
 
-    /** Close the chain and forget its cached size; safe to call when already torn down. */
+    /**
+     * Close the chain and forget its cached size; safe to call when already torn down.
+     */
     private static void closeChain() {
         if (chain != null) {
             try {
@@ -206,7 +224,9 @@ public final class PassoutBlurEffect {
         chainHeight = -1;
     }
 
-    /** Permanently disable the effect for this session and release any GL resources. */
+    /**
+     * Permanently disable the effect for this session and release any GL resources.
+     */
     private static void disable() {
         disabled = true;
         closeChain();

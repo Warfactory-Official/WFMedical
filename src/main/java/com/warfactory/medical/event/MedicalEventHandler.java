@@ -7,11 +7,7 @@ import com.warfactory.medical.capability.MedicalProvider;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.MedicalProfile;
-import com.warfactory.medical.core.damage.ArmorEvaluation;
-import com.warfactory.medical.core.damage.DamageCategory;
-import com.warfactory.medical.core.damage.DamageClassifier;
-import com.warfactory.medical.core.damage.HitLocation;
-import com.warfactory.medical.core.damage.TraumaGenerator;
+import com.warfactory.medical.core.damage.*;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
@@ -51,12 +47,18 @@ import java.util.List;
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class MedicalEventHandler {
 
-    /** Capability attachment key for the per-player medical data. */
+    /**
+     * Capability attachment key for the per-player medical data.
+     */
     private static final ResourceLocation MEDICAL_KEY = new ResourceLocation(WFMedical.MOD_ID, "medical");
 
-    /** Fraction of a fully-blocked hit that leaks through as vanilla-like minor bruising. */
+    /**
+     * Fraction of a fully-blocked hit that leaks through as vanilla-like minor bruising.
+     */
     private static final float BLOCKED_RESIDUAL_FRACTION = 0.15F;
-    /** Hard cap on that residual so a huge blocked hit still stays cosmetic. */
+    /**
+     * Hard cap on that residual so a huge blocked hit still stays cosmetic.
+     */
     private static final float BLOCKED_RESIDUAL_MAX = 1.0F;
 
     private MedicalEventHandler() {
@@ -64,7 +66,9 @@ public final class MedicalEventHandler {
 
     // ------------------------------------------------------------------ capability attach
 
-    /** Attach a fresh {@link MedicalProvider} to every player and wire its invalidation listener. */
+    /**
+     * Attach a fresh {@link MedicalProvider} to every player and wire its invalidation listener.
+     */
     @SubscribeEvent
     public static void onAttachCapabilities(AttachCapabilitiesEvent<Entity> event) {
         if (event.getObject() instanceof Player) {
@@ -76,7 +80,9 @@ public final class MedicalEventHandler {
 
     // ------------------------------------------------------------------ scheduled physiology
 
-    /** Fan the server tick out to the engine, which enforces its own cadence and dirty-skip. */
+    /**
+     * Fan the server tick out to the engine, which enforces its own cadence and dirty-skip.
+     */
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END) {

@@ -22,13 +22,17 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class WFMedicalClient {
 
-    /** Guards against the mod-bus overlay event reaching this subscriber more than once per launch. */
+    /**
+     * Guards against the mod-bus overlay event reaching this subscriber more than once per launch.
+     */
     private static boolean overlaysRegistered;
 
     private WFMedicalClient() {
     }
 
-    /** Register the three rebindable medical key mappings. */
+    /**
+     * Register the three rebindable medical key mappings.
+     */
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         MedicalKeyMappings.register(event);

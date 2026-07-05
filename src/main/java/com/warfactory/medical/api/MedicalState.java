@@ -37,25 +37,33 @@ public final class MedicalState {
         return data.getProfile().cached();
     }
 
-    /** @return true when leg fracture / knockdown forbids sprinting. */
+    /**
+     * @return true when leg fracture / knockdown forbids sprinting.
+     */
     public static boolean isSprintBlocked(Player player) {
         DerivedStats s = stats(player);
         return s != null && s.sprintBlocked();
     }
 
-    /** @return multiplier applied to jump strength (1.0 = unaffected). */
+    /**
+     * @return multiplier applied to jump strength (1.0 = unaffected).
+     */
     public static float jumpMultiplier(Player player) {
         DerivedStats s = stats(player);
         return s != null ? s.jumpMultiplier() : 1.0F;
     }
 
-    /** @return multiplier applied to movement speed (1.0 = unaffected). */
+    /**
+     * @return multiplier applied to movement speed (1.0 = unaffected).
+     */
     public static float movementMultiplier(Player player) {
         DerivedStats s = stats(player);
         return s != null ? s.movementMultiplier() : 1.0F;
     }
 
-    /** @return true when the player is unconscious (bleed-out knockdown OR overdose blackout — the single merged state). */
+    /**
+     * @return true when the player is unconscious (bleed-out knockdown OR overdose blackout — the single merged state).
+     */
     public static boolean isUnconscious(Player player) {
         DerivedStats s = stats(player);
         return s != null && s.state() == HealthState.UNCONSCIOUS;

@@ -66,35 +66,43 @@ import java.util.List;
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class WFMedicalCommands {
 
-    /** Default forced-blackout / command-injected overdose blackout duration (ticks). */
+    /**
+     * Default forced-blackout / command-injected overdose blackout duration (ticks).
+     */
     private static final int DEFAULT_BLACKOUT_TICKS = 200;
+    /**
+     * Suggest the six {@link LimbType} enum names.
+     */
+    private static final SuggestionProvider<CommandSourceStack> LIMB_SUGGESTIONS =
+            (ctx, b) -> SharedSuggestionProvider.suggest(Arrays.stream(LimbType.VALUES).map(Enum::name), b);
+
+    // ------------------------------------------------------------------ suggestion providers
+    /**
+     * Suggest every registered {@link TraumaType} id.
+     */
+    private static final SuggestionProvider<CommandSourceStack> TRAUMA_SUGGESTIONS =
+            (ctx, b) -> SharedSuggestionProvider.suggest(
+                    TraumaRegistry.active().all().stream().map(TraumaType::getId), b);
+    /**
+     * Suggest every registered {@link Substance} id (e.g. morphine, naloxone).
+     */
+    private static final SuggestionProvider<CommandSourceStack> SUBSTANCE_SUGGESTIONS =
+            (ctx, b) -> SharedSuggestionProvider.suggest(
+                    SubstanceRegistry.active().all().stream().map(Substance::id), b);
+    /**
+     * Suggest the {@link HealthState} enum names.
+     */
+    private static final SuggestionProvider<CommandSourceStack> STATE_SUGGESTIONS =
+            (ctx, b) -> SharedSuggestionProvider.suggest(Arrays.stream(HealthState.values()).map(Enum::name), b);
 
     private WFMedicalCommands() {
     }
 
-    // ------------------------------------------------------------------ suggestion providers
-
-    /** Suggest the six {@link LimbType} enum names. */
-    private static final SuggestionProvider<CommandSourceStack> LIMB_SUGGESTIONS =
-            (ctx, b) -> SharedSuggestionProvider.suggest(Arrays.stream(LimbType.VALUES).map(Enum::name), b);
-
-    /** Suggest every registered {@link TraumaType} id. */
-    private static final SuggestionProvider<CommandSourceStack> TRAUMA_SUGGESTIONS =
-            (ctx, b) -> SharedSuggestionProvider.suggest(
-                    TraumaRegistry.active().all().stream().map(TraumaType::getId), b);
-
-    /** Suggest every registered {@link Substance} id (e.g. morphine, naloxone). */
-    private static final SuggestionProvider<CommandSourceStack> SUBSTANCE_SUGGESTIONS =
-            (ctx, b) -> SharedSuggestionProvider.suggest(
-                    SubstanceRegistry.active().all().stream().map(Substance::getId), b);
-
-    /** Suggest the {@link HealthState} enum names. */
-    private static final SuggestionProvider<CommandSourceStack> STATE_SUGGESTIONS =
-            (ctx, b) -> SharedSuggestionProvider.suggest(Arrays.stream(HealthState.values()).map(Enum::name), b);
-
     // ------------------------------------------------------------------ registration
 
-    /** FORGE-bus hook (server-only) that wires the whole tree into the dispatcher. */
+    /**
+     * FORGE-bus hook (server-only) that wires the whole tree into the dispatcher.
+     */
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         register(event.getDispatcher());
@@ -267,13 +275,17 @@ public final class WFMedicalCommands {
 
     // ------------------------------------------------------------------ target resolution helpers
 
-    /** The executing player as a singleton list (throws a friendly error if run from console). */
+    /**
+     * The executing player as a singleton list (throws a friendly error if run from console).
+     */
     private static Collection<ServerPlayer> self(CommandContext<CommandSourceStack> ctx)
             throws CommandSyntaxException {
         return Collections.singletonList(ctx.getSource().getPlayerOrException());
     }
 
-    /** The parsed {@code targets} selector. */
+    /**
+     * The parsed {@code targets} selector.
+     */
     private static Collection<ServerPlayer> players(CommandContext<CommandSourceStack> ctx)
             throws CommandSyntaxException {
         return EntityArgument.getPlayers(ctx, "targets");
@@ -302,7 +314,9 @@ public final class WFMedicalCommands {
         return count;
     }
 
-    /** Full heal: clear all trauma, top up blood, drop pain/drug/blackout/knockdown, back to full health. */
+    /**
+     * Full heal: clear all trauma, top up blood, drop pain/drug/blackout/knockdown, back to full health.
+     */
     private static int cmdHeal(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
             clearAllTrauma(profile);
@@ -322,7 +336,9 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /** Replace the profile with a pristine default, then resync to full derived health. */
+    /**
+     * Replace the profile with a pristine default, then resync to full derived health.
+     */
     private static int cmdReset(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
             MedicalProfile fresh = new MedicalProfile(MedicalConfig.maxBloodMl());
@@ -413,7 +429,9 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /** Add a trauma of the given registry id to a limb (severity optional, default = base contribution). */
+    /**
+     * Add a trauma of the given registry id to a limb (severity optional, default = base contribution).
+     */
     private static int cmdTraumaAdd(CommandSourceStack src, Collection<ServerPlayer> targets,
                                     String limbName, String traumaId, float severity) {
         LimbType limb = parseLimb(src, limbName);
@@ -438,7 +456,9 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /** Remove the first trauma matching the id on a limb. */
+    /**
+     * Remove the first trauma matching the id on a limb.
+     */
     private static int cmdTraumaRemove(CommandSourceStack src, Collection<ServerPlayer> targets,
                                        String limbName, String traumaId) {
         LimbType limb = parseLimb(src, limbName);
@@ -467,7 +487,9 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /** Clear all trauma on one limb, or on every limb when {@code limbName} is null. */
+    /**
+     * Clear all trauma on one limb, or on every limb when {@code limbName} is null.
+     */
     private static int cmdTraumaClear(CommandSourceStack src, Collection<ServerPlayer> targets, String limbName) {
         final LimbType only;
         if (limbName != null) {
@@ -493,7 +515,9 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /** Set or add blood volume (clamped to {@code [0, maxBloodMl]} by the profile setter). */
+    /**
+     * Set or add blood volume (clamped to {@code [0, maxBloodMl]} by the profile setter).
+     */
     private static int cmdBlood(CommandSourceStack src, Collection<ServerPlayer> targets, double ml, boolean add) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
             profile.setBloodMl(add ? profile.getBloodMl() + ml : ml);
@@ -506,7 +530,9 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /** Set the perceived-pain suppression mask (0..1). */
+    /**
+     * Set the perceived-pain suppression mask (0..1).
+     */
     private static int cmdSuppression(CommandSourceStack src, Collection<ServerPlayer> targets, float value) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
             profile.setPainSuppression(value);
@@ -518,8 +544,6 @@ public final class WFMedicalCommands {
                 + " for " + n + " player(s)."), true);
         return n;
     }
-
-    private enum DrugMode { SET, ADD, CLEAR }
 
     /**
      * Set / add / clear the accumulating drug load. To keep the command immediately testable, when the
@@ -554,7 +578,9 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /** Inject a registered substance directly, exercising the full opioid / overdose / antidote path. */
+    /**
+     * Inject a registered substance directly, exercising the full opioid / overdose / antidote path.
+     */
     private static int cmdSubstance(CommandSourceStack src, Collection<ServerPlayer> targets, String substanceId) {
         Substance substance = resolveSubstance(substanceId);
         if (substance == null) {
@@ -567,12 +593,14 @@ public final class WFMedicalCommands {
             MedicalEngine.resync(p);
             return injected;
         });
-        src.sendSuccess(() -> Component.literal("[wfmedical] Injected '" + substance.getId() + "' into "
+        src.sendSuccess(() -> Component.literal("[wfmedical] Injected '" + substance.id() + "' into "
                 + n + " player(s)."), true);
         return n;
     }
 
-    /** Force a blackout for {@code ticks} ticks. */
+    /**
+     * Force a blackout for {@code ticks} ticks.
+     */
     private static int cmdBlackout(CommandSourceStack src, Collection<ServerPlayer> targets, int ticks) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
             profile.setBlackoutUntilTick(p.level().getGameTime() + ticks);
@@ -606,7 +634,9 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /** Set the {@link HealthState} directly; DEAD routes through the proper kill semantics. */
+    /**
+     * Set the {@link HealthState} directly; DEAD routes through the proper kill semantics.
+     */
     private static int cmdState(CommandSourceStack src, Collection<ServerPlayer> targets, String stateName) {
         HealthState state = parseState(src, stateName);
         if (state == null) {
@@ -642,7 +672,9 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /** Convenience: add the fracture trauma to a limb (requires the fracture feature enabled). */
+    /**
+     * Convenience: add the fracture trauma to a limb (requires the fracture feature enabled).
+     */
     private static int cmdFracture(CommandSourceStack src, Collection<ServerPlayer> targets, String limbName) {
         if (!MedicalConfig.enableFractures()) {
             src.sendFailure(Component.literal("[wfmedical] Fractures are disabled in the config."));
@@ -656,7 +688,9 @@ public final class WFMedicalCommands {
         return addTraumaConvenience(src, targets, limbName, type, "Fractured");
     }
 
-    /** Convenience: add a bleeding laceration trauma to a limb. */
+    /**
+     * Convenience: add a bleeding laceration trauma to a limb.
+     */
     private static int cmdBleed(CommandSourceStack src, Collection<ServerPlayer> targets,
                                 String limbName, float severity) {
         TraumaType type = resolveTrauma("laceration", TraumaCategory.LACERATION);
@@ -680,8 +714,6 @@ public final class WFMedicalCommands {
                 + limb.name() + " on " + n + " player(s)."), true);
         return n;
     }
-
-    // ------------------------------------------------------------------ shared internals
 
     /**
      * Iterate targets, resolving the capability once per player, skipping (with a warning) any that lack it
@@ -709,11 +741,7 @@ public final class WFMedicalCommands {
         return count;
     }
 
-    /** Per-player mutation callback used by {@link #forEach}. */
-    @FunctionalInterface
-    private interface ProfileAction {
-        boolean apply(CommandSourceStack src, ServerPlayer player, IMedicalData data, MedicalProfile profile);
-    }
+    // ------------------------------------------------------------------ shared internals
 
     private static int addTraumaConvenience(CommandSourceStack src, Collection<ServerPlayer> targets,
                                             String limbName, TraumaType type, String verb) {
@@ -771,7 +799,9 @@ public final class WFMedicalCommands {
         limb.markDirty();
     }
 
-    /** Resolve a limb name against {@link LimbType} (case-insensitive), reporting failure on no match. */
+    /**
+     * Resolve a limb name against {@link LimbType} (case-insensitive), reporting failure on no match.
+     */
     private static LimbType parseLimb(CommandSourceStack src, String name) {
         for (LimbType lt : LimbType.VALUES) {
             if (lt.name().equalsIgnoreCase(name)) {
@@ -783,7 +813,9 @@ public final class WFMedicalCommands {
         return null;
     }
 
-    /** Resolve a health-state name (case-insensitive), reporting failure on no match. */
+    /**
+     * Resolve a health-state name (case-insensitive), reporting failure on no match.
+     */
     private static HealthState parseState(CommandSourceStack src, String name) {
         for (HealthState st : HealthState.values()) {
             if (st.name().equalsIgnoreCase(name)) {
@@ -794,7 +826,9 @@ public final class WFMedicalCommands {
         return null;
     }
 
-    /** Resolve a substance by its id first, then by its item id (case-insensitive). */
+    /**
+     * Resolve a substance by its id first, then by its item id (case-insensitive).
+     */
     private static Substance resolveSubstance(String key) {
         SubstanceRegistry reg = SubstanceRegistry.active();
         Substance byItem = reg.get(key);
@@ -802,14 +836,16 @@ public final class WFMedicalCommands {
             return byItem;
         }
         for (Substance sub : reg.all()) {
-            if (sub.getId().equalsIgnoreCase(key) || sub.getItemId().equalsIgnoreCase(key)) {
+            if (sub.id().equalsIgnoreCase(key) || sub.itemId().equalsIgnoreCase(key)) {
                 return sub;
             }
         }
         return null;
     }
 
-    /** Resolve a trauma type by preferred id, falling back to the first of a category. */
+    /**
+     * Resolve a trauma type by preferred id, falling back to the first of a category.
+     */
     private static TraumaType resolveTrauma(String preferredId, TraumaCategory fallbackCategory) {
         TraumaType byId = TraumaRegistry.active().get(preferredId);
         if (byId != null) {
@@ -830,7 +866,9 @@ public final class WFMedicalCommands {
         return String.format(java.util.Locale.ROOT, "%.2f", v);
     }
 
-    /** Build the multi-line debug dump for one player. */
+    /**
+     * Build the multi-line debug dump for one player.
+     */
     private static String buildDump(ServerPlayer p, MedicalProfile profile, DerivedStats stats) {
         long now = p.level().getGameTime();
         long remaining = profile.getBlackoutUntilTick() > 0L ? Math.max(0L, profile.getBlackoutUntilTick() - now) : 0L;
@@ -887,5 +925,15 @@ public final class WFMedicalCommands {
             }
         }
         return sb.toString();
+    }
+
+    private enum DrugMode {SET, ADD, CLEAR}
+
+    /**
+     * Per-player mutation callback used by {@link #forEach}.
+     */
+    @FunctionalInterface
+    private interface ProfileAction {
+        boolean apply(CommandSourceStack src, ServerPlayer player, IMedicalData data, MedicalProfile profile);
     }
 }

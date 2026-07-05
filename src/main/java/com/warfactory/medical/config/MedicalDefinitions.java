@@ -1,7 +1,7 @@
 package com.warfactory.medical.config;
 
-import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.core.CommentedConfig;
+import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.toml.TomlFormat;
 import com.mojang.logging.LogUtils;
 import com.warfactory.medical.core.substance.Substance;
@@ -19,11 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Loads the data-driven trauma / treatment definitions from a TOML file (parsed with Forge's bundled
@@ -36,10 +32,11 @@ import java.util.Set;
  */
 public final class MedicalDefinitions {
 
-    private static final Logger LOGGER = LogUtils.getLogger();
-
-    /** File name in both the config directory and the classpath. */
+    /**
+     * File name in both the config directory and the classpath.
+     */
     public static final String FILE_NAME = "wfmedical_definitions.toml";
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     private MedicalDefinitions() {
     }
@@ -204,7 +201,9 @@ public final class MedicalDefinitions {
     // Hardcoded fallback that mirrors wfmedical_definitions.toml exactly.
     // ---------------------------------------------------------------------
 
-    /** Populates the SAME definitions as the bundled TOML, programmatically (IO-free safety net). */
+    /**
+     * Populates the SAME definitions as the bundled TOML, programmatically (IO-free safety net).
+     */
     public static void loadDefaults(TraumaRegistry registry, Map<String, Treatment> itemTreatments,
                                     SubstanceRegistry substances) {
         registry.register(TraumaType.builder("bruise", TraumaCategory.BRUISE)

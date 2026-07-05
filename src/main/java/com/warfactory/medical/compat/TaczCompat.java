@@ -32,17 +32,23 @@ public final class TaczCompat {
     private TaczCompat() {
     }
 
-    /** @return true when the TACZ mod is present in the running instance. */
+    /**
+     * @return true when the TACZ mod is present in the running instance.
+     */
     public static boolean isLoaded() {
         return ModList.get() != null && ModList.get().isLoaded(MOD_ID);
     }
 
-    /** Live view of the recognised gun/bullet damage id substrings. */
+    /**
+     * Live view of the recognised gun/bullet damage id substrings.
+     */
     public static Set<String> getBulletDamageIds() {
         return BULLET_DAMAGE_IDS;
     }
 
-    /** Replace the recognised id set (values are lower-cased and blanks dropped). */
+    /**
+     * Replace the recognised id set (values are lower-cased and blanks dropped).
+     */
     public static void setBulletDamageIds(Collection<String> ids) {
         BULLET_DAMAGE_IDS.clear();
         if (ids == null) {
@@ -57,7 +63,7 @@ public final class TaczCompat {
 
     /**
      * @return true only when TACZ is loaded and the given source looks like gun/bullet damage.
-     *         Matches on the source msgId as well as the damage-type registry key namespace and path.
+     * Matches on the source msgId as well as the damage-type registry key namespace and path.
      */
     public static boolean isGunDamage(DamageSource source) {
         if (source == null || !isLoaded()) {

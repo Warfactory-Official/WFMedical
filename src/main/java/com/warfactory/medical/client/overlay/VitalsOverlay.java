@@ -32,15 +32,21 @@ import net.minecraftforge.client.gui.overlay.IGuiOverlay;
 @OnlyIn(Dist.CLIENT)
 public final class VitalsOverlay implements IGuiOverlay {
 
-    /** The singleton overlay instance (register it from client scaffolding to enable it). */
+    /**
+     * The singleton overlay instance (register it from client scaffolding to enable it).
+     */
     public static final IGuiOverlay INSTANCE = new VitalsOverlay();
 
     private static final int BAR_WIDTH = 60;
     private static final int BAR_HEIGHT = 6;
-    /** Top-left inset. */
+    /**
+     * Top-left inset.
+     */
     private static final int MARGIN_X = 4;
     private static final int MARGIN_Y = 4;
-    /** Width reserved for the leading label so bars line up. */
+    /**
+     * Width reserved for the leading label so bars line up.
+     */
     private static final int LABEL_WIDTH = 34;
 
     private static final ColorRectTexture BACKGROUND = new ColorRectTexture(0xC0101010);

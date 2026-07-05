@@ -19,7 +19,9 @@ import java.util.UUID;
  */
 public final class MedicalEffects {
 
-    /** Fixed UUIDs so our modifiers never stack across ticks and are cleanly removable. */
+    /**
+     * Fixed UUIDs so our modifiers never stack across ticks and are cleanly removable.
+     */
     private static final UUID MAX_HEALTH_MODIFIER_ID = UUID.fromString("b6d4c2a0-1e3f-4a7b-9c11-2f6e8a4d1c30");
     private static final UUID MOVEMENT_MODIFIER_ID = UUID.fromString("a1f0e9d8-7c6b-4a53-8e42-0b9c7d6e5f14");
     private static final String MAX_HEALTH_MODIFIER_NAME = "wfmedical:trauma_max_health";
@@ -119,7 +121,9 @@ public final class MedicalEffects {
         }
     }
 
-    /** Remove our transient modifiers (on logout, respawn reset, or creative immunity). */
+    /**
+     * Remove our transient modifiers (on logout, respawn reset, or creative immunity).
+     */
     public static void clear(ServerPlayer player) {
         if (player == null) {
             return;

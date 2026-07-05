@@ -32,14 +32,16 @@ public class InjectableItem extends MedicalItem {
         this.substance = substance;
     }
 
-    /** The substance this item injects. */
+    /**
+     * The substance this item injects.
+     */
     public Substance getSubstance() {
         return substance;
     }
 
     @Override
     public int getUseDuration(ItemStack stack) {
-        int ticks = substance != null ? substance.getUseDurationTicks() : 0;
+        int ticks = substance != null ? substance.useDurationTicks() : 0;
         return ticks > 0 ? ticks : 20;
     }
 

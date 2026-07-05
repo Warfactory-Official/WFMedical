@@ -20,7 +20,9 @@ import java.util.List;
 @Mixin(PostChain.class)
 public interface PostChainAccessor {
 
-    /** @return the live, ordered list of post-processing passes owned by this chain. */
+    /**
+     * @return the live, ordered list of post-processing passes owned by this chain.
+     */
     @Accessor("passes")
     List<PostPass> wfmedical$getPasses();
 }

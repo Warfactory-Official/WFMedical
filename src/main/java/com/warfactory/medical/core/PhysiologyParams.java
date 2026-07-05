@@ -4,17 +4,17 @@ package com.warfactory.medical.core;
  * Immutable bundle of physiology tunables. Kept config-free so the core stays pure; the config module
  * builds one of these from TOML and hands it to {@link Physiology}.
  *
- * @param maxHealthPoints         baseline max-health "points" (30 = 15 hearts).
- * @param maxBloodMl              total blood volume in ml.
- * @param bloodLowFraction        fraction below which blood-loss penalties begin.
- * @param bloodCriticalFraction   fraction below which the player is critical.
- * @param bloodDeathMl            blood volume (ml) at or below which death/knockdown occurs.
- * @param painShockThreshold      pain (0..1) above which pain-shock penalties begin.
- * @param painMaxHealthPenalty    max health points removed by full pain shock.
+ * @param maxHealthPoints            baseline max-health "points" (30 = 15 hearts).
+ * @param maxBloodMl                 total blood volume in ml.
+ * @param bloodLowFraction           fraction below which blood-loss penalties begin.
+ * @param bloodCriticalFraction      fraction below which the player is critical.
+ * @param bloodDeathMl               blood volume (ml) at or below which death/knockdown occurs.
+ * @param painShockThreshold         pain (0..1) above which pain-shock penalties begin.
+ * @param painMaxHealthPenalty       max health points removed by full pain shock.
  * @param legFractureSpeedMultiplier movement multiplier applied per fractured leg.
- * @param painSpeedFloor          lower bound on the movement multiplier.
- * @param knockdownEnabled        if true, lethal conditions knock down instead of instant death.
- * @param knockdownBleedoutTicks  ticks a player may remain knocked down before dying.
+ * @param painSpeedFloor             lower bound on the movement multiplier.
+ * @param knockdownEnabled           if true, lethal conditions knock down instead of instant death.
+ * @param knockdownBleedoutTicks     ticks a player may remain knocked down before dying.
  */
 public record PhysiologyParams(
         float maxHealthPoints,

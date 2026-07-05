@@ -23,6 +23,10 @@ import net.minecraft.server.level.ServerPlayer;
 public final class TreatmentService {
 
     private static final float DEFAULT_HEAL_MAGNITUDE = 0.25F;
+    /**
+     * Score bonus applied to a trauma sitting on the UI-selected limb so the hint wins over severity.
+     */
+    private static final float LIMB_HINT_BONUS = 1000.0F;
 
     private TreatmentService() {
     }
@@ -52,15 +56,15 @@ public final class TreatmentService {
             return false;
         }
         MedicalProfile profile = data.getProfile();
-        TreatmentAction action = treatment.getAction();
+        TreatmentAction action = treatment.action();
 
         // RESTORE_BLOOD acts on the blood pool, not a specific trauma.
         if (action == TreatmentAction.RESTORE_BLOOD) {
             double before = profile.getBloodMl();
-            if (treatment.getBloodRestoreMl() <= 0.0D || before >= profile.getMaxBloodMl()) {
+            if (treatment.bloodRestoreMl() <= 0.0D || before >= profile.getMaxBloodMl()) {
                 return false;
             }
-            profile.setBloodMl(before + treatment.getBloodRestoreMl());
+            profile.setBloodMl(before + treatment.bloodRestoreMl());
             boolean changed = profile.getBloodMl() != before;
             if (changed) {
                 data.bumpRevision();
@@ -73,7 +77,7 @@ public final class TreatmentService {
         // REDUCE_PAIN (painkillers) suppresses PERCEIVED pain globally without healing any injury — it
         // must not touch trauma severity (which drives bleeding and max-health), only the pain mask.
         if (action == TreatmentAction.REDUCE_PAIN) {
-            float mag = treatment.getMagnitude() > 0.0F ? treatment.getMagnitude() : DEFAULT_HEAL_MAGNITUDE;
+            float mag = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;
             float before = profile.getPainSuppression();
             profile.setPainSuppression(Math.max(before, mag));
             boolean changed = profile.getPainSuppression() != before;
@@ -88,9 +92,9 @@ public final class TreatmentService {
         Trauma target = pickTarget(profile, treatment, action, limbHint);
         if (target == null) {
             // A treatment may still restore blood as a secondary effect even with no matching wound.
-            if (treatment.getBloodRestoreMl() > 0.0D && profile.getBloodMl() < profile.getMaxBloodMl()) {
+            if (treatment.bloodRestoreMl() > 0.0D && profile.getBloodMl() < profile.getMaxBloodMl()) {
                 double before = profile.getBloodMl();
-                profile.setBloodMl(before + treatment.getBloodRestoreMl());
+                profile.setBloodMl(before + treatment.bloodRestoreMl());
                 if (profile.getBloodMl() != before) {
                     data.bumpRevision();
                     return true;
@@ -99,7 +103,7 @@ public final class TreatmentService {
             return false;
         }
 
-        float magnitude = treatment.getMagnitude() > 0.0F ? treatment.getMagnitude() : DEFAULT_HEAL_MAGNITUDE;
+        float magnitude = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;
         boolean removed = false;
         boolean changed = false;
         TraumaDeltaPacket.Op op = TraumaDeltaPacket.Op.TREATED;
@@ -150,8 +154,8 @@ public final class TreatmentService {
         }
 
         // Optional secondary blood restore (e.g. a medkit that also gives blood).
-        if (treatment.getBloodRestoreMl() > 0.0D && profile.getBloodMl() < profile.getMaxBloodMl()) {
-            profile.setBloodMl(profile.getBloodMl() + treatment.getBloodRestoreMl());
+        if (treatment.bloodRestoreMl() > 0.0D && profile.getBloodMl() < profile.getMaxBloodMl()) {
+            profile.setBloodMl(profile.getBloodMl() + treatment.bloodRestoreMl());
             changed = true;
         }
 
@@ -166,9 +170,6 @@ public final class TreatmentService {
                 new TraumaDeltaPacket(op, target.getLimb(), target.getType().getId(), target.getSeverity()));
         return true;
     }
-
-    /** Score bonus applied to a trauma sitting on the UI-selected limb so the hint wins over severity. */
-    private static final float LIMB_HINT_BONUS = 1000.0F;
 
     /**
      * Choose the best trauma for this action: category must be applicable and the trauma must respond to
@@ -204,7 +205,9 @@ public final class TreatmentService {
         return best;
     }
 
-    /** Action-specific preference bonus so the most relevant wound wins ties on severity. */
+    /**
+     * Action-specific preference bonus so the most relevant wound wins ties on severity.
+     */
     private static float priority(TreatmentAction action, Trauma t) {
         return switch (action) {
             case REDUCE_BLEEDING, SUTURE_WOUND -> {

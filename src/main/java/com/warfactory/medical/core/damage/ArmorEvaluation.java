@@ -17,12 +17,6 @@ import net.minecraft.world.item.ItemStack;
  */
 public final class ArmorEvaluation {
 
-    public enum Outcome {
-        BLOCKED,
-        PARTIAL,
-        FULL
-    }
-
     private ArmorEvaluation() {
     }
 
@@ -129,5 +123,11 @@ public final class ArmorEvaluation {
 
     private static float clampF(float v, float lo, float hi) {
         return v < lo ? lo : (v > hi ? hi : v);
+    }
+
+    public enum Outcome {
+        BLOCKED,
+        PARTIAL,
+        FULL
     }
 }

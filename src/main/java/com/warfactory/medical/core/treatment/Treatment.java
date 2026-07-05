@@ -10,14 +10,8 @@ import java.util.Set;
  * Immutable description of what a single medical item does when used. Data-driven: the damage /
  * treatment modules read these fields to decide how to mutate a {@code Trauma} or the blood pool.
  */
-public final class Treatment {
-
-    private final TreatmentAction action;
-    private final Set<TraumaCategory> applicableCategories;
-    private final float magnitude;
-    private final double bloodRestoreMl;
-    private final int useDurationTicks;
-    private final boolean removesTrauma;
+public record Treatment(TreatmentAction action, Set<TraumaCategory> applicableCategories, float magnitude,
+                        double bloodRestoreMl, int useDurationTicks, boolean removesTrauma) {
 
     public Treatment(TreatmentAction action,
                      Set<TraumaCategory> applicableCategories,
@@ -35,32 +29,15 @@ public final class Treatment {
         this.removesTrauma = removesTrauma;
     }
 
-    public TreatmentAction getAction() {
-        return action;
-    }
-
-    /** Categories this treatment is allowed to act on (empty = any category). */
-    public Set<TraumaCategory> getApplicableCategories() {
+    /**
+     * Categories this treatment is allowed to act on (empty = any category).
+     */
+    @Override
+    public Set<TraumaCategory> applicableCategories() {
         return applicableCategories;
     }
 
     public boolean appliesTo(TraumaCategory category) {
         return applicableCategories.isEmpty() || applicableCategories.contains(category);
-    }
-
-    public float getMagnitude() {
-        return magnitude;
-    }
-
-    public double getBloodRestoreMl() {
-        return bloodRestoreMl;
-    }
-
-    public int getUseDurationTicks() {
-        return useDurationTicks;
-    }
-
-    public boolean removesTrauma() {
-        return removesTrauma;
     }
 }

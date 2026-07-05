@@ -40,25 +40,45 @@ import java.util.List;
  */
 public final class RadialMenuUI {
 
-    /** Radius (px) of the circle the item buttons are arranged on, measured from the screen centre. */
+    /**
+     * Radius (px) of the circle the item buttons are arranged on, measured from the screen centre.
+     */
     private static final int RING_RADIUS = 96;
-    /** Side length (px) of each square item button. */
+    /**
+     * Side length (px) of each square item button.
+     */
     private static final int BUTTON_SIZE = 26;
-    /** Half of {@link #BUTTON_SIZE}, used to convert a ring point into the button's top-left corner. */
+    /**
+     * Half of {@link #BUTTON_SIZE}, used to convert a ring point into the button's top-left corner.
+     */
     private static final int BUTTON_HALF = BUTTON_SIZE / 2;
-    /** Corner radius (px) for the rounded button backgrounds / hover border. */
+    /**
+     * Corner radius (px) for the rounded button backgrounds / hover border.
+     */
     private static final int BUTTON_RADIUS = 6;
-    /** Central body-diagram width (px). */
+    /**
+     * Central body-diagram width (px).
+     */
     private static final int BODY_WIDTH = 56;
-    /** Central body-diagram height (px). */
+    /**
+     * Central body-diagram height (px).
+     */
     private static final int BODY_HEIGHT = 84;
-    /** ARGB translucent black backdrop so the world dims behind the wheel. */
+    /**
+     * ARGB translucent black backdrop so the world dims behind the wheel.
+     */
     private static final int BACKDROP_COLOR = 0x90000000;
-    /** ARGB idle button background. */
+    /**
+     * ARGB idle button background.
+     */
     private static final int BUTTON_BG_COLOR = 0xC0202020;
-    /** ARGB hover highlight border. */
+    /**
+     * ARGB hover highlight border.
+     */
     private static final int BUTTON_HOVER_COLOR = 0xFFFFDD55;
-    /** ARGB for the vitals / hint text. */
+    /**
+     * ARGB for the vitals / hint text.
+     */
     private static final int TEXT_COLOR = 0xFFFFFFFF;
 
     private RadialMenuUI() {
@@ -196,7 +216,9 @@ public final class RadialMenuUI {
         ui.mainGroup.addWidget(painLabel);
     }
 
-    /** Blood volume as a whole-number percentage from the latest snapshot; 100 when none/undefined. */
+    /**
+     * Blood volume as a whole-number percentage from the latest snapshot; 100 when none/undefined.
+     */
     private static int bloodPercent() {
         MedicalSyncPacket snap = ClientMedicalCache.get();
         if (snap == null || snap.maxBloodMl() <= 0.0D) {
@@ -211,12 +233,16 @@ public final class RadialMenuUI {
         return (int) Math.round(pct);
     }
 
-    /** The full item tooltip (name + description) for a ring button's hover text. */
+    /**
+     * The full item tooltip (name + description) for a ring button's hover text.
+     */
     private static List<Component> itemTooltip(ItemStack stack) {
         return stack.getTooltipLines(Minecraft.getInstance().player, TooltipFlag.Default.NORMAL);
     }
 
-    /** A compact button caption: the item's display name, truncated so the wheel stays readable. */
+    /**
+     * A compact button caption: the item's display name, truncated so the wheel stays readable.
+     */
     private static String shortName(ItemStack stack) {
         String name = stack.getHoverName().getString();
         if (name.length() > 12) {

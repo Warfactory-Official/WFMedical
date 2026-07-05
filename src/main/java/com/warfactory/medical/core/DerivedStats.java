@@ -21,7 +21,9 @@ public record DerivedStats(
             30.0F, 0.0F, 30.0F, 0.0D, 0.0F, 1.0F, false, 1.0F,
             HealthState.HEALTHY, false, false);
 
-    /** A no-injury snapshot (30 health points, full mobility). */
+    /**
+     * A no-injury snapshot (30 health points, full mobility).
+     */
     public static DerivedStats healthy() {
         return HEALTHY;
     }

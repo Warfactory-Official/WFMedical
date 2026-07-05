@@ -12,8 +12,8 @@ import net.minecraft.client.renderer.PostChain;
 import net.minecraft.client.renderer.PostPass;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
@@ -48,22 +48,34 @@ import java.util.List;
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class BloodDesaturationEffect {
 
-    /** Blood fraction at/above which no desaturation is applied (mirrors PhysiologyParams bloodLowFraction). */
+    /**
+     * Blood fraction at/above which no desaturation is applied (mirrors PhysiologyParams bloodLowFraction).
+     */
     private static final float LOW_FRACTION = 0.60F;
-    /** Maximum desaturation amount at an empty blood pool (0 = untouched, 1 = full grayscale). */
+    /**
+     * Maximum desaturation amount at an empty blood pool (0 = untouched, 1 = full grayscale).
+     */
     private static final float MAX_DESATURATION = 0.85F;
-    /** Below this desaturation amount the effect is a no-op (keeps healthy players off the hot path). */
+    /**
+     * Below this desaturation amount the effect is a no-op (keeps healthy players off the hot path).
+     */
     private static final float EPSILON = 0.001F;
 
     private static final ResourceLocation SHADER =
             new ResourceLocation(WFMedical.MOD_ID, "shaders/post/blood_desaturate.json");
 
-    /** Cached post-processing chain; {@code null} until first needed or after teardown. */
+    /**
+     * Cached post-processing chain; {@code null} until first needed or after teardown.
+     */
     private static PostChain chain;
-    /** Window dimensions the cached {@link #chain} was last sized for. */
+    /**
+     * Window dimensions the cached {@link #chain} was last sized for.
+     */
     private static int chainWidth = -1;
     private static int chainHeight = -1;
-    /** Set once on unrecoverable failure; blocks all further processing for the session. */
+    /**
+     * Set once on unrecoverable failure; blocks all further processing for the session.
+     */
     private static boolean disabled;
 
     private BloodDesaturationEffect() {
@@ -110,7 +122,9 @@ public final class BloodDesaturationEffect {
         }
     }
 
-    /** Tear down the chain when leaving a world so we do not leak GL resources or reuse a stale target. */
+    /**
+     * Tear down the chain when leaving a world so we do not leak GL resources or reuse a stale target.
+     */
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         closeChain();
@@ -166,7 +180,9 @@ public final class BloodDesaturationEffect {
         }
     }
 
-    /** @return the current desaturation amount (0..MAX_DESATURATION) from the synced blood fraction. */
+    /**
+     * @return the current desaturation amount (0..MAX_DESATURATION) from the synced blood fraction.
+     */
     private static float desaturationAmount() {
         MedicalSyncPacket snap = ClientMedicalCache.get();
         if (snap == null) {
@@ -189,7 +205,9 @@ public final class BloodDesaturationEffect {
         return MAX_DESATURATION * t;
     }
 
-    /** Close the chain and forget its cached size; safe to call when already torn down. */
+    /**
+     * Close the chain and forget its cached size; safe to call when already torn down.
+     */
     private static void closeChain() {
         if (chain != null) {
             try {
@@ -203,7 +221,9 @@ public final class BloodDesaturationEffect {
         chainHeight = -1;
     }
 
-    /** Permanently disable the effect for this session and release any GL resources. */
+    /**
+     * Permanently disable the effect for this session and release any GL resources.
+     */
     private static void disable() {
         disabled = true;
         closeChain();

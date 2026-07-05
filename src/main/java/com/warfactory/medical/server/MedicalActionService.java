@@ -75,10 +75,10 @@ public final class MedicalActionService {
         int totalTicks;
         TreatmentAction action;
         if (treatment != null) {
-            totalTicks = treatment.getUseDurationTicks();
-            action = treatment.getAction();
+            totalTicks = treatment.useDurationTicks();
+            action = treatment.action();
         } else {
-            totalTicks = ((InjectableItem) item).getSubstance().getUseDurationTicks();
+            totalTicks = ((InjectableItem) item).getSubstance().useDurationTicks();
             // Injectables carry no TreatmentAction; REDUCE_PAIN is the closest presentation label and keeps
             // the overlay packet's non-null-action invariant. Completion resolves the item, not this action.
             action = TreatmentAction.REDUCE_PAIN;
@@ -159,7 +159,9 @@ public final class MedicalActionService {
         MedicalNetworking.sendActiveTreatment(player, ActiveTreatmentPacket.inactive());
     }
 
-    /** @return the first inventory slot holding {@code item}, or {@code -1} when the player has none. */
+    /**
+     * @return the first inventory slot holding {@code item}, or {@code -1} when the player has none.
+     */
     private static int findItemSlot(ServerPlayer player, Item item) {
         Inventory inv = player.getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) {

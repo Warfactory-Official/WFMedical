@@ -25,6 +25,24 @@ public final class Trauma {
         this.timestamp = timestamp;
     }
 
+    /**
+     * @return the loaded trauma, or {@code null} if the type is unknown to the registry.
+     */
+    public static Trauma load(CompoundTag tag, TraumaRegistry registry) {
+        String id = tag.getString("Type");
+        TraumaType type = registry.get(id);
+        if (type == null) {
+            return null;
+        }
+        LimbType limb = LimbType.byOrdinal(tag.getInt("Limb"));
+        Trauma t = new Trauma(type, limb, tag.getFloat("Severity"), tag.getLong("Timestamp"));
+        t.treated = tag.getBoolean("Treated");
+        t.sutured = tag.getBoolean("Sutured");
+        t.stabilized = tag.getBoolean("Stabilized");
+        t.healProgress = tag.getFloat("HealProgress");
+        return t;
+    }
+
     private float clampSeverity(float s) {
         if (s < 0.0F) {
             return 0.0F;
@@ -85,7 +103,9 @@ public final class Trauma {
         this.healProgress = healProgress;
     }
 
-    /** Bleeding contribution in ml/tick; a sutured wound does not bleed, a bandaged one bleeds less. */
+    /**
+     * Bleeding contribution in ml/tick; a sutured wound does not bleed, a bandaged one bleeds less.
+     */
     public float bleeding() {
         if (sutured) {
             return 0.0F;
@@ -94,13 +114,17 @@ public final class Trauma {
         return treated ? base * 0.25F : base;
     }
 
-    /** Pain contribution; splinting/stabilizing a fracture eases it. */
+    /**
+     * Pain contribution; splinting/stabilizing a fracture eases it.
+     */
     public float pain() {
         float base = type.getPainPerSeverity() * severity;
         return stabilized ? base * 0.5F : base;
     }
 
-    /** Max-health reduction (only major trauma removes hearts). */
+    /**
+     * Max-health reduction (only major trauma removes hearts).
+     */
     public float healthReduction() {
         return type.isMajor() ? type.getHealthReductionPerSeverity() * severity : 0.0F;
     }
@@ -124,7 +148,9 @@ public final class Trauma {
                 && this.severity < type.getMaxSeverity();
     }
 
-    /** Fold {@code other} into this one, capping at the type's max severity. */
+    /**
+     * Fold {@code other} into this one, capping at the type's max severity.
+     */
     public void mergeIn(Trauma other) {
         this.severity = clampSeverity(this.severity + other.severity);
         // A merged wound is only as "handled" as its least-treated component.
@@ -146,21 +172,5 @@ public final class Trauma {
         tag.putLong("Timestamp", timestamp);
         tag.putFloat("HealProgress", healProgress);
         return tag;
-    }
-
-    /** @return the loaded trauma, or {@code null} if the type is unknown to the registry. */
-    public static Trauma load(CompoundTag tag, TraumaRegistry registry) {
-        String id = tag.getString("Type");
-        TraumaType type = registry.get(id);
-        if (type == null) {
-            return null;
-        }
-        LimbType limb = LimbType.byOrdinal(tag.getInt("Limb"));
-        Trauma t = new Trauma(type, limb, tag.getFloat("Severity"), tag.getLong("Timestamp"));
-        t.treated = tag.getBoolean("Treated");
-        t.sutured = tag.getBoolean("Sutured");
-        t.stabilized = tag.getBoolean("Stabilized");
-        t.healProgress = tag.getFloat("HealProgress");
-        return t;
     }
 }

@@ -26,20 +26,30 @@ import net.minecraftforge.client.gui.overlay.IGuiOverlay;
 @OnlyIn(Dist.CLIENT)
 public final class HealthBarOverlay implements IGuiOverlay {
 
-    /** The singleton overlay instance registered by the client scaffolding. */
+    /**
+     * The singleton overlay instance registered by the client scaffolding.
+     */
     public static final IGuiOverlay INSTANCE = new HealthBarOverlay();
 
-    /** Bar geometry — mirrors the vanilla left HUD anchor (81px wide, 9px tall, red heart row). */
+    /**
+     * Bar geometry — mirrors the vanilla left HUD anchor (81px wide, 9px tall, red heart row).
+     */
     private static final int BAR_WIDTH = 81;
     private static final int BAR_HEIGHT = 9;
 
-    /** Dark backdrop drawn behind the fill. */
+    /**
+     * Dark backdrop drawn behind the fill.
+     */
     private static final ColorRectTexture BACKGROUND = new ColorRectTexture(0xC0101010);
-    /** Empty (dark red) -> filled (bright red) health fill. */
+    /**
+     * Empty (dark red) -> filled (bright red) health fill.
+     */
     private static final ProgressTexture HEALTH_FILL = new ProgressTexture(
             new ColorRectTexture(0xFF400000), new ColorRectTexture(0xFFDD2222))
             .setFillDirection(ProgressTexture.FillDirection.LEFT_TO_RIGHT);
-    /** Centered readout, tinted by state; re-tinted each frame before draw. */
+    /**
+     * Centered readout, tinted by state; re-tinted each frame before draw.
+     */
     private static final TextTexture LABEL = new TextTexture("")
             .setType(TextTexture.TextType.NORMAL)
             .setDropShadow(true);

@@ -11,15 +11,17 @@ import net.minecraft.server.level.ServerPlayer;
  * the UI so subsequent treatments (both the timed active-treatment flow and vanilla right-click use) bias
  * toward it. The hint is a transient, non-authoritative preference; it never mutates trauma.
  */
-public final class SetTargetLimbPacket {
+public record SetTargetLimbPacket(LimbType limb) {
 
-    private final LimbType limb;
-
-    public SetTargetLimbPacket(LimbType limb) {
-        this.limb = limb;
+    public static SetTargetLimbPacket decode(FriendlyByteBuf buf) {
+        LimbType limb = buf.readBoolean() ? buf.readEnum(LimbType.class) : null;
+        return new SetTargetLimbPacket(limb);
     }
 
-    /** The selected limb, or null to clear the preference. */
+    /**
+     * The selected limb, or null to clear the preference.
+     */
+    @Override
     public LimbType limb() {
         return limb;
     }
@@ -32,12 +34,9 @@ public final class SetTargetLimbPacket {
         }
     }
 
-    public static SetTargetLimbPacket decode(FriendlyByteBuf buf) {
-        LimbType limb = buf.readBoolean() ? buf.readEnum(LimbType.class) : null;
-        return new SetTargetLimbPacket(limb);
-    }
-
-    /** Server-thread handler: store the targeting hint on the sender's profile. */
+    /**
+     * Server-thread handler: store the targeting hint on the sender's profile.
+     */
     public void handleServer(ServerPlayer sender) {
         if (sender == null) {
             return;

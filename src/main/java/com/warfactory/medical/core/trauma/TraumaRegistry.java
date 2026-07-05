@@ -20,7 +20,9 @@ public final class TraumaRegistry {
     public TraumaRegistry() {
     }
 
-    /** The globally active registry (never null). */
+    /**
+     * The globally active registry (never null).
+     */
     public static TraumaRegistry active() {
         return active;
     }
@@ -34,7 +36,9 @@ public final class TraumaRegistry {
         return type;
     }
 
-    /** @return the type, or {@code null} if unknown. */
+    /**
+     * @return the type, or {@code null} if unknown.
+     */
     public TraumaType get(String id) {
         return byId.get(id);
     }
@@ -55,7 +59,9 @@ public final class TraumaRegistry {
         return Collections.unmodifiableCollection(byId.values());
     }
 
-    /** First registered type of a given category (insertion order), or {@code null}. */
+    /**
+     * First registered type of a given category (insertion order), or {@code null}.
+     */
     public TraumaType firstOfCategory(TraumaCategory category) {
         for (TraumaType t : byId.values()) {
             if (t.getCategory() == category) {

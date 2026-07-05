@@ -20,7 +20,9 @@ public enum HealthState {
     UNCONSCIOUS,
     DEAD;
 
-    /** Legacy persisted name for {@link #UNCONSCIOUS}, kept so old saves load cleanly after the merge. */
+    /**
+     * Legacy persisted name for {@link #UNCONSCIOUS}, kept so old saves load cleanly after the merge.
+     */
     private static final String LEGACY_KNOCKED_DOWN = "KNOCKED_DOWN";
 
     /**

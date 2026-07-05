@@ -32,8 +32,8 @@ public abstract class LivingEntityMixin {
     @Inject(method = "setSprinting(Z)V", at = @At("HEAD"), cancellable = true)
     private void wfmedical$preventBlockedSprint(boolean sprinting, CallbackInfo callbackInfo) {
         if (sprinting
-            && (Object) this instanceof Player player
-            && MedicalState.isSprintBlocked(player)) {
+                && (Object) this instanceof Player player
+                && MedicalState.isSprintBlocked(player)) {
             callbackInfo.cancel();
         }
     }

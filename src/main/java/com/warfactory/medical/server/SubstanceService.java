@@ -47,7 +47,7 @@ public final class SubstanceService {
         // item's registry name so TOML retuning (thresholds, doses, blackout/durations, reversal, ...) actually
         // takes effect. The Substance captured on the item is only the load-order safety net used when the
         // active registry has no matching entry.
-        Substance live = SubstanceRegistry.active().get(substance.getItemId());
+        Substance live = SubstanceRegistry.active().get(substance.itemId());
         if (live != null) {
             substance = live;
         }
@@ -58,27 +58,27 @@ public final class SubstanceService {
         MedicalProfile profile = data.getProfile();
         long now = player.level().getGameTime();
 
-        if (substance.isAntidote()) {
+        if (substance.antidote()) {
             // Counter-play: reverse the overdose. Drug load drops, the blackout ends immediately, and the
             // pain mask collapses to zero so all the previously-suppressed pain comes rushing back.
-            profile.setDrugLoad(Math.max(0.0F, profile.getDrugLoad() - substance.getReversalAmount()));
+            profile.setDrugLoad(Math.max(0.0F, profile.getDrugLoad() - substance.reversalAmount()));
             profile.setBlackoutUntilTick(0L);
             profile.setBlackoutActive(false);
             profile.setPainSuppression(0.0F);
         } else {
             // Opioid: strong pain immunity + accumulating drug load. Re-dosing to stay pain-free stacks the
             // load toward the overdose threshold, at which point the player blacks out for blackoutTicks.
-            profile.setPainSuppression(Math.max(profile.getPainSuppression(), substance.getPainSuppression()));
-            profile.setDrugLoad(profile.getDrugLoad() + substance.getDoseLoad());
-            if (profile.getDrugLoad() >= substance.getOverdoseThreshold()) {
-                profile.setBlackoutUntilTick(now + substance.getBlackoutTicks());
+            profile.setPainSuppression(Math.max(profile.getPainSuppression(), substance.painSuppression()));
+            profile.setDrugLoad(profile.getDrugLoad() + substance.doseLoad());
+            if (profile.getDrugLoad() >= substance.overdoseThreshold()) {
+                profile.setBlackoutUntilTick(now + substance.blackoutTicks());
                 profile.setBlackoutActive(true);
             }
         }
 
         // Optional secondary blood restore.
-        if (substance.getBloodRestoreMl() > 0.0D && profile.getBloodMl() < profile.getMaxBloodMl()) {
-            profile.setBloodMl(profile.getBloodMl() + substance.getBloodRestoreMl());
+        if (substance.bloodRestoreMl() > 0.0D && profile.getBloodMl() < profile.getMaxBloodMl()) {
+            profile.setBloodMl(profile.getBloodMl() + substance.bloodRestoreMl());
         }
 
         profile.markDirty();

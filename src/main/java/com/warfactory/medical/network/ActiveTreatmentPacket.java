@@ -13,48 +13,42 @@ import net.minecraft.network.FriendlyByteBuf;
  * The client computes progress from {@code startGameTime} and {@code totalTicks} against its own level
  * game time: {@code elapsed = clientGameTime - startGameTime; fraction = elapsed / totalTicks}.</p>
  */
-public final class ActiveTreatmentPacket {
+public record ActiveTreatmentPacket(boolean active, TreatmentAction action, LimbType limb, int totalTicks,
+                                    long startGameTime) {
 
-    private final boolean active;
-    private final TreatmentAction action;
-    private final LimbType limb;
-    private final int totalTicks;
-    private final long startGameTime;
-
-    public ActiveTreatmentPacket(boolean active, TreatmentAction action, LimbType limb,
-                                 int totalTicks, long startGameTime) {
-        this.active = active;
-        this.action = action;
-        this.limb = limb;
-        this.totalTicks = totalTicks;
-        this.startGameTime = startGameTime;
-    }
-
-    /** Convenience "no active treatment" instance for cancellation / completion. */
+    /**
+     * Convenience "no active treatment" instance for cancellation / completion.
+     */
     public static ActiveTreatmentPacket inactive() {
         return new ActiveTreatmentPacket(false, null, null, 0, 0L);
     }
 
-    public boolean active() {
-        return active;
+    public static ActiveTreatmentPacket decode(FriendlyByteBuf buf) {
+        boolean active = buf.readBoolean();
+        if (!active) {
+            return inactive();
+        }
+        TreatmentAction action = buf.readEnum(TreatmentAction.class);
+        LimbType limb = buf.readBoolean() ? buf.readEnum(LimbType.class) : null;
+        int totalTicks = buf.readVarInt();
+        long startGameTime = buf.readLong();
+        return new ActiveTreatmentPacket(true, action, limb, totalTicks, startGameTime);
     }
 
-    /** The action being applied (only meaningful while {@link #active()}; may be null otherwise). */
+    /**
+     * The action being applied (only meaningful while {@link #active()}; may be null otherwise).
+     */
+    @Override
     public TreatmentAction action() {
         return action;
     }
 
-    /** The targeted limb (nullable even while active — an auto-pick treatment carries no limb). */
+    /**
+     * The targeted limb (nullable even while active — an auto-pick treatment carries no limb).
+     */
+    @Override
     public LimbType limb() {
         return limb;
-    }
-
-    public int totalTicks() {
-        return totalTicks;
-    }
-
-    public long startGameTime() {
-        return startGameTime;
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -73,19 +67,9 @@ public final class ActiveTreatmentPacket {
         buf.writeLong(startGameTime);
     }
 
-    public static ActiveTreatmentPacket decode(FriendlyByteBuf buf) {
-        boolean active = buf.readBoolean();
-        if (!active) {
-            return inactive();
-        }
-        TreatmentAction action = buf.readEnum(TreatmentAction.class);
-        LimbType limb = buf.readBoolean() ? buf.readEnum(LimbType.class) : null;
-        int totalTicks = buf.readVarInt();
-        long startGameTime = buf.readLong();
-        return new ActiveTreatmentPacket(true, action, limb, totalTicks, startGameTime);
-    }
-
-    /** Client-thread handler: store the latest active-treatment state for the overlay. */
+    /**
+     * Client-thread handler: store the latest active-treatment state for the overlay.
+     */
     public void handleClient() {
         ClientMedicalCache.setActiveTreatment(this);
     }

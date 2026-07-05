@@ -5,6 +5,7 @@ import com.warfactory.medical.capability.MedicalCapabilities;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.treatment.Treatment;
 import com.warfactory.medical.server.TreatmentService;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
@@ -15,7 +16,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.level.Level;
-import net.minecraft.server.level.ServerPlayer;
 
 /**
  * A medical item whose use starts a timed "treatment". The actual physiology mutation is server
@@ -44,7 +44,7 @@ public class MedicalItem extends Item {
 
     @Override
     public int getUseDuration(ItemStack stack) {
-        int ticks = treatment != null ? treatment.getUseDurationTicks() : 0;
+        int ticks = treatment != null ? treatment.useDurationTicks() : 0;
         return ticks > 0 ? ticks : 20;
     }
 

@@ -16,7 +16,8 @@ import net.minecraftforge.common.capabilities.CapabilityToken;
 public final class MedicalCapabilities {
 
     public static final Capability<IMedicalData> MEDICAL =
-            CapabilityManager.get(new CapabilityToken<>() {});
+            CapabilityManager.get(new CapabilityToken<>() {
+            });
 
     private MedicalCapabilities() {
     }

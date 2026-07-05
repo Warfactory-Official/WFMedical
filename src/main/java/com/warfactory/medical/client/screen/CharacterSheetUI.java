@@ -80,7 +80,9 @@ public final class CharacterSheetUI {
     private static final int ACTION_GAP = 2;
     private static final int ACTION_COLS = 2;
 
-    /** Opaque dark backdrop for the debug overlay so it fully hides the vitals/actions beneath it. */
+    /**
+     * Opaque dark backdrop for the debug overlay so it fully hides the vitals/actions beneath it.
+     */
     private static final int DEBUG_BG = 0xF00A0A0A;
     private static final int DEBUG_LINE_H = 11;
 
@@ -104,7 +106,7 @@ public final class CharacterSheetUI {
         // --- header ---
         root.addWidget(new LabelWidget(10, 6, "Medical Status"));
         root.addWidget(new LabelWidget(196, 6,
-                (Supplier<String>) () -> "Debug: " + (ClientMedicalCache.isDebug() ? "on" : "off")));
+                () -> "Debug: " + (ClientMedicalCache.isDebug() ? "on" : "off")));
 
         // --- left: body chart + selected-limb detail ---
         root.addWidget(MedicalUIParts.bodyDiagram(BODY_X, BODY_Y, BODY_W, BODY_H));
@@ -127,15 +129,17 @@ public final class CharacterSheetUI {
 
     // ------------------------------------------------------------------ selected-limb detail
 
-    /** Left column beneath the body chart: the currently selected limb's summary, updated live. */
+    /**
+     * Left column beneath the body chart: the currently selected limb's summary, updated live.
+     */
     private static void addSelectedLimbDetail(WidgetGroup root, Player player) {
         int y = DETAIL_Y;
-        root.addWidget(new LabelWidget(DETAIL_X, y, (Supplier<String>) () -> {
+        root.addWidget(new LabelWidget(DETAIL_X, y, () -> {
             LimbType limb = MedicalUIParts.selectedLimb();
             return limb == null ? "No limb selected" : MedicalUIParts.limbName(limb).getString();
         }));
         y += DETAIL_LINE_H;
-        root.addWidget(new LabelWidget(DETAIL_X, y, (Supplier<String>) () -> {
+        root.addWidget(new LabelWidget(DETAIL_X, y, () -> {
             LimbType limb = MedicalUIParts.selectedLimb();
             if (limb == null) {
                 return "-";
@@ -143,7 +147,7 @@ public final class CharacterSheetUI {
             return "Health: " + Math.round(MedicalUIParts.limbSummary(limb).healthPercent() * 100.0F) + "%";
         }));
         y += DETAIL_LINE_H;
-        root.addWidget(new LabelWidget(DETAIL_X, y, (Supplier<String>) () -> {
+        root.addWidget(new LabelWidget(DETAIL_X, y, () -> {
             LimbType limb = MedicalUIParts.selectedLimb();
             if (limb == null) {
                 return "";
@@ -151,7 +155,7 @@ public final class CharacterSheetUI {
             return "Bleeding: " + fmt(MedicalUIParts.limbSummary(limb).bleeding());
         }));
         y += DETAIL_LINE_H;
-        root.addWidget(new LabelWidget(DETAIL_X, y, (Supplier<String>) () -> {
+        root.addWidget(new LabelWidget(DETAIL_X, y, () -> {
             LimbType limb = MedicalUIParts.selectedLimb();
             if (limb == null) {
                 return "";
@@ -159,7 +163,7 @@ public final class CharacterSheetUI {
             return "Pain: " + fmt(MedicalUIParts.limbSummary(limb).pain());
         }));
         y += DETAIL_LINE_H;
-        root.addWidget(new LabelWidget(DETAIL_X, y, (Supplier<String>) () -> {
+        root.addWidget(new LabelWidget(DETAIL_X, y, () -> {
             LimbType limb = MedicalUIParts.selectedLimb();
             if (limb != null && MedicalUIParts.limbSummary(limb).fracture()) {
                 return "Fractured";
@@ -170,15 +174,17 @@ public final class CharacterSheetUI {
 
     // ------------------------------------------------------------------ vitals
 
-    /** Right upper column: live top-level vitals. The state line is recolored each tick. */
+    /**
+     * Right upper column: live top-level vitals. The state line is recolored each tick.
+     */
     private static void addVitals(WidgetGroup root, Player player) {
         int y = VITALS_Y;
 
-        root.addWidget(new LabelWidget(VITALS_X, y, (Supplier<String>) () ->
+        root.addWidget(new LabelWidget(VITALS_X, y, () ->
                 "Health: " + Math.round(player.getHealth()) + "/" + Math.round(player.getMaxHealth())));
         y += VITALS_LINE_H;
 
-        root.addWidget(new LabelWidget(VITALS_X, y, (Supplier<String>) () -> {
+        root.addWidget(new LabelWidget(VITALS_X, y, () -> {
             MedicalSyncPacket snap = ClientMedicalCache.get();
             double blood = snap == null ? 0.0 : snap.bloodMl();
             double maxBlood = snap == null ? 0.0 : snap.maxBloodMl();
@@ -186,12 +192,12 @@ public final class CharacterSheetUI {
         }));
         y += VITALS_LINE_H;
 
-        root.addWidget(new LabelWidget(VITALS_X, y, (Supplier<String>) () ->
+        root.addWidget(new LabelWidget(VITALS_X, y, () ->
                 "Pain: " + Math.round(MedicalUIParts.stats().totalPain() * 100.0F) + "%"));
         y += VITALS_LINE_H;
 
         // State line: colored live by health state.
-        LabelWidget stateLine = new LabelWidget(VITALS_X, y, (Supplier<String>) () ->
+        LabelWidget stateLine = new LabelWidget(VITALS_X, y, () ->
                 "State: " + MedicalUIParts.stateName(ClientMedicalCache.state()).getString()) {
             @Override
             public void updateScreen() {
@@ -202,15 +208,15 @@ public final class CharacterSheetUI {
         root.addWidget(stateLine);
         y += VITALS_LINE_H;
 
-        root.addWidget(new LabelWidget(VITALS_X, y, (Supplier<String>) () ->
+        root.addWidget(new LabelWidget(VITALS_X, y, () ->
                 "Movement: " + Math.round(MedicalUIParts.stats().movementMultiplier() * 100.0F) + "%"));
         y += VITALS_LINE_H;
 
-        root.addWidget(new LabelWidget(VITALS_X, y, (Supplier<String>) () ->
+        root.addWidget(new LabelWidget(VITALS_X, y, () ->
                 "Bleeding: " + fmt((float) MedicalUIParts.stats().totalBleeding()) + " ml/s"));
         y += VITALS_LINE_H;
 
-        root.addWidget(new LabelWidget(VITALS_X, y, (Supplier<String>) () -> {
+        root.addWidget(new LabelWidget(VITALS_X, y, () -> {
             DerivedStats st = MedicalUIParts.stats();
             if (st.anyLegFracture() && st.anyArmFracture()) {
                 return "Fractures: arm + leg";
@@ -262,7 +268,9 @@ public final class CharacterSheetUI {
 
     // ------------------------------------------------------------------ debug overlay
 
-    /** Build the scrollable debug overlay group; visibility is driven live by {@link ClientMedicalCache#isDebug()}. */
+    /**
+     * Build the scrollable debug overlay group; visibility is driven live by {@link ClientMedicalCache#isDebug()}.
+     */
     private static DraggableScrollableWidgetGroup buildDebugGroup(Player player) {
         DebugGroup group = new DebugGroup(96, 18, 180, 176);
         group.setBackground(new ColorRectTexture(DEBUG_BG));
@@ -336,10 +344,21 @@ public final class CharacterSheetUI {
         return group;
     }
 
-    /** Add one live debug label at the given y inside the scrollable debug group. */
+    /**
+     * Add one live debug label at the given y inside the scrollable debug group.
+     */
     private static void addDebugLine(DraggableScrollableWidgetGroup group, int y, Supplier<String> text) {
         group.addWidget(new LabelWidget(4, y, text));
     }
+
+    /**
+     * Compact 2-decimal formatting for the numeric readouts.
+     */
+    private static String fmt(float value) {
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
+
+    // ------------------------------------------------------------------ helpers
 
     /**
      * Scrollable debug overlay whose visibility follows {@link ClientMedicalCache#isDebug()} every tick.
@@ -359,12 +378,5 @@ public final class CharacterSheetUI {
                 setVisible(debug);
             }
         }
-    }
-
-    // ------------------------------------------------------------------ helpers
-
-    /** Compact 2-decimal formatting for the numeric readouts. */
-    private static String fmt(float value) {
-        return String.format(Locale.ROOT, "%.2f", value);
     }
 }

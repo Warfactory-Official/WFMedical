@@ -41,29 +41,49 @@ import net.minecraftforge.fml.common.Mod;
 @OnlyIn(Dist.CLIENT)
 public final class PainVignetteOverlay implements IGuiOverlay {
 
-    /** The singleton overlay instance; registered by {@link Registrar}. */
+    /**
+     * The singleton overlay instance; registered by {@link Registrar}.
+     */
     public static final IGuiOverlay INSTANCE = new PainVignetteOverlay();
 
-    /** Overlay id used when registering with Forge. */
+    /**
+     * Overlay id used when registering with Forge.
+     */
     public static final String OVERLAY_ID = "wfmedical_pain_vignette";
 
-    /** Vanilla vignette sprite reused for the edge falloff (fully opaque centre-out gradient). */
+    /**
+     * Vanilla vignette sprite reused for the edge falloff (fully opaque centre-out gradient).
+     */
     private static final ResourceLocation VIGNETTE_TEXTURE =
             new ResourceLocation("minecraft", "textures/misc/vignette.png");
 
-    /** Below this perceived-pain fraction the effect is invisible; early-return keeps healthy cost ~0. */
+    /**
+     * Below this perceived-pain fraction the effect is invisible; early-return keeps healthy cost ~0.
+     */
     private static final float PAIN_THRESHOLD = 0.02F;
-    /** Maps pain (0..1) onto the base opacity ceiling before pulse modulation. */
+    /**
+     * Maps pain (0..1) onto the base opacity ceiling before pulse modulation.
+     */
     private static final float BASE_STRENGTH = 0.85F;
-    /** Hard clamp so the screen never fully saturates red. */
+    /**
+     * Hard clamp so the screen never fully saturates red.
+     */
     private static final float MAX_ALPHA = 0.85F;
-    /** Slowest pulse (radians/tick) at low pain. */
+    /**
+     * Slowest pulse (radians/tick) at low pain.
+     */
     private static final float PULSE_SPEED_MIN = 0.15F;
-    /** Fastest pulse (radians/tick) at maximum pain — a faster throb reads as more intense. */
+    /**
+     * Fastest pulse (radians/tick) at maximum pain — a faster throb reads as more intense.
+     */
     private static final float PULSE_SPEED_MAX = 0.40F;
-    /** Fraction of the amplitude that pulses; the remainder is a steady floor. */
+    /**
+     * Fraction of the amplitude that pulses; the remainder is a steady floor.
+     */
     private static final float PULSE_DEPTH = 0.40F;
-    /** Draw z; matches vanilla's far-back vignette depth so world/HUD sit in front. */
+    /**
+     * Draw z; matches vanilla's far-back vignette depth so world/HUD sit in front.
+     */
     private static final int Z_OFFSET = -90;
 
     private PainVignetteOverlay() {
@@ -136,7 +156,9 @@ public final class PainVignetteOverlay implements IGuiOverlay {
     @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class Registrar {
 
-        /** Guards against the mod-bus overlay event reaching this registrar more than once per launch. */
+        /**
+         * Guards against the mod-bus overlay event reaching this registrar more than once per launch.
+         */
         private static boolean registered;
 
         private Registrar() {

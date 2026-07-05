@@ -17,7 +17,9 @@ import net.minecraftforge.fml.config.ModConfig;
  */
 public final class MedicalConfig {
 
-    /** The public spec; integrators may register this directly if they prefer. */
+    /**
+     * The public spec; integrators may register this directly if they prefer.
+     */
     public static final ForgeConfigSpec SPEC;
 
     // --- raw config values -------------------------------------------------
@@ -106,7 +108,9 @@ public final class MedicalConfig {
     private MedicalConfig() {
     }
 
-    /** Registers {@link #SPEC} as this mod's COMMON config. */
+    /**
+     * Registers {@link #SPEC} as this mod's COMMON config.
+     */
     public static void register(ModLoadingContext context) {
         context.registerConfig(ModConfig.Type.COMMON, SPEC);
     }
@@ -121,7 +125,9 @@ public final class MedicalConfig {
         return MAX_HEALTH_HEARTS.get();
     }
 
-    /** Baseline max health in points (hearts * 2). */
+    /**
+     * Baseline max health in points (hearts * 2).
+     */
     public static float maxHealthPoints() {
         return MAX_HEALTH_HEARTS.get() * 2.0F;
     }
@@ -174,27 +180,37 @@ public final class MedicalConfig {
         return LEG_FRACTURE_SPEED_MULTIPLIER.get().floatValue();
     }
 
-    /** Master toggle for the injectable/opioid substance system. */
+    /**
+     * Master toggle for the injectable/opioid substance system.
+     */
     public static boolean enableInjectables() {
         return ENABLE_INJECTABLES.get();
     }
 
-    /** How much injectable drug load decays per tick. */
+    /**
+     * How much injectable drug load decays per tick.
+     */
     public static double drugDecayPerTick() {
         return DRUG_DECAY_PER_TICK.get();
     }
 
-    /** If true, a severe overdose drains health during blackout. */
+    /**
+     * If true, a severe overdose drains health during blackout.
+     */
     public static boolean overdoseLethalEnabled() {
         return OVERDOSE_LETHAL_ENABLED.get();
     }
 
-    /** Drug load at/above which a blackout also causes a respiratory-depression health drain. */
+    /**
+     * Drug load at/above which a blackout also causes a respiratory-depression health drain.
+     */
     public static double overdoseLethalThreshold() {
         return OVERDOSE_LETHAL_THRESHOLD.get();
     }
 
-    /** Health points drained per tick during a severe overdose blackout. */
+    /**
+     * Health points drained per tick during a severe overdose blackout.
+     */
     public static double overdoseLethalDrainPerTick() {
         return OVERDOSE_LETHAL_DRAIN_PER_TICK.get();
     }

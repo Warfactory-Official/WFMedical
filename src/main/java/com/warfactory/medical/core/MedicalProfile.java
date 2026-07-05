@@ -25,9 +25,13 @@ public final class MedicalProfile {
     private double maxBloodMl;
     private HealthState state = HealthState.HEALTHY;
     private long knockdownSinceTick = -1L;
-    /** Perceived-pain suppression (0..1) from painkillers; decays over time, never heals the wound. */
+    /**
+     * Perceived-pain suppression (0..1) from painkillers; decays over time, never heals the wound.
+     */
     private float painSuppression;
-    /** Accumulating injectable-drug load; decays slowly, persisted, drives overdose -> blackout. */
+    /**
+     * Accumulating injectable-drug load; decays slowly, persisted, drives overdose -> blackout.
+     */
     private float drugLoad;
     private boolean dirty = true;
     private DerivedStats cached = DerivedStats.healthy();
@@ -42,7 +46,9 @@ public final class MedicalProfile {
     private transient int activeTotalTicks;
     private transient long activeStartGameTime;
     private transient boolean activeTreatment;
-    /** Client-provided targeting hint (nullable): the limb the player selected in the UI. Transient. */
+    /**
+     * Client-provided targeting hint (nullable): the limb the player selected in the UI. Transient.
+     */
     private transient LimbType preferredLimb;
 
     // --- Transient overdose-blackout tracking. These are the INTERNAL "overdose" CAUSE markers of the single
@@ -52,16 +58,22 @@ public final class MedicalProfile {
     //     from NBT: a blackout is a live timed state driven by the engine each tick and must never survive a
     //     save/reload or clone. drugLoad (above) IS persisted; the derived blackout is recomputed from it on
     //     the next injection.
-    /** Game time at which the current overdose blackout ends ({@code 0} = not blacked out). Transient. */
+    /**
+     * Game time at which the current overdose blackout ends ({@code 0} = not blacked out). Transient.
+     */
     private transient long blackoutUntilTick;
-    /** Whether the player is currently overdose-unconscious; set by the engine each tick, read by Physiology. Transient. */
+    /**
+     * Whether the player is currently overdose-unconscious; set by the engine each tick, read by Physiology. Transient.
+     */
     private transient boolean blackoutActive;
 
     // --- Transient downed-broadcast bookkeeping. Deliberately NOT written to / read from NBT: it mirrors
     //     the last {@link #isDowned()} value the server broadcast to tracking clients so the engine can
     //     detect edges (enter / exit downed) and push a {@code DownedStatePacket} only on change. Starts
     //     {@code false} on a fresh / cloned / respawned profile, which is the correct "not downed" default.
-    /** Last {@link #isDowned()} value broadcast to trackers; engine edge-detects against this. Transient. */
+    /**
+     * Last {@link #isDowned()} value broadcast to trackers; engine edge-detects against this. Transient.
+     */
     private transient boolean lastBroadcastDowned;
 
     // --- Transient admin-forced state override. Deliberately NOT written to / read from NBT: a forced
@@ -69,7 +81,9 @@ public final class MedicalProfile {
     //     never survive a save/reload or clone. Honoured by {@link Physiology}, which pins the derived
     //     state to at least this severity so the forced state, its mobility lock and the downed pose survive
     //     every recompute instead of being clobbered back to the pure physiology-derived state.
-    /** Admin-forced health state (nullable = no override); never downgrades a worse derived state. Transient. */
+    /**
+     * Admin-forced health state (nullable = no override); never downgrades a worse derived state. Transient.
+     */
     private transient HealthState forcedState;
 
     public MedicalProfile() {
@@ -156,7 +170,9 @@ public final class MedicalProfile {
         this.knockdownSinceTick = tick;
     }
 
-    /** Current perceived-pain suppression fraction (0..1). */
+    /**
+     * Current perceived-pain suppression fraction (0..1).
+     */
     public float getPainSuppression() {
         return painSuppression;
     }
@@ -169,7 +185,9 @@ public final class MedicalProfile {
         }
     }
 
-    /** Accumulating injectable-drug load (>= 0); persisted, decays slowly, drives overdose -> blackout. */
+    /**
+     * Accumulating injectable-drug load (>= 0); persisted, decays slowly, drives overdose -> blackout.
+     */
     public float getDrugLoad() {
         return drugLoad;
     }
@@ -182,7 +200,9 @@ public final class MedicalProfile {
         }
     }
 
-    /** Game time at which the current blackout ends ({@code 0} = not blacked out). Transient, never NBT. */
+    /**
+     * Game time at which the current blackout ends ({@code 0} = not blacked out). Transient, never NBT.
+     */
     public long getBlackoutUntilTick() {
         return blackoutUntilTick;
     }
@@ -191,7 +211,9 @@ public final class MedicalProfile {
         this.blackoutUntilTick = tick;
     }
 
-    /** Whether the player is currently blacked out (engine-driven each tick). Transient, never NBT. */
+    /**
+     * Whether the player is currently blacked out (engine-driven each tick). Transient, never NBT.
+     */
     public boolean isBlackoutActive() {
         return blackoutActive;
     }
@@ -200,7 +222,9 @@ public final class MedicalProfile {
         this.blackoutActive = value;
     }
 
-    /** Last {@link #isDowned()} value the server broadcast to trackers (engine edge-detection). Transient. */
+    /**
+     * Last {@link #isDowned()} value the server broadcast to trackers (engine edge-detection). Transient.
+     */
     public boolean isLastBroadcastDowned() {
         return lastBroadcastDowned;
     }
@@ -217,13 +241,17 @@ public final class MedicalProfile {
         this.dirty = true;
     }
 
-    /** Attach a new trauma to a limb, marking both the limb and this profile dirty. */
+    /**
+     * Attach a new trauma to a limb, marking both the limb and this profile dirty.
+     */
     public void addTrauma(LimbType limbType, Trauma trauma) {
         limbs.get(limbType).addTrauma(trauma);
         this.dirty = true;
     }
 
-    /** Snapshot of every trauma across all limbs (allocates a new list). */
+    /**
+     * Snapshot of every trauma across all limbs (allocates a new list).
+     */
     public List<Trauma> allTraumas() {
         List<Trauma> out = new ArrayList<>();
         for (LimbType lt : LimbType.VALUES) {
@@ -256,7 +284,9 @@ public final class MedicalProfile {
 
     // ------------------------------------------------------------------ transient active treatment
 
-    /** @return true while a timed treatment is being applied (server-tracked, never persisted). */
+    /**
+     * @return true while a timed treatment is being applied (server-tracked, never persisted).
+     */
     public boolean hasActiveTreatment() {
         return activeTreatment;
     }
@@ -281,7 +311,9 @@ public final class MedicalProfile {
         this.activeTreatment = true;
     }
 
-    /** Clear any active treatment (completion, cancellation, death). Safe to call when none is active. */
+    /**
+     * Clear any active treatment (completion, cancellation, death). Safe to call when none is active.
+     */
     public void clearActiveTreatment() {
         this.activeTreatment = false;
         this.activeAction = null;
@@ -311,7 +343,9 @@ public final class MedicalProfile {
         return activeStartGameTime;
     }
 
-    /** Client-selected targeting hint (nullable). */
+    /**
+     * Client-selected targeting hint (nullable).
+     */
     public LimbType getPreferredLimb() {
         return preferredLimb;
     }

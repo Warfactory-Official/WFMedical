@@ -16,14 +16,23 @@ import java.util.Map;
  */
 public final class SubstanceRegistry {
 
+    /**
+     * Item id of the bundled morphine opioid injectable.
+     */
+    public static final String MORPHINE_ITEM_ID = "wfmedical:morphine_syringe";
+    /**
+     * Item id of the bundled naloxone antidote injectable.
+     */
+    public static final String NALOXONE_ITEM_ID = "wfmedical:naloxone_syringe";
     private static volatile SubstanceRegistry active = withDefaults();
-
     private final Map<String, Substance> byItemId = new LinkedHashMap<>();
 
     public SubstanceRegistry() {
     }
 
-    /** The globally active registry (never null). */
+    /**
+     * The globally active registry (never null).
+     */
     public static SubstanceRegistry active() {
         return active;
     }
@@ -32,12 +41,61 @@ public final class SubstanceRegistry {
         active = registry != null ? registry : withDefaults();
     }
 
+    /**
+     * The bundled morphine opioid substance (safety-net default).
+     */
+    public static Substance defaultMorphine() {
+        return new Substance(
+                "morphine", MORPHINE_ITEM_ID,
+                0.95F,   // painSuppression
+                0.5F,    // doseLoad
+                1.0F,    // overdoseThreshold
+                200,     // blackoutTicks
+                1.6F,    // lethalThreshold
+                false,   // antidote
+                0.0F,    // reversalAmount (unused for opioid)
+                40,      // useDurationTicks
+                0.0D);   // bloodRestoreMl
+    }
+
+    /**
+     * The bundled naloxone antidote substance (safety-net default).
+     */
+    public static Substance defaultNaloxone() {
+        return new Substance(
+                "naloxone", NALOXONE_ITEM_ID,
+                0.0F,    // painSuppression (irrelevant for antidote)
+                0.0F,    // doseLoad
+                0.0F,    // overdoseThreshold (unused)
+                0,       // blackoutTicks (unused)
+                0.0F,    // lethalThreshold (disabled)
+                true,    // antidote
+                3.0F,    // reversalAmount
+                30,      // useDurationTicks
+                0.0D);   // bloodRestoreMl
+    }
+
+    /**
+     * @return a fresh registry pre-populated with the hardcoded morphine + naloxone defaults.
+     */
+    public static SubstanceRegistry withDefaults() {
+        SubstanceRegistry r = new SubstanceRegistry();
+        r.registerDefaults();
+        return r;
+    }
+
     public Substance register(Substance substance) {
-        byItemId.put(substance.getItemId(), substance);
+        byItemId.put(substance.itemId(), substance);
         return substance;
     }
 
-    /** @return the substance bound to {@code itemId}, or {@code null} if unknown. */
+    // ---------------------------------------------------------------------
+    // Hardcoded fallback defaults (IO-free safety net; mirrors the bundled TOML).
+    // ---------------------------------------------------------------------
+
+    /**
+     * @return the substance bound to {@code itemId}, or {@code null} if unknown.
+     */
     public Substance get(String itemId) {
         return itemId == null ? null : byItemId.get(itemId);
     }
@@ -58,55 +116,11 @@ public final class SubstanceRegistry {
         byItemId.clear();
     }
 
-    // ---------------------------------------------------------------------
-    // Hardcoded fallback defaults (IO-free safety net; mirrors the bundled TOML).
-    // ---------------------------------------------------------------------
-
-    /** Item id of the bundled morphine opioid injectable. */
-    public static final String MORPHINE_ITEM_ID = "wfmedical:morphine_syringe";
-    /** Item id of the bundled naloxone antidote injectable. */
-    public static final String NALOXONE_ITEM_ID = "wfmedical:naloxone_syringe";
-
-    /** The bundled morphine opioid substance (safety-net default). */
-    public static Substance defaultMorphine() {
-        return new Substance(
-                "morphine", MORPHINE_ITEM_ID,
-                0.95F,   // painSuppression
-                0.5F,    // doseLoad
-                1.0F,    // overdoseThreshold
-                200,     // blackoutTicks
-                1.6F,    // lethalThreshold
-                false,   // antidote
-                0.0F,    // reversalAmount (unused for opioid)
-                40,      // useDurationTicks
-                0.0D);   // bloodRestoreMl
-    }
-
-    /** The bundled naloxone antidote substance (safety-net default). */
-    public static Substance defaultNaloxone() {
-        return new Substance(
-                "naloxone", NALOXONE_ITEM_ID,
-                0.0F,    // painSuppression (irrelevant for antidote)
-                0.0F,    // doseLoad
-                0.0F,    // overdoseThreshold (unused)
-                0,       // blackoutTicks (unused)
-                0.0F,    // lethalThreshold (disabled)
-                true,    // antidote
-                3.0F,    // reversalAmount
-                30,      // useDurationTicks
-                0.0D);   // bloodRestoreMl
-    }
-
-    /** Register the hardcoded morphine + naloxone defaults into this registry. */
+    /**
+     * Register the hardcoded morphine + naloxone defaults into this registry.
+     */
     public void registerDefaults() {
         register(defaultMorphine());
         register(defaultNaloxone());
-    }
-
-    /** @return a fresh registry pre-populated with the hardcoded morphine + naloxone defaults. */
-    public static SubstanceRegistry withDefaults() {
-        SubstanceRegistry r = new SubstanceRegistry();
-        r.registerDefaults();
-        return r;
     }
 }

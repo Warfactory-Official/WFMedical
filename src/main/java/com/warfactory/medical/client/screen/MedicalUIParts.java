@@ -11,12 +11,8 @@ import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.item.MedicalItem;
-import com.warfactory.medical.network.ClientMedicalCache;
-import com.warfactory.medical.network.MedicalActionPacket;
-import com.warfactory.medical.network.MedicalNetworking;
-import com.warfactory.medical.network.MedicalSyncPacket;
+import com.warfactory.medical.network.*;
 import com.warfactory.medical.network.MedicalSyncPacket.LimbSummary;
-import com.warfactory.medical.network.SetTargetLimbPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -25,11 +21,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Shared, CLIENT-ONLY widget builders and helpers used by BOTH {@link CharacterSheetUI} and
@@ -51,9 +43,13 @@ import java.util.Set;
  */
 public final class MedicalUIParts {
 
-    /** ARGB opaque-white; used for the selected-limb highlight border. */
+    /**
+     * ARGB opaque-white; used for the selected-limb highlight border.
+     */
     private static final int HIGHLIGHT_COLOR = 0xFFFFFFFF;
-    /** Border thickness (px) of the selected-limb highlight. */
+    /**
+     * Border thickness (px) of the selected-limb highlight.
+     */
     private static final int HIGHLIGHT_BORDER = 2;
 
     private MedicalUIParts() {
@@ -106,7 +102,9 @@ public final class MedicalUIParts {
 
     // ------------------------------------------------------------------ selection
 
-    /** @return the UI-local selected limb (nullable), mirroring the server targeting hint. */
+    /**
+     * @return the UI-local selected limb (nullable), mirroring the server targeting hint.
+     */
     public static LimbType selectedLimb() {
         return ClientMedicalCache.selectedLimb();
     }
@@ -174,7 +172,9 @@ public final class MedicalUIParts {
 
     // ------------------------------------------------------------------ safe snapshot reads
 
-    /** @return the latest synced {@link DerivedStats}; never null (healthy defaults if none received). */
+    /**
+     * @return the latest synced {@link DerivedStats}; never null (healthy defaults if none received).
+     */
     public static DerivedStats stats() {
         return ClientMedicalCache.stats();
     }
@@ -218,12 +218,16 @@ public final class MedicalUIParts {
 
     // ------------------------------------------------------------------ labels
 
-    /** @return the display name Component for a limb ({@code gui.wfmedical.limb.<name>}). */
+    /**
+     * @return the display name Component for a limb ({@code gui.wfmedical.limb.<name>}).
+     */
     public static Component limbName(LimbType limb) {
         return Component.translatable("gui.wfmedical.limb." + limb.name().toLowerCase(Locale.ROOT));
     }
 
-    /** @return the display name Component for a health state ({@code gui.wfmedical.state.<name>}). */
+    /**
+     * @return the display name Component for a health state ({@code gui.wfmedical.state.<name>}).
+     */
     public static Component stateName(HealthState state) {
         HealthState s = state == null ? HealthState.HEALTHY : state;
         return Component.translatable("gui.wfmedical.state." + s.name().toLowerCase(Locale.ROOT));
@@ -286,14 +290,14 @@ public final class MedicalUIParts {
 
         // Live color fill (drawn first, behind).
         ImageWidget fill = new ImageWidget(tx, ty, tw, th,
-                (java.util.function.Supplier<IGuiTexture>) () ->
+                () ->
                         new ColorRectTexture(limbColor(limbSummary(limb).healthPercent())));
         fill.setClientSideWidget();
         group.addWidget(fill);
 
         // Selection highlight border (only visible while this limb is selected).
         ImageWidget border = new ImageWidget(tx, ty, tw, th,
-                (java.util.function.Supplier<IGuiTexture>) () ->
+                () ->
                         selectedLimb() == limb
                                 ? new ColorBorderTexture(HIGHLIGHT_BORDER, HIGHLIGHT_COLOR)
                                 : IGuiTexture.EMPTY);
@@ -314,7 +318,9 @@ public final class MedicalUIParts {
         group.addWidget(click);
     }
 
-    /** Build the hover tooltip lines for a limb from the current snapshot. */
+    /**
+     * Build the hover tooltip lines for a limb from the current snapshot.
+     */
     private static List<Component> limbTooltip(LimbType limb) {
         LimbSummary s = limbSummary(limb);
         List<Component> lines = new ArrayList<>(4);

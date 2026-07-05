@@ -77,7 +77,9 @@ public final class MedicalClientEvents {
         event.setCanceled(true);
     }
 
-    /** Drop all cached medical / UI state when the local player disconnects. */
+    /**
+     * Drop all cached medical / UI state when the local player disconnects.
+     */
     @SubscribeEvent
     public static void onLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientMedicalCache.clear();

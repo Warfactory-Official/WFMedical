@@ -61,7 +61,7 @@ public final class TraumaGenerator {
                 return out;
             case EXPLOSION:
                 // Blast -> crushing + burning; heavy blasts can fracture.
-                add(out, registry, CRUSH_INJURY, TraumaCategory.CRUSH_INJURY, limb, 1.0F * energyFactor, nowTick);
+                add(out, registry, CRUSH_INJURY, TraumaCategory.CRUSH_INJURY, limb, energyFactor, nowTick);
                 add(out, registry, BURN, TraumaCategory.BURN, limb, 0.6F * energyFactor, nowTick);
                 maybeFracture(out, registry, limb, nowTick, rand, fractureChance(category, limb, energyFactor));
                 return out;

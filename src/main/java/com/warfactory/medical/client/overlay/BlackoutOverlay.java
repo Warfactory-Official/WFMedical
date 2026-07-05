@@ -45,41 +45,69 @@ import net.minecraftforge.fml.common.Mod;
 @OnlyIn(Dist.CLIENT)
 public final class BlackoutOverlay implements IGuiOverlay {
 
-    /** The singleton overlay instance; registered by {@link Registrar}. */
+    /**
+     * The singleton overlay instance; registered by {@link Registrar}.
+     */
     public static final IGuiOverlay INSTANCE = new BlackoutOverlay();
 
-    /** Overlay id used when registering with Forge. */
+    /**
+     * Overlay id used when registering with Forge.
+     */
     public static final String OVERLAY_ID = "wfmedical_blackout";
 
-    /** Vanilla vignette sprite reused for the edge falloff (opaque edges, transparent centre). */
+    /**
+     * Vanilla vignette sprite reused for the edge falloff (opaque edges, transparent centre).
+     */
     private static final ResourceLocation VIGNETTE_TEXTURE =
             new ResourceLocation("minecraft", "textures/misc/vignette.png");
 
-    /** Per-frame easing factor toward the fade target; matches {@link PassoutBlurEffect} so they close together. */
+    /**
+     * Per-frame easing factor toward the fade target; matches {@link PassoutBlurEffect} so they close together.
+     */
     private static final float FADE_STEP = 0.06F;
-    /** Below this fade the overlay is invisible; early-return keeps conscious cost ~0. */
+    /**
+     * Below this fade the overlay is invisible; early-return keeps conscious cost ~0.
+     */
     private static final float FADE_EPSILON = 0.001F;
 
-    /** Maps fade (0..1) onto the dark-vignette alpha; the texture's own falloff shapes the edge closing. */
+    /**
+     * Maps fade (0..1) onto the dark-vignette alpha; the texture's own falloff shapes the edge closing.
+     */
     private static final float VIGNETTE_STRENGTH = 1.0F;
-    /** Hard clamp on the vignette alpha so the closing edges never become a perfectly opaque frame. */
+    /**
+     * Hard clamp on the vignette alpha so the closing edges never become a perfectly opaque frame.
+     */
     private static final float VIGNETTE_MAX = 0.95F;
 
-    /** Uniform whole-screen darkening at full fade before the deep-fade boost (keeps the centre visible). */
+    /**
+     * Uniform whole-screen darkening at full fade before the deep-fade boost (keeps the centre visible).
+     */
     private static final float UNIFORM_DARK_BASE = 0.35F;
-    /** Deepest uniform darkening at maximum fade; deliberately NOT opaque so the view stays faintly visible. */
+    /**
+     * Deepest uniform darkening at maximum fade; deliberately NOT opaque so the view stays faintly visible.
+     */
     private static final float UNIFORM_DARK_MAX = 0.60F;
-    /** Fade above which the uniform darkening ramps from BASE toward MAX (the centre dims further). */
+    /**
+     * Fade above which the uniform darkening ramps from BASE toward MAX (the centre dims further).
+     */
     private static final float DEEPEN_THRESHOLD = 0.85F;
 
-    /** Above this fade the centred "unconscious" hint is legible against the dimmed view and gets drawn. */
+    /**
+     * Above this fade the centred "unconscious" hint is legible against the dimmed view and gets drawn.
+     */
     private static final float HINT_THRESHOLD = 0.85F;
-    /** Draw z; matches vanilla's far-back vignette depth so world/HUD sit in front. */
+    /**
+     * Draw z; matches vanilla's far-back vignette depth so world/HUD sit in front.
+     */
     private static final int Z_OFFSET = -90;
-    /** Faint hint text drawn near the centre while deeply passed out. */
+    /**
+     * Faint hint text drawn near the centre while deeply passed out.
+     */
     private static final String HINT_TEXT = "...";
 
-    /** Smoothed client-side fade toward the current passed-out target; persists across frames. */
+    /**
+     * Smoothed client-side fade toward the current passed-out target; persists across frames.
+     */
     private static float fade;
 
     private BlackoutOverlay() {
@@ -157,7 +185,9 @@ public final class BlackoutOverlay implements IGuiOverlay {
     @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class Registrar {
 
-        /** Guards against the mod-bus overlay event reaching this registrar more than once per launch. */
+        /**
+         * Guards against the mod-bus overlay event reaching this registrar more than once per launch.
+         */
         private static boolean registered;
 
         private Registrar() {

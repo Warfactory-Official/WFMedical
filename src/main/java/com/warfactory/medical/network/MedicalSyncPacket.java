@@ -14,32 +14,12 @@ import net.minecraft.network.FriendlyByteBuf;
  * <p>Sent on login / respawn / dimension change and whenever a delta would be insufficient. Cheaper
  * incremental updates go through {@link TraumaDeltaPacket}.</p>
  */
-public final class MedicalSyncPacket {
+public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double bloodMl, double maxBloodMl,
+                                float painSuppression, float drugLoad, HealthState state) {
 
-    /** Compact per-limb summary carried in the snapshot; enough for a HUD, not the raw trauma list. */
-    public record LimbSummary(LimbType limb, float healthPercent, float bleeding, float pain, boolean fracture) {
-    }
-
-    private final DerivedStats stats;
-    private final LimbSummary[] limbs;
-    private final double bloodMl;
-    private final double maxBloodMl;
-    private final float painSuppression;
-    private final float drugLoad;
-    private final HealthState state;
-
-    public MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double bloodMl,
-                             double maxBloodMl, float painSuppression, float drugLoad, HealthState state) {
-        this.stats = stats;
-        this.limbs = limbs;
-        this.bloodMl = bloodMl;
-        this.maxBloodMl = maxBloodMl;
-        this.painSuppression = painSuppression;
-        this.drugLoad = drugLoad;
-        this.state = state;
-    }
-
-    /** Build a snapshot from the authoritative server-side profile (reads cached limb aggregates). */
+    /**
+     * Build a snapshot from the authoritative server-side profile (reads cached limb aggregates).
+     */
     public static MedicalSyncPacket fromProfile(MedicalProfile profile) {
         LimbType[] all = LimbType.VALUES;
         LimbSummary[] summaries = new LimbSummary[all.length];
@@ -68,66 +48,6 @@ public final class MedicalSyncPacket {
                 profile.getPainSuppression(),
                 profile.getDrugLoad(),
                 profile.getState());
-    }
-
-    public DerivedStats stats() {
-        return stats;
-    }
-
-    public LimbSummary[] limbs() {
-        return limbs;
-    }
-
-    public double bloodMl() {
-        return bloodMl;
-    }
-
-    public double maxBloodMl() {
-        return maxBloodMl;
-    }
-
-    /** Perceived-pain suppression fraction (0..1) from painkillers at snapshot time. */
-    public float painSuppression() {
-        return painSuppression;
-    }
-
-    /** Accumulating injectable-drug load at snapshot time (0..); drives the overdose UI. */
-    public float drugLoad() {
-        return drugLoad;
-    }
-
-    public HealthState state() {
-        return state;
-    }
-
-    public void encode(FriendlyByteBuf buf) {
-        // DerivedStats
-        buf.writeFloat(stats.effectiveMaxHealth());
-        buf.writeFloat(stats.healthModifier());
-        buf.writeFloat(stats.effectiveCurrentHealth());
-        buf.writeDouble(stats.totalBleeding());
-        buf.writeFloat(stats.totalPain());
-        buf.writeFloat(stats.movementMultiplier());
-        buf.writeBoolean(stats.sprintBlocked());
-        buf.writeFloat(stats.jumpMultiplier());
-        buf.writeEnum(stats.state());
-        buf.writeBoolean(stats.anyLegFracture());
-        buf.writeBoolean(stats.anyArmFracture());
-        // Blood + high-level state
-        buf.writeDouble(bloodMl);
-        buf.writeDouble(maxBloodMl);
-        buf.writeFloat(painSuppression);
-        buf.writeFloat(drugLoad);
-        buf.writeEnum(state);
-        // Per-limb summary
-        buf.writeVarInt(limbs.length);
-        for (LimbSummary s : limbs) {
-            buf.writeEnum(s.limb());
-            buf.writeFloat(s.healthPercent());
-            buf.writeFloat(s.bleeding());
-            buf.writeFloat(s.pain());
-            buf.writeBoolean(s.fracture());
-        }
     }
 
     public static MedicalSyncPacket decode(FriendlyByteBuf buf) {
@@ -161,8 +81,62 @@ public final class MedicalSyncPacket {
         return new MedicalSyncPacket(stats, limbs, bloodMl, maxBloodMl, painSuppression, drugLoad, state);
     }
 
-    /** Client-thread handler: overwrite the local cache with this authoritative snapshot. */
+    /**
+     * Perceived-pain suppression fraction (0..1) from painkillers at snapshot time.
+     */
+    @Override
+    public float painSuppression() {
+        return painSuppression;
+    }
+
+    /**
+     * Accumulating injectable-drug load at snapshot time (0..); drives the overdose UI.
+     */
+    @Override
+    public float drugLoad() {
+        return drugLoad;
+    }
+
+    public void encode(FriendlyByteBuf buf) {
+        // DerivedStats
+        buf.writeFloat(stats.effectiveMaxHealth());
+        buf.writeFloat(stats.healthModifier());
+        buf.writeFloat(stats.effectiveCurrentHealth());
+        buf.writeDouble(stats.totalBleeding());
+        buf.writeFloat(stats.totalPain());
+        buf.writeFloat(stats.movementMultiplier());
+        buf.writeBoolean(stats.sprintBlocked());
+        buf.writeFloat(stats.jumpMultiplier());
+        buf.writeEnum(stats.state());
+        buf.writeBoolean(stats.anyLegFracture());
+        buf.writeBoolean(stats.anyArmFracture());
+        // Blood + high-level state
+        buf.writeDouble(bloodMl);
+        buf.writeDouble(maxBloodMl);
+        buf.writeFloat(painSuppression);
+        buf.writeFloat(drugLoad);
+        buf.writeEnum(state);
+        // Per-limb summary
+        buf.writeVarInt(limbs.length);
+        for (LimbSummary s : limbs) {
+            buf.writeEnum(s.limb());
+            buf.writeFloat(s.healthPercent());
+            buf.writeFloat(s.bleeding());
+            buf.writeFloat(s.pain());
+            buf.writeBoolean(s.fracture());
+        }
+    }
+
+    /**
+     * Client-thread handler: overwrite the local cache with this authoritative snapshot.
+     */
     public void handleClient() {
         ClientMedicalCache.set(this);
+    }
+
+    /**
+     * Compact per-limb summary carried in the snapshot; enough for a HUD, not the raw trauma list.
+     */
+    public record LimbSummary(LimbType limb, float healthPercent, float bleeding, float pain, boolean fracture) {
     }
 }

@@ -31,7 +31,9 @@ public final class MedicalNetworking {
     private MedicalNetworking() {
     }
 
-    /** Register all packets (S2C state + C2S requests). Idempotent; call once from mod construction. */
+    /**
+     * Register all packets (S2C state + C2S requests). Idempotent; call once from mod construction.
+     */
     public static void register() {
         if (registered) {
             return;
@@ -98,17 +100,23 @@ public final class MedicalNetworking {
                 .add();
     }
 
-    /** Send a full authoritative snapshot to one player. */
+    /**
+     * Send a full authoritative snapshot to one player.
+     */
     public static void sendFull(ServerPlayer player, MedicalProfile profile) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), MedicalSyncPacket.fromProfile(profile));
     }
 
-    /** Send an incremental trauma change to one player. */
+    /**
+     * Send an incremental trauma change to one player.
+     */
     public static void sendDelta(ServerPlayer player, TraumaDeltaPacket packet) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
     }
 
-    /** Send the active-treatment progress state to one player (start / completion / cancellation). */
+    /**
+     * Send the active-treatment progress state to one player (start / completion / cancellation).
+     */
     public static void sendActiveTreatment(ServerPlayer player, ActiveTreatmentPacket packet) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
     }

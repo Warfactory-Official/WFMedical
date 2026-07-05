@@ -17,10 +17,9 @@ import java.util.List;
 public final class Limb {
 
     private final LimbType type;
+    private final List<Trauma> traumas = new ArrayList<>();
     private float maxHealth;
     private float minorDamage;
-    private final List<Trauma> traumas = new ArrayList<>();
-
     // Cached aggregates (valid while !dirty).
     private double cachedBleeding;
     private float cachedPain;
@@ -50,7 +49,9 @@ public final class Limb {
         this.maxHealth = maxHealth;
     }
 
-    /** Regenerating minor-damage pool (vanilla-like scratches that heal over time). */
+    /**
+     * Regenerating minor-damage pool (vanilla-like scratches that heal over time).
+     */
     public float getMinorDamage() {
         return minorDamage;
     }
@@ -166,7 +167,9 @@ public final class Limb {
         }
     }
 
-    /** Recompute every cached aggregate with a single pass over the trauma list. */
+    /**
+     * Recompute every cached aggregate with a single pass over the trauma list.
+     */
     public void rebuildCache() {
         double bleeding = 0.0D;
         float pain = 0.0F;

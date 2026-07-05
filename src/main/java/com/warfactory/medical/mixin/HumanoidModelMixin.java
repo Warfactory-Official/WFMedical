@@ -38,6 +38,10 @@ import java.util.Random;
 @Mixin(HumanoidModel.class)
 public abstract class HumanoidModelMixin {
 
+    /**
+     * Half-range (radians) of the per-limb random tilt; kept subtle for a relaxed sprawl, not a T-pose.
+     */
+    private static final float WFMEDICAL$TILT_RANGE = 0.28F;
     @Shadow
     public ModelPart head;
     @Shadow
@@ -49,8 +53,21 @@ public abstract class HumanoidModelMixin {
     @Shadow
     public ModelPart leftLeg;
 
-    /** Half-range (radians) of the per-limb random tilt; kept subtle for a relaxed sprawl, not a T-pose. */
-    private static final float WFMEDICAL$TILT_RANGE = 0.28F;
+    /**
+     * Add a subtle seeded tilt to each rotation axis of one limb.
+     */
+    private static void wfmedical$sprawl(ModelPart part, Random rng) {
+        part.xRot += wfmedical$tilt(rng);
+        part.yRot += wfmedical$tilt(rng);
+        part.zRot += wfmedical$tilt(rng);
+    }
+
+    /**
+     * A subtle signed tilt in {@code [-TILT_RANGE, +TILT_RANGE]} radians from the seeded generator.
+     */
+    private static float wfmedical$tilt(Random rng) {
+        return (rng.nextFloat() * 2.0F - 1.0F) * WFMEDICAL$TILT_RANGE;
+    }
 
     /**
      * After the vanilla animator has posed the humanoid, add the seeded limb sprawl for downed players.
@@ -81,17 +98,5 @@ public abstract class HumanoidModelMixin {
         } catch (Throwable t) {
             WFMedical.LOGGER.warn("[{}] Downed limb sprawl failed; skipping this frame", WFMedical.MOD_ID, t);
         }
-    }
-
-    /** Add a subtle seeded tilt to each rotation axis of one limb. */
-    private static void wfmedical$sprawl(ModelPart part, Random rng) {
-        part.xRot += wfmedical$tilt(rng);
-        part.yRot += wfmedical$tilt(rng);
-        part.zRot += wfmedical$tilt(rng);
-    }
-
-    /** A subtle signed tilt in {@code [-TILT_RANGE, +TILT_RANGE]} radians from the seeded generator. */
-    private static float wfmedical$tilt(Random rng) {
-        return (rng.nextFloat() * 2.0F - 1.0F) * WFMEDICAL$TILT_RANGE;
     }
 }

@@ -24,11 +24,17 @@ import java.util.List;
  */
 public final class MedicalEngine {
 
-    /** Baseline natural regeneration of a minor trauma's severity, per tick, when the type is silent. */
+    /**
+     * Baseline natural regeneration of a minor trauma's severity, per tick, when the type is silent.
+     */
     private static final float DEFAULT_MINOR_REGEN_PER_TICK = 0.0006F;
-    /** Slow worsening applied to an untreated major trauma, per tick. */
+    /**
+     * Slow worsening applied to an untreated major trauma, per tick.
+     */
     private static final float MAJOR_WORSEN_PER_TICK = 0.00015F;
-    /** Rate at which painkiller pain-suppression wears off, per tick (a full dose lasts ~tens of seconds). */
+    /**
+     * Rate at which painkiller pain-suppression wears off, per tick (a full dose lasts ~tens of seconds).
+     */
     private static final float PAIN_SUPPRESSION_DECAY_PER_TICK = 0.0008F;
 
     private static int tickCounter;
@@ -36,7 +42,9 @@ public final class MedicalEngine {
     private MedicalEngine() {
     }
 
-    /** Forge server-tick hook; keeps the cadence counter and fans out to online players. */
+    /**
+     * Forge server-tick hook; keeps the cadence counter and fans out to online players.
+     */
     public static void onServerTick(MinecraftServer server) {
         if (server == null) {
             return;
@@ -216,7 +224,9 @@ public final class MedicalEngine {
         }
     }
 
-    /** Allocation-free liveness test; false means the profile can be skipped this pass. */
+    /**
+     * Allocation-free liveness test; false means the profile can be skipped this pass.
+     */
     private static boolean isActive(MedicalProfile profile) {
         if (profile.isDirty() || profile.getPainSuppression() > 0.0F || profile.hasActiveTreatment()) {
             return true;
@@ -341,7 +351,9 @@ public final class MedicalEngine {
         }
     }
 
-    /** Full sync on join/respawn/dimension change: rebuild caches, apply effects, push a snapshot. */
+    /**
+     * Full sync on join/respawn/dimension change: rebuild caches, apply effects, push a snapshot.
+     */
     public static void onPlayerJoin(ServerPlayer player) {
         resync(player);
     }
@@ -412,7 +424,9 @@ public final class MedicalEngine {
         reconcileDownedBroadcast(player, profile);
     }
 
-    /** Cleanup on logout: remove our transient attribute modifiers from the vanilla body. */
+    /**
+     * Cleanup on logout: remove our transient attribute modifiers from the vanilla body.
+     */
     public static void onPlayerLeave(ServerPlayer player) {
         MedicalEffects.clear(player);
         // Clear any lingering downed flag on observers so a player who logs out while downed doesn't leave

@@ -34,9 +34,13 @@ import net.minecraftforge.fml.common.Mod;
  */
 public final class ClientDownedTracker {
 
-    /** Guards {@link #DOWNED}. Writes are on the client main thread; reads are on the render thread. */
+    /**
+     * Guards {@link #DOWNED}. Writes are on the client main thread; reads are on the render thread.
+     */
     private static final Object LOCK = new Object();
-    /** Entity ids the server has flagged as downed. Not thread-safe itself, hence {@link #LOCK}. */
+    /**
+     * Entity ids the server has flagged as downed. Not thread-safe itself, hence {@link #LOCK}.
+     */
     private static final IntOpenHashSet DOWNED = new IntOpenHashSet();
 
     private ClientDownedTracker() {
@@ -62,9 +66,9 @@ public final class ClientDownedTracker {
     /**
      * @param entityId a player entity network id
      * @return {@code true} if that player is currently downed. Any entity id the server has broadcast as
-     *         downed reports {@code true}; additionally the LOCAL player reports {@code true} whenever the
-     *         synced snapshot says it is unconscious (the single merged passed-out state, for either the
-     *         overdose or bleed-out cause; see the class javadoc). Unknown ids default to {@code false}.
+     * downed reports {@code true}; additionally the LOCAL player reports {@code true} whenever the
+     * synced snapshot says it is unconscious (the single merged passed-out state, for either the
+     * overdose or bleed-out cause; see the class javadoc). Unknown ids default to {@code false}.
      */
     public static boolean isDowned(int entityId) {
         synchronized (LOCK) {
@@ -81,7 +85,9 @@ public final class ClientDownedTracker {
         return false;
     }
 
-    /** Wipe all tracked downed ids (client disconnect / world change) so nothing leaks across worlds. */
+    /**
+     * Wipe all tracked downed ids (client disconnect / world change) so nothing leaks across worlds.
+     */
     public static void clear() {
         synchronized (LOCK) {
             DOWNED.clear();

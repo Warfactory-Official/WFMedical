@@ -1,30 +1,22 @@
 package com.warfactory.medical.core.substance;
 
+import com.warfactory.medical.core.treatment.Treatment;
+
 /**
  * Immutable description of an injectable substance (opioid analgesic or antidote). Data-driven, mirroring
- * {@link com.warfactory.medical.core.treatment.Treatment}: the substance / injection modules read these
+ * {@link Treatment}: the substance / injection modules read these
  * fields to decide how to mutate the player's {@code drugLoad}, pain suppression and blackout state.
  *
- * <p>An opioid ({@link #isAntidote()} == false) masks perceived pain by raising the profile's
- * {@code painSuppression} and adds {@link #getDoseLoad()} to an accumulating {@code drugLoad}; re-dosing to
- * stay pain-free stacks {@code drugLoad} toward {@link #getOverdoseThreshold()} (blackout) and, past
- * {@link #getLethalThreshold()}, a fatal respiratory-depression drain. An antidote
- * ({@link #isAntidote()} == true) instead removes {@link #getReversalAmount()} from {@code drugLoad}, ends
+ * <p>An opioid ({@link #antidote ()} == false) masks perceived pain by raising the profile's
+ * {@code painSuppression} and adds {@link #doseLoad ()} to an accumulating {@code drugLoad}; re-dosing to
+ * stay pain-free stacks {@code drugLoad} toward {@link #overdoseThreshold ()} (blackout) and, past
+ * {@link #lethalThreshold ()}, a fatal respiratory-depression drain. An antidote
+ * ({@link #antidote ()} == true) instead removes {@link #reversalAmount ()} from {@code drugLoad}, ends
  * the blackout and drops pain suppression back to zero.</p>
  */
-public final class Substance {
-
-    private final String id;
-    private final String itemId;
-    private final float painSuppression;
-    private final float doseLoad;
-    private final float overdoseThreshold;
-    private final int blackoutTicks;
-    private final float lethalThreshold;
-    private final boolean antidote;
-    private final float reversalAmount;
-    private final int useDurationTicks;
-    private final double bloodRestoreMl;
+public record Substance(String id, String itemId, float painSuppression, float doseLoad, float overdoseThreshold,
+                        int blackoutTicks, float lethalThreshold, boolean antidote, float reversalAmount,
+                        int useDurationTicks, double bloodRestoreMl) {
 
     /**
      * @param id                unique substance id
@@ -67,58 +59,91 @@ public final class Substance {
         return v < 0.0F ? 0.0F : (v > 1.0F ? 1.0F : v);
     }
 
-    /** Unique substance id (e.g. {@code "morphine"}). */
-    public String getId() {
+    /**
+     * Unique substance id (e.g. {@code "morphine"}).
+     */
+    @Override
+    public String id() {
         return id;
     }
 
-    /** Registry-name string of the item that injects this substance (e.g. {@code "wfmedical:morphine_syringe"}). */
-    public String getItemId() {
+    /**
+     * Registry-name string of the item that injects this substance (e.g. {@code "wfmedical:morphine_syringe"}).
+     */
+    @Override
+    public String itemId() {
         return itemId;
     }
 
-    /** Perceived-pain mask (0..1) applied on injection; ignored for antidotes. */
-    public float getPainSuppression() {
+    /**
+     * Perceived-pain mask (0..1) applied on injection; ignored for antidotes.
+     */
+    @Override
+    public float painSuppression() {
         return painSuppression;
     }
 
-    /** Amount added to the player's {@code drugLoad} per injection (opioid only). */
-    public float getDoseLoad() {
+    /**
+     * Amount added to the player's {@code drugLoad} per injection (opioid only).
+     */
+    @Override
+    public float doseLoad() {
         return doseLoad;
     }
 
-    /** {@code drugLoad} at/above which an overdose blackout triggers. */
-    public float getOverdoseThreshold() {
+    /**
+     * {@code drugLoad} at/above which an overdose blackout triggers.
+     */
+    @Override
+    public float overdoseThreshold() {
         return overdoseThreshold;
     }
 
-    /** Blackout (unconscious) duration in ticks. */
-    public int getBlackoutTicks() {
+    /**
+     * Blackout (unconscious) duration in ticks.
+     */
+    @Override
+    public int blackoutTicks() {
         return blackoutTicks;
     }
 
-    /** {@code drugLoad} at/above which an overdose additionally drains health ({@code <=0} disables). */
-    public float getLethalThreshold() {
+    /**
+     * {@code drugLoad} at/above which an overdose additionally drains health ({@code <=0} disables).
+     */
+    @Override
+    public float lethalThreshold() {
         return lethalThreshold;
     }
 
-    /** True when this substance reverses an overdose (antidote) instead of causing one (opioid). */
-    public boolean isAntidote() {
+    /**
+     * True when this substance reverses an overdose (antidote) instead of causing one (opioid).
+     */
+    @Override
+    public boolean antidote() {
         return antidote;
     }
 
-    /** {@code drugLoad} removed by a single antidote injection. */
-    public float getReversalAmount() {
+    /**
+     * {@code drugLoad} removed by a single antidote injection.
+     */
+    @Override
+    public float reversalAmount() {
         return reversalAmount;
     }
 
-    /** Injection channel time in ticks. */
-    public int getUseDurationTicks() {
+    /**
+     * Injection channel time in ticks.
+     */
+    @Override
+    public int useDurationTicks() {
         return useDurationTicks;
     }
 
-    /** Optional secondary blood restore in ml (usually 0). */
-    public double getBloodRestoreMl() {
+    /**
+     * Optional secondary blood restore in ml (usually 0).
+     */
+    @Override
+    public double bloodRestoreMl() {
         return bloodRestoreMl;
     }
 }

@@ -54,14 +54,22 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class DownedPlayerRenderer {
 
-    /** Upward nudge (blocks) so the supine body rests on the surface rather than sinking into it. */
+    /**
+     * Upward nudge (blocks) so the supine body rests on the surface rather than sinking into it.
+     */
     private static final float GROUND_LIFT = 0.1F;
-    /** Backward tip about the horizontal X axis to lay the model on its back (negative = fall backward). */
+    /**
+     * Backward tip about the horizontal X axis to lay the model on its back (negative = fall backward).
+     */
     private static final float LAY_DEGREES = -90.0F;
-    /** Small fixed yaw so the sprawl reads natural instead of grid-aligned. */
+    /**
+     * Small fixed yaw so the sprawl reads natural instead of grid-aligned.
+     */
     private static final float STABLE_YAW = 8.0F;
 
-    /** {@code true} between a successful {@link #onRenderPre} push and its matching {@link #onRenderPost}. */
+    /**
+     * {@code true} between a successful {@link #onRenderPre} push and its matching {@link #onRenderPost}.
+     */
     private static boolean applied;
 
     private DownedPlayerRenderer() {

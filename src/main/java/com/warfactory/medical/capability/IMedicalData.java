@@ -23,21 +23,31 @@ public interface IMedicalData {
 
     void setProfile(MedicalProfile profile);
 
-    /** @return true when the profile's physiology needs to be recomputed. */
+    /**
+     * @return true when the profile's physiology needs to be recomputed.
+     */
     boolean isDirty();
 
-    /** Monotonic counter bumped whenever the authoritative state changes and clients must be told. */
+    /**
+     * Monotonic counter bumped whenever the authoritative state changes and clients must be told.
+     */
     int getRevision();
 
     int getLastSyncedRevision();
 
-    /** Advance the revision counter, flagging the state as needing a network delta. */
+    /**
+     * Advance the revision counter, flagging the state as needing a network delta.
+     */
     void bumpRevision();
 
-    /** Record that the current {@link #getRevision()} has been transmitted to the client. */
+    /**
+     * Record that the current {@link #getRevision()} has been transmitted to the client.
+     */
     void markSynced();
 
-    /** @return true when {@link #getRevision()} is ahead of {@link #getLastSyncedRevision()}. */
+    /**
+     * @return true when {@link #getRevision()} is ahead of {@link #getLastSyncedRevision()}.
+     */
     boolean needsSync();
 
     CompoundTag save();

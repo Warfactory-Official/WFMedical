@@ -21,10 +21,6 @@ public enum TraumaCategory {
         this.majorByDefault = majorByDefault;
     }
 
-    public boolean isMajorByDefault() {
-        return majorByDefault;
-    }
-
     public static TraumaCategory byName(String name, TraumaCategory fallback) {
         if (name == null) {
             return fallback;
@@ -35,5 +31,9 @@ public enum TraumaCategory {
             }
         }
         return fallback;
+    }
+
+    public boolean isMajorByDefault() {
+        return majorByDefault;
     }
 }

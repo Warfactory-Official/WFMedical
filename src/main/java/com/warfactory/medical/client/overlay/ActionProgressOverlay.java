@@ -34,30 +34,67 @@ import net.minecraftforge.client.gui.overlay.IGuiOverlay;
 @OnlyIn(Dist.CLIENT)
 public final class ActionProgressOverlay implements IGuiOverlay {
 
-    /** The singleton overlay instance registered by the client scaffolding. */
+    /**
+     * The singleton overlay instance registered by the client scaffolding.
+     */
     public static final IGuiOverlay INSTANCE = new ActionProgressOverlay();
 
     private static final int BAR_WIDTH = 100;
     private static final int BAR_HEIGHT = 8;
 
-    /** Dark backdrop drawn behind the fill. */
+    /**
+     * Dark backdrop drawn behind the fill.
+     */
     private static final ColorRectTexture BACKGROUND = new ColorRectTexture(0xC0101010);
-    /** Empty (dark teal) -> filled (bright teal) progress fill. */
+    /**
+     * Empty (dark teal) -> filled (bright teal) progress fill.
+     */
     private static final ProgressTexture FILL = new ProgressTexture(
             new ColorRectTexture(0xFF10402F), new ColorRectTexture(0xFF33CC99))
             .setFillDirection(ProgressTexture.FillDirection.LEFT_TO_RIGHT);
-    /** Centered label above the bar. */
+    /**
+     * Centered label above the bar.
+     */
     private static final TextTexture LABEL = new TextTexture("")
             .setType(TextTexture.TextType.NORMAL)
             .setColor(0xFFFFFFFF)
             .setDropShadow(true);
-    /** Centered percentage overlaid on the bar. */
+    /**
+     * Centered percentage overlaid on the bar.
+     */
     private static final TextTexture PERCENT = new TextTexture("")
             .setType(TextTexture.TextType.NORMAL)
             .setColor(0xFFFFFFFF)
             .setDropShadow(true);
 
     private ActionProgressOverlay() {
+    }
+
+    /**
+     * Build a friendly "<action> (<limb>)" label. Falls back gracefully when either part is null.
+     */
+    private static String actionLabel(TreatmentAction action, LimbType limb) {
+        String actionName = action == null ? "Treatment" : friendlyAction(action);
+        if (limb == null) {
+            return actionName;
+        }
+        return actionName + " (" + MedicalUIParts.limbName(limb).getString() + ")";
+    }
+
+    /**
+     * Human-readable name for a treatment action (self-contained; no lang dependency).
+     */
+    private static String friendlyAction(TreatmentAction action) {
+        return switch (action) {
+            case REDUCE_BLEEDING -> "Stopping Bleeding";
+            case SUTURE_WOUND -> "Suturing Wound";
+            case STABILIZE_FRACTURE -> "Splinting Fracture";
+            case RESTORE_BLOOD -> "Restoring Blood";
+            case REDUCE_PAIN -> "Administering Painkiller";
+            case HEAL_TRAUMA -> "Treating Wound";
+            case TREAT_BURN -> "Treating Burn";
+            case TREAT_RADIATION -> "Treating Radiation";
+        };
     }
 
     @Override
@@ -110,28 +147,5 @@ public final class ActionProgressOverlay implements IGuiOverlay {
 
         PERCENT.updateText(Math.round(progress * 100.0F) + "%");
         PERCENT.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT);
-    }
-
-    /** Build a friendly "<action> (<limb>)" label. Falls back gracefully when either part is null. */
-    private static String actionLabel(TreatmentAction action, LimbType limb) {
-        String actionName = action == null ? "Treatment" : friendlyAction(action);
-        if (limb == null) {
-            return actionName;
-        }
-        return actionName + " (" + MedicalUIParts.limbName(limb).getString() + ")";
-    }
-
-    /** Human-readable name for a treatment action (self-contained; no lang dependency). */
-    private static String friendlyAction(TreatmentAction action) {
-        return switch (action) {
-            case REDUCE_BLEEDING -> "Stopping Bleeding";
-            case SUTURE_WOUND -> "Suturing Wound";
-            case STABILIZE_FRACTURE -> "Splinting Fracture";
-            case RESTORE_BLOOD -> "Restoring Blood";
-            case REDUCE_PAIN -> "Administering Painkiller";
-            case HEAL_TRAUMA -> "Treating Wound";
-            case TREAT_BURN -> "Treating Burn";
-            case TREAT_RADIATION -> "Treating Radiation";
-        };
     }
 }

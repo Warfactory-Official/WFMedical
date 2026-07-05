@@ -1,44 +1,44 @@
-modLoader="javafml" #mandatory
-loaderVersion="${loader_version_range}" #mandatory
-license="${mod_license}"
+modLoader = "javafml" #mandatory
+loaderVersion = "${loader_version_range}" #mandatory
+license = "${mod_license}"
 
 [[mods]] #mandatory
-modId="${mod_id}" #mandatory
-version="${mod_version}" #mandatory
-displayName="${mod_name}" #mandatory
-authors="${mod_authors}" #optional
-description='''${mod_description}'''
+modId = "${mod_id}" #mandatory
+version = "${mod_version}" #mandatory
+displayName = "${mod_name}" #mandatory
+authors = "${mod_authors}" #optional
+description = '''${mod_description}'''
 
 # Forge dependency
-[[dependencies.${mod_id}]]
-    modId="forge" #mandatory
-    mandatory=true
-    versionRange="${forge_version_range}"
-    ordering="NONE"
-    side="BOTH"
+[[dependencies.${ mod_id }]]
+modId = "forge" #mandatory
+mandatory = true
+versionRange = "${forge_version_range}"
+ordering = "NONE"
+side = "BOTH"
 
 # Minecraft dependency
-[[dependencies.${mod_id}]]
-    modId="minecraft"
-    mandatory=true
-    versionRange="${minecraft_version_range}"
-    ordering="NONE"
-    side="BOTH"
+[[dependencies.${ mod_id }]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "BOTH"
 
 # LDLib — MANDATORY. Provides the ModularUI GUI framework used by the client character sheet,
 # radial menu and HUD overlays. Load AFTER it so its GUI types are available on both sides.
-[[dependencies.${mod_id}]]
-    modId="ldlib"
-    mandatory=true
-    versionRange="*"
-    ordering="AFTER"
-    side="BOTH"
+[[dependencies.${ mod_id }]]
+modId = "ldlib"
+mandatory = true
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
 
 # TACZ (Timeless and Classics Zero) — OPTIONAL compatibility. Not required; when present we load
 # AFTER it so our damage->trauma classification can recognise gun/bullet damage sources.
-[[dependencies.${mod_id}]]
-    modId="tacz"
-    mandatory=false
-    versionRange="*"
-    ordering="AFTER"
-    side="BOTH"
+[[dependencies.${ mod_id }]]
+modId = "tacz"
+mandatory = false
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"

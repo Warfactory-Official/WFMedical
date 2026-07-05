@@ -1,17 +1,17 @@
 {
-    "targets": [
-        "swap"
-    ],
-    "passes": [
-        {
-            "name": "wfmedical:blood_desaturate",
-            "intarget": "minecraft:main",
-            "outtarget": "swap"
-        },
-        {
-            "name": "minecraft:blit",
-            "intarget": "swap",
-            "outtarget": "minecraft:main"
-        }
-    ]
+  "targets": [
+    "swap"
+  ],
+  "passes": [
+    {
+      "name": "wfmedical:blood_desaturate",
+      "intarget": "minecraft:main",
+      "outtarget": "swap"
+    },
+    {
+      "name": "minecraft:blit",
+      "intarget": "swap",
+      "outtarget": "minecraft:main"
+    }
+  ]
 }
