@@ -105,6 +105,96 @@ tasks.matching { it.name in ['runServer', 'runGameTestServer'] }.configureEach {
     dependsOn 'prepareDedicatedServer'
 }
 
+
+tasks.register('runAll') {
+    group = 'forgegradle runs'
+    description = 'Launch the offline server + both isolated clients together (multiplayer test).'
+
+    dependsOn 'prepareDedicatedServer', 'prepareRunServer', 'prepareRunClient1', 'prepareRunClient2'
+
+    doLast {
+        if (System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win')) {
+            throw new GradleException('runAll is POSIX-only (uses ./gradlew and /proc); on Windows ' +
+                    'launch runServer / runClient1 / runClient2 individually instead.')
+        }
+
+
+        def stopGames = { findWfmedicalGameJvms(project).each { it.destroy() }.size() }
+        Runtime.runtime.addShutdownHook(new Thread({ stopGames() }))
+
+        def procs = []
+        def spawn = { String runTask ->
+            def logFile = new File(project.projectDir, "run/${runTask}.out.log")
+            def proc = new ProcessBuilder('./gradlew', runTask, '--console=plain')
+                    .directory(project.projectDir)
+                    .redirectErrorStream(true)
+                    .redirectOutput(logFile)
+                    .start()
+            procs << proc
+            logger.lifecycle("  ▶ ${runTask}  →  ${logFile}")
+            return [proc: proc, log: logFile]
+        }
+
+        try {
+
+            def server = spawn('runServer')
+            logger.lifecycle('Waiting for the dedicated server to accept connections…')
+            boolean ready = false
+            for (int i = 0; i < 180 && !ready; i++) {
+                if (!server.proc.isAlive()) {
+                    throw new GradleException("Dedicated server exited before it was ready — see ${server.log}")
+                }
+                ready = server.log.exists() && server.log.text.contains('! For help, type')
+                if (!ready) { Thread.sleep(1000) }
+            }
+            if (!ready) {
+                throw new GradleException("Server did not report ready within 180s — see ${server.log}")
+            }
+            logger.lifecycle('Server is up in offline mode. Launching both isolated clients…')
+
+            spawn('runClient1')
+            Thread.sleep(1500)
+            spawn('runClient2')
+
+            logger.lifecycle('Server + 2 clients running. Stop this task (Ctrl-C / IDE stop) to shut all three down.')
+            procs.each { it.waitFor() }
+        } finally {
+
+            stopGames()
+        }
+    }
+}
+
+
+tasks.register('stopAll') {
+    group = 'forgegradle runs'
+    description = 'Stop the offline server + both clients started by runAll.'
+    doLast {
+        def handles = findWfmedicalGameJvms(project)
+        handles.each { it.destroy(); logger.lifecycle("stopped pid ${it.pid()}") }
+        logger.lifecycle(handles.isEmpty() ? 'Nothing to stop.' : "Stopped ${handles.size()} process(es).")
+    }
+}
+
+
+def findWfmedicalGameJvms(project) {
+    def root = project.projectDir.absolutePath
+    def markers = ['--launchTarget forgeserveruserdev', '--username Player1', '--username Player2']
+    def handles = []
+    new File('/proc').listFiles()?.each { dir ->
+        if (!(dir.name ==~ /\d+/)) { return }
+        try {
+            def cmdlineFile = new File(dir, 'cmdline')
+            if (!cmdlineFile.exists()) { return }
+            def cmd = new String(cmdlineFile.bytes).replace('\u0000', ' ')
+            if (cmd.contains(root) && markers.any { cmd.contains(it) }) {
+                ProcessHandle.of(dir.name as long).ifPresent { handles << it }
+            }
+        } catch (ignored) {}
+    }
+    return handles
+}
+
 // Sponge Mixin plugin: generate and bundle the refmap for our mixin config.
 mixin {
     add sourceSets.main, "${mod_id}.refmap.json"
