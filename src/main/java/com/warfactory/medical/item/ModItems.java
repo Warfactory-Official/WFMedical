@@ -1,6 +1,8 @@
 package com.warfactory.medical.item;
 
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.core.substance.Substance;
+import com.warfactory.medical.core.substance.SubstanceRegistry;
 import com.warfactory.medical.core.trauma.TraumaCategory;
 import com.warfactory.medical.core.treatment.Treatment;
 import com.warfactory.medical.core.treatment.TreatmentAction;
@@ -37,6 +39,11 @@ public final class ModItems {
     private static RegistryObject<Item> medical(String name, Treatment treatment, boolean eatAnim) {
         return ITEMS.register(name,
                 () -> new MedicalItem(new Item.Properties().stacksTo(16), treatment, eatAnim));
+    }
+
+    private static RegistryObject<Item> injectable(String name, Substance substance) {
+        return ITEMS.register(name,
+                () -> new InjectableItem(new Item.Properties().stacksTo(16), substance));
     }
 
     private static Set<TraumaCategory> cats(TraumaCategory... c) {
@@ -79,6 +86,14 @@ public final class ModItems {
     public static final RegistryObject<Item> ANTIRAD_SHOT = medical("antirad_shot",
             new Treatment(TreatmentAction.TREAT_RADIATION,
                     cats(TraumaCategory.RADIATION_BURN), 1.0F, 0.0D, 40, true), true);
+
+    // Injectable/opioid substances. Constructed from the SubstanceRegistry hardcoded defaults so the items
+    // are always functional regardless of config load ordering (mirrors how treatments are inlined above).
+    public static final RegistryObject<Item> MORPHINE_SYRINGE =
+            injectable("morphine_syringe", SubstanceRegistry.defaultMorphine());
+
+    public static final RegistryObject<Item> NALOXONE_SYRINGE =
+            injectable("naloxone_syringe", SubstanceRegistry.defaultNaloxone());
 
     public static void register(IEventBus modBus) {
         ITEMS.register(modBus);

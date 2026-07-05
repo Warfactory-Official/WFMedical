@@ -24,14 +24,18 @@ public final class MedicalSyncPacket {
     private final LimbSummary[] limbs;
     private final double bloodMl;
     private final double maxBloodMl;
+    private final float painSuppression;
+    private final float drugLoad;
     private final HealthState state;
 
     public MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double bloodMl,
-                             double maxBloodMl, HealthState state) {
+                             double maxBloodMl, float painSuppression, float drugLoad, HealthState state) {
         this.stats = stats;
         this.limbs = limbs;
         this.bloodMl = bloodMl;
         this.maxBloodMl = maxBloodMl;
+        this.painSuppression = painSuppression;
+        this.drugLoad = drugLoad;
         this.state = state;
     }
 
@@ -61,6 +65,8 @@ public final class MedicalSyncPacket {
                 summaries,
                 profile.getBloodMl(),
                 profile.getMaxBloodMl(),
+                profile.getPainSuppression(),
+                profile.getDrugLoad(),
                 profile.getState());
     }
 
@@ -80,6 +86,16 @@ public final class MedicalSyncPacket {
         return maxBloodMl;
     }
 
+    /** Perceived-pain suppression fraction (0..1) from painkillers at snapshot time. */
+    public float painSuppression() {
+        return painSuppression;
+    }
+
+    /** Accumulating injectable-drug load at snapshot time (0..); drives the overdose UI. */
+    public float drugLoad() {
+        return drugLoad;
+    }
+
     public HealthState state() {
         return state;
     }
@@ -97,9 +113,12 @@ public final class MedicalSyncPacket {
         buf.writeEnum(stats.state());
         buf.writeBoolean(stats.anyLegFracture());
         buf.writeBoolean(stats.anyArmFracture());
+        buf.writeBoolean(stats.blackout());
         // Blood + high-level state
         buf.writeDouble(bloodMl);
         buf.writeDouble(maxBloodMl);
+        buf.writeFloat(painSuppression);
+        buf.writeFloat(drugLoad);
         buf.writeEnum(state);
         // Per-limb summary
         buf.writeVarInt(limbs.length);
@@ -124,9 +143,12 @@ public final class MedicalSyncPacket {
                 buf.readFloat(),
                 buf.readEnum(HealthState.class),
                 buf.readBoolean(),
+                buf.readBoolean(),
                 buf.readBoolean());
         double bloodMl = buf.readDouble();
         double maxBloodMl = buf.readDouble();
+        float painSuppression = buf.readFloat();
+        float drugLoad = buf.readFloat();
         HealthState state = buf.readEnum(HealthState.class);
         int count = buf.readVarInt();
         LimbSummary[] limbs = new LimbSummary[count];
@@ -138,7 +160,7 @@ public final class MedicalSyncPacket {
                     buf.readFloat(),
                     buf.readBoolean());
         }
-        return new MedicalSyncPacket(stats, limbs, bloodMl, maxBloodMl, state);
+        return new MedicalSyncPacket(stats, limbs, bloodMl, maxBloodMl, painSuppression, drugLoad, state);
     }
 
     /** Client-thread handler: overwrite the local cache with this authoritative snapshot. */

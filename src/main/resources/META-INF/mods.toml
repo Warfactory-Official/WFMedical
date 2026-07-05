@@ -25,6 +25,15 @@ description='''${mod_description}'''
     ordering="NONE"
     side="BOTH"
 
+# LDLib — MANDATORY. Provides the ModularUI GUI framework used by the client character sheet,
+# radial menu and HUD overlays. Load AFTER it so its GUI types are available on both sides.
+[[dependencies.${mod_id}]]
+    modId="ldlib"
+    mandatory=true
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
 # TACZ (Timeless and Classics Zero) — OPTIONAL compatibility. Not required; when present we load
 # AFTER it so our damage->trauma classification can recognise gun/bullet damage sources.
 [[dependencies.${mod_id}]]

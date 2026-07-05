@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.config.MedicalDefinitions;
+import com.warfactory.medical.core.substance.SubstanceRegistry;
 import com.warfactory.medical.core.trauma.TraumaRegistry;
 import com.warfactory.medical.core.treatment.Treatment;
 import com.warfactory.medical.item.ModCreativeTab;
@@ -65,12 +66,14 @@ public final class WFMedical {
         event.enqueueWork(() -> {
             TraumaRegistry registry = new TraumaRegistry();
             Map<String, Treatment> itemTreatments = new HashMap<>();
+            SubstanceRegistry substances = new SubstanceRegistry();
             try {
-                MedicalDefinitions.load(FMLPaths.CONFIGDIR.get(), registry, itemTreatments);
+                MedicalDefinitions.load(FMLPaths.CONFIGDIR.get(), registry, itemTreatments, substances);
             } catch (Exception e) {
                 LOGGER.error("[{}] Failed to load medical definitions; using hardcoded defaults", MOD_ID, e);
-                MedicalDefinitions.loadDefaults(registry, itemTreatments);
+                MedicalDefinitions.loadDefaults(registry, itemTreatments, substances);
                 TraumaRegistry.setActive(registry);
+                SubstanceRegistry.setActive(substances);
             }
 
             if (TaczCompat.isLoaded()) {

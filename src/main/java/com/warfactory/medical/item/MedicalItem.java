@@ -1,5 +1,8 @@
 package com.warfactory.medical.item;
 
+import com.warfactory.medical.capability.IMedicalData;
+import com.warfactory.medical.capability.MedicalCapabilities;
+import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.treatment.Treatment;
 import com.warfactory.medical.server.TreatmentService;
 import net.minecraft.sounds.SoundEvents;
@@ -60,7 +63,10 @@ public class MedicalItem extends Item {
     @Override
     public ItemStack finishUsingItem(ItemStack stack, Level level, LivingEntity entity) {
         if (!level.isClientSide && entity instanceof ServerPlayer serverPlayer && treatment != null) {
-            boolean applied = TreatmentService.apply(serverPlayer, treatment);
+            // Bias vanilla right-click use toward whatever limb the player selected in the UI, if any.
+            IMedicalData data = MedicalCapabilities.get(serverPlayer);
+            LimbType preferred = data != null ? data.getProfile().getPreferredLimb() : null;
+            boolean applied = TreatmentService.applyTargeted(serverPlayer, treatment, preferred);
             if (applied) {
                 level.playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
                         SoundEvents.BOTTLE_EMPTY, SoundSource.PLAYERS, 0.8F, 1.0F);

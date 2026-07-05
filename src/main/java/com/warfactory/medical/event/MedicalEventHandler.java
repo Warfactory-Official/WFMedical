@@ -16,6 +16,7 @@ import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
 import com.warfactory.medical.core.trauma.TraumaRegistry;
+import com.warfactory.medical.server.MedicalActionService;
 import com.warfactory.medical.server.MedicalEngine;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -118,6 +119,11 @@ public final class MedicalEventHandler {
             return;
         }
 
+        // Taking damage interrupts any in-progress timed treatment.
+        if (profile.hasActiveTreatment()) {
+            MedicalActionService.cancel(player, "damaged");
+        }
+
         RandomSource rand = player.getRandom();
         long nowTick = player.level().getGameTime();
         TraumaRegistry registry = TraumaRegistry.active();
@@ -191,6 +197,11 @@ public final class MedicalEventHandler {
         // The engine already ruled this a real bleed-out; let vanilla finish the kill.
         if (profile.getState() == HealthState.DEAD) {
             return;
+        }
+
+        // A knockdown interrupts any in-progress timed treatment.
+        if (profile.hasActiveTreatment()) {
+            MedicalActionService.cancel(player, "knocked_down");
         }
 
         // Still have knockdown budget: cancel death, crawl, keep bleeding until the timer runs out.

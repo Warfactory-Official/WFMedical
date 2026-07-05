@@ -28,10 +28,22 @@ public final class TreatmentService {
     }
 
     /**
-     * Apply {@code treatment} to {@code player}. Returns whether anything changed so callers only consume
-     * the item on success.
+     * Apply {@code treatment} to {@code player} with no limb preference (server auto-picks the most
+     * relevant wound). Returns whether anything changed so callers only consume the item on success.
      */
     public static boolean apply(ServerPlayer player, Treatment treatment) {
+        return applyTargeted(player, treatment, null);
+    }
+
+    /**
+     * Apply {@code treatment} to {@code player}, strongly preferring trauma on {@code limbHint} when
+     * picking the target. Behaves exactly like {@link #apply(ServerPlayer, Treatment)} when
+     * {@code limbHint} is {@code null}. Returns whether anything changed so callers only consume the item
+     * on success.
+     *
+     * @param limbHint the limb the player selected in the UI (nullable = no preference)
+     */
+    public static boolean applyTargeted(ServerPlayer player, Treatment treatment, LimbType limbHint) {
         if (player == null || treatment == null) {
             return false;
         }
@@ -73,7 +85,7 @@ public final class TreatmentService {
             return changed;
         }
 
-        Trauma target = pickTarget(profile, treatment, action);
+        Trauma target = pickTarget(profile, treatment, action, limbHint);
         if (target == null) {
             // A treatment may still restore blood as a secondary effect even with no matching wound.
             if (treatment.getBloodRestoreMl() > 0.0D && profile.getBloodMl() < profile.getMaxBloodMl()) {
@@ -155,11 +167,17 @@ public final class TreatmentService {
         return true;
     }
 
+    /** Score bonus applied to a trauma sitting on the UI-selected limb so the hint wins over severity. */
+    private static final float LIMB_HINT_BONUS = 1000.0F;
+
     /**
      * Choose the best trauma for this action: category must be applicable and the trauma must respond to
-     * the action; then score by action-specific priority plus severity.
+     * the action; then score by action-specific priority plus severity. When {@code limbHint} is non-null,
+     * trauma on that limb gets a large bonus so a UI-selected limb is strongly preferred (a matching wound
+     * always outranks a non-matching one, ties within the limb still break on the usual priority/severity).
      */
-    private static Trauma pickTarget(MedicalProfile profile, Treatment treatment, TreatmentAction action) {
+    private static Trauma pickTarget(MedicalProfile profile, Treatment treatment, TreatmentAction action,
+                                     LimbType limbHint) {
         Trauma best = null;
         float bestScore = Float.NEGATIVE_INFINITY;
         for (LimbType lt : LimbType.VALUES) {
@@ -174,6 +192,9 @@ public final class TreatmentService {
                     continue;
                 }
                 float score = priority(action, t) + t.getSeverity();
+                if (limbHint != null && t.getLimb() == limbHint) {
+                    score += LIMB_HINT_BONUS;
+                }
                 if (score > bestScore) {
                     bestScore = score;
                     best = t;

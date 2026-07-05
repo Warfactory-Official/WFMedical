@@ -15,11 +15,12 @@ public record DerivedStats(
         float jumpMultiplier,
         HealthState state,
         boolean anyLegFracture,
-        boolean anyArmFracture
+        boolean anyArmFracture,
+        boolean blackout
 ) {
     private static final DerivedStats HEALTHY = new DerivedStats(
             30.0F, 0.0F, 30.0F, 0.0D, 0.0F, 1.0F, false, 1.0F,
-            HealthState.HEALTHY, false, false);
+            HealthState.HEALTHY, false, false, false);
 
     /** A no-injury snapshot (30 health points, full mobility). */
     public static DerivedStats healthy() {

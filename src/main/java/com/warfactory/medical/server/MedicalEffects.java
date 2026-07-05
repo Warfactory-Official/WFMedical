@@ -31,10 +31,28 @@ public final class MedicalEffects {
 
     /**
      * Push the derived snapshot onto the vanilla body: transient MAX_HEALTH / MOVEMENT_SPEED modifiers and
-     * a downward health clamp. Keeps a knocked-down player alive (death interception lives in the event
-     * handler); never raises current health.
+     * a health clamp. Keeps a knocked-down player alive (death interception lives in the event handler).
+     *
+     * <p>Convenience overload that never raises current health (normal ticking behaviour).</p>
      */
     public static void apply(ServerPlayer player, DerivedStats stats) {
+        apply(player, stats, false);
+    }
+
+    /**
+     * Push the derived snapshot onto the vanilla body: transient MAX_HEALTH / MOVEMENT_SPEED modifiers and
+     * a health reconciliation. Keeps a knocked-down player alive (death interception lives in the event
+     * handler).
+     *
+     * <p>When {@code allowRaise} is {@code false} current health is only clamped DOWNWARD toward the
+     * derived target (normal ticking never heals the player). When {@code allowRaise} is {@code true} the
+     * health is set EXACTLY to the derived {@code effectiveCurrentHealth} (clamped to {@code [0,
+     * effectiveMaxHealth]}); this is used on join / respawn / dimension change so a pristine player spawns
+     * at full derived health instead of being stuck at the old vanilla 20 while max is lifted to 30.</p>
+     *
+     * @param allowRaise when true, current health may be raised to the derived target (join/respawn only)
+     */
+    public static void apply(ServerPlayer player, DerivedStats stats, boolean allowRaise) {
         if (player == null || stats == null) {
             return;
         }
@@ -83,7 +101,9 @@ public final class MedicalEffects {
             target = attrTarget;
         }
         float current = player.getHealth();
-        float clamped = Math.min(current, target);
+        // Normal ticking only clamps downward (never heals); join/respawn sets health exactly to the
+        // derived target so a pristine player spawns full instead of stuck at the old vanilla value.
+        float clamped = allowRaise ? target : Math.min(current, target);
         if (state == HealthState.KNOCKED_DOWN && clamped < 1.0F) {
             clamped = 1.0F;
         }

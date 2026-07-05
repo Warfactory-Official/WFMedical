@@ -7,7 +7,9 @@
   "mixins": [
     "LivingEntityMixin"
   ],
-  "client": [],
+  "client": [
+    "PostChainAccessor"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

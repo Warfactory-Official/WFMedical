@@ -4,6 +4,8 @@ import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.toml.TomlFormat;
 import com.mojang.logging.LogUtils;
+import com.warfactory.medical.core.substance.Substance;
+import com.warfactory.medical.core.substance.SubstanceRegistry;
 import com.warfactory.medical.core.trauma.TraumaCategory;
 import com.warfactory.medical.core.trauma.TraumaRegistry;
 import com.warfactory.medical.core.trauma.TraumaType;
@@ -29,7 +31,7 @@ import java.util.Set;
  * users can edit it.
  *
  * <p>Everything is defensive: missing keys fall back to sensible defaults, and if the file cannot be
- * read/parsed at all we fall back to {@link #loadDefaults(TraumaRegistry, Map)} which builds the same
+ * read/parsed at all we fall back to {@link #loadDefaults} which builds the same
  * set programmatically. The populated registry is installed via {@link TraumaRegistry#setActive}.</p>
  */
 public final class MedicalDefinitions {
@@ -43,12 +45,14 @@ public final class MedicalDefinitions {
     }
 
     /**
-     * Loads definitions into {@code registry} and {@code itemTreatments}, copying the bundled defaults
-     * into {@code configDir} if the file is missing, then activating the registry.
+     * Loads definitions into {@code registry}, {@code itemTreatments} and {@code substances}, copying the
+     * bundled defaults into {@code configDir} if the file is missing, then activating both registries.
      */
-    public static void load(Path configDir, TraumaRegistry registry, Map<String, Treatment> itemTreatments) {
+    public static void load(Path configDir, TraumaRegistry registry, Map<String, Treatment> itemTreatments,
+                            SubstanceRegistry substances) {
         registry.clear();
         itemTreatments.clear();
+        substances.clear();
 
         Path file = configDir.resolve(FILE_NAME);
         try {
@@ -56,20 +60,27 @@ public final class MedicalDefinitions {
                 copyBundled(file);
             }
             if (Files.exists(file)) {
-                parse(file, registry, itemTreatments);
+                parse(file, registry, itemTreatments, substances);
             }
         } catch (Exception e) {
             LOGGER.error("[wfmedical] Failed to load {} - using hardcoded defaults", FILE_NAME, e);
             registry.clear();
             itemTreatments.clear();
+            substances.clear();
         }
 
         if (registry.size() == 0) {
-            loadDefaults(registry, itemTreatments);
+            loadDefaults(registry, itemTreatments, substances);
+        }
+        // Injectables are independent of trauma; fall back to the hardcoded substances if none were parsed.
+        if (substances.size() == 0) {
+            substances.registerDefaults();
         }
 
         TraumaRegistry.setActive(registry);
-        LOGGER.info("[wfmedical] Loaded {} trauma types and {} treatments", registry.size(), itemTreatments.size());
+        SubstanceRegistry.setActive(substances);
+        LOGGER.info("[wfmedical] Loaded {} trauma types, {} treatments and {} substances",
+                registry.size(), itemTreatments.size(), substances.size());
     }
 
     private static void copyBundled(Path target) throws Exception {
@@ -84,7 +95,8 @@ public final class MedicalDefinitions {
         }
     }
 
-    private static void parse(Path file, TraumaRegistry registry, Map<String, Treatment> itemTreatments) throws Exception {
+    private static void parse(Path file, TraumaRegistry registry, Map<String, Treatment> itemTreatments,
+                              SubstanceRegistry substances) throws Exception {
         CommentedConfig root;
         try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             root = TomlFormat.instance().createParser().parse(reader);
@@ -104,6 +116,14 @@ public final class MedicalDefinitions {
             Treatment treatment = readTreatment(t);
             if (item != null && treatment != null) {
                 itemTreatments.put(item, treatment);
+            }
+        }
+
+        List<Config> substanceTables = getTableList(root, "substance");
+        for (Config t : substanceTables) {
+            Substance substance = readSubstance(t);
+            if (substance != null) {
+                substances.register(substance);
             }
         }
     }
@@ -159,12 +179,34 @@ public final class MedicalDefinitions {
         );
     }
 
+    private static Substance readSubstance(Config t) {
+        String id = str(t, "id", null);
+        String item = str(t, "item", null);
+        if (id == null || id.isEmpty() || item == null || item.isEmpty()) {
+            return null;
+        }
+        return new Substance(
+                id,
+                item,
+                flt(t, "painSuppression", 0.0F),
+                flt(t, "doseLoad", 0.0F),
+                flt(t, "overdoseThreshold", 1.0F),
+                intOf(t, "blackoutTicks", 200),
+                flt(t, "lethalThreshold", 0.0F),
+                bool(t, "antidote", false),
+                flt(t, "reversalAmount", 0.0F),
+                intOf(t, "useDurationTicks", 40),
+                dbl(t, "bloodRestoreMl", 0.0D)
+        );
+    }
+
     // ---------------------------------------------------------------------
     // Hardcoded fallback that mirrors wfmedical_definitions.toml exactly.
     // ---------------------------------------------------------------------
 
     /** Populates the SAME definitions as the bundled TOML, programmatically (IO-free safety net). */
-    public static void loadDefaults(TraumaRegistry registry, Map<String, Treatment> itemTreatments) {
+    public static void loadDefaults(TraumaRegistry registry, Map<String, Treatment> itemTreatments,
+                                    SubstanceRegistry substances) {
         registry.register(TraumaType.builder("bruise", TraumaCategory.BRUISE)
                 .major(false).severityContribution(0.3F).painPerSeverity(0.15F).bleedingPerSeverity(0.0F)
                 .healSpeedPerTick(0.0008F).canReopen(false).permanent(false).movementModifier(1.0F)
@@ -245,6 +287,10 @@ public final class MedicalDefinitions {
                 EnumSet.of(TraumaCategory.BURN, TraumaCategory.CHEMICAL_BURN), 0.8F, 0.0D, 80, false));
         itemTreatments.put("wfmedical:antirad_shot", new Treatment(TreatmentAction.TREAT_RADIATION,
                 EnumSet.of(TraumaCategory.RADIATION_BURN), 1.0F, 0.0D, 40, true));
+
+        // Injectable substances (mirror the bundled TOML [[substance]] tables).
+        substances.register(SubstanceRegistry.defaultMorphine());
+        substances.register(SubstanceRegistry.defaultNaloxone());
     }
 
     // ---------------------------------------------------------------------

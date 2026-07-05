@@ -75,15 +75,12 @@ repositories {
         name = 'SpongePowered'
         url = 'https://repo.spongepowered.org/repository/maven-public/'
     }
-    // TACZ (Timeless and Classics Zero) lives on the CurseForge maven. Compat is soft (no compile
-    // dependency) so this repo stays commented out; uncomment + add a compileOnly dep if you ever
-    // need to reference TACZ types directly.
-    // maven {
-    //     name = 'CurseMaven'
-    //     url = 'https://cursemaven.com'
-    //     content { includeGroup 'curse.maven' }
-    // }
-    // dev.prism / others as needed
+    // CurseForge maven — hosts LDLib (UI framework) and, if ever needed directly, TACZ.
+    maven {
+        name = 'CurseMaven'
+        url = 'https://cursemaven.com'
+        content { includeGroup 'curse.maven' }
+    }
     mavenCentral()
 }
 
@@ -92,6 +89,9 @@ dependencies {
 
     // Mixin annotation processor (required so @Mixin classes generate the refmap).
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+
+    // LDLib — UI framework used for the character sheet, radial menu and HUD overlays.
+    implementation fg.deobf("curse.maven:ldlib-626676:7809449")
 
     // Soft TACZ compat only — no hard dependency. To reference TACZ directly:
     // compileOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")

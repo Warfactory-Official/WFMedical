@@ -88,13 +88,18 @@ public final class Physiology {
         boolean lethal = bloodMl <= deathMl || effectiveMaxHealth <= 0.0F;
         boolean knockdown = lethal && cfg.knockdownEnabled();
 
+        // Overdose blackout: an orthogonal incapacitation (unconscious). Treated like knockdown for mobility
+        // (movement 0, sprint blocked, no jump) but it does NOT change the health-based HealthState below.
+        boolean blackout = p.isBlackoutActive();
+        boolean incapacitated = knockdown || blackout;
+
         // Movement: leg-fracture multipliers * pain slowdown, floored.
         float movement = movementFromLimbs;
         for (int i = 0; i < fracturedLegs; i++) {
             movement *= cfg.legFractureSpeedMultiplier();
         }
         movement *= (1.0F - 0.5F * totalPain);
-        if (knockdown) {
+        if (incapacitated) {
             movement = 0.0F;
         } else if (movement < cfg.painSpeedFloor()) {
             movement = cfg.painSpeedFloor();
@@ -104,10 +109,10 @@ public final class Physiology {
         boolean sprintBlocked = legFracture
                 || totalPain > cfg.painShockThreshold()
                 || lowBlood
-                || knockdown;
+                || incapacitated;
 
         float jumpMultiplier;
-        if (legFracture || knockdown) {
+        if (legFracture || incapacitated) {
             jumpMultiplier = 0.0F;
         } else {
             jumpMultiplier = 1.0F - totalPain;
@@ -137,7 +142,8 @@ public final class Physiology {
                 jumpMultiplier,
                 state,
                 legFracture,
-                armFracture
+                armFracture,
+                blackout
         );
     }
 }

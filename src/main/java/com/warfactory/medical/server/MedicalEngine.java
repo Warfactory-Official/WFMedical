@@ -77,6 +77,12 @@ public final class MedicalEngine {
 
         long nowTick = player.level().getGameTime();
 
+        // (2.0) Advance any active timed treatment; on completion this applies the treatment (marking the
+        // profile dirty) and clears itself, so the recompute below picks up the result immediately.
+        if (profile.hasActiveTreatment()) {
+            MedicalActionService.tick(player, profile, nowTick);
+        }
+
         // (2a) Blood loss from the last cached bleeding aggregate.
         if (MedicalConfig.enableBleeding()) {
             double bleeding = profile.cached().totalBleeding();
@@ -87,6 +93,9 @@ public final class MedicalEngine {
 
         // (2b) Minor-trauma regeneration + untreated-major slow worsening + treated-major healing.
         advanceTrauma(profile, interval);
+
+        // (2b.5) Injectable-drug state: blackout timer, slow drug-load decay, severe-overdose health drain.
+        advanceSubstances(player, profile, nowTick, interval);
 
         // (3) Recompute derived stats only when something is dirty (rebuilds only dirty limb caches).
         boolean wasDirty = profile.isDirty();
@@ -112,9 +121,67 @@ public final class MedicalEngine {
         }
     }
 
+    /**
+     * Advance injectable-drug state each engine pass: keep the transient {@code blackoutActive} flag in
+     * sync with the {@code blackoutUntilTick} timer (waking the player + re-syncing when it elapses),
+     * decay the accumulated {@code drugLoad}, and apply the severe-overdose respiratory-depression health
+     * drain while blacked out (which can be fatal, flowing through the existing death pipeline). Marks the
+     * profile dirty on any transition so the recompute re-derives mobility (blackout locks / wake unlocks).
+     */
+    private static void advanceSubstances(ServerPlayer player, MedicalProfile profile, long nowTick, int interval) {
+        // Severe overdose: drug load at/above the lethal line drives the respiratory-depression drain AND
+        // sustains the blackout past the fixed timer. Without this, the drain stopped when the timed window
+        // elapsed (guarded by isBlackoutActive), so a single dose-stack could never exhaust health before
+        // waking; now the player stays unconscious and keeps draining until the load decays back below the
+        // lethal threshold or an antidote reverses it — making an untreated severe overdose actually fatal.
+        boolean severeOverdose = MedicalConfig.overdoseLethalEnabled()
+                && MedicalConfig.overdoseLethalThreshold() > 0.0D
+                && profile.getDrugLoad() >= MedicalConfig.overdoseLethalThreshold();
+
+        long until = profile.getBlackoutUntilTick();
+        boolean timerBlackout = until > 0L && nowTick < until;
+        boolean shouldBlackout = timerBlackout || severeOverdose;
+        if (shouldBlackout != profile.isBlackoutActive()) {
+            profile.setBlackoutActive(shouldBlackout);
+            profile.markDirty();
+        }
+        // The timer elapsed and no severe overdose is holding the player under: they wake. Clear the timer and
+        // mark dirty so mobility is restored + re-synced. A severe overdose defers this until the load decays.
+        if (until > 0L && nowTick >= until && !severeOverdose) {
+            profile.setBlackoutUntilTick(0L);
+            profile.markDirty();
+        }
+
+        // Slow drug-load decay over time (setDrugLoad marks the profile dirty when it actually changes).
+        float load = profile.getDrugLoad();
+        if (load > 0.0F) {
+            float decayed = (float) Math.max(0.0D, load - MedicalConfig.drugDecayPerTick() * interval);
+            profile.setDrugLoad(decayed);
+        }
+
+        // Severe overdose: respiratory-depression drain while blacked out (guarded by the lethal threshold, so
+        // it never runs for a stable, non-overdosed player, but keeps running for the whole time the load stays
+        // lethal — not just the fixed timer window). Reaching 0 health flows through the vanilla LivingDeath ->
+        // knockdown/death pipeline like any other lethal cause.
+        if (severeOverdose && profile.isBlackoutActive()) {
+            float drain = (float) (MedicalConfig.overdoseLethalDrainPerTick() * interval);
+            if (drain > 0.0F) {
+                float current = player.getHealth();
+                if (current > 0.0F) {
+                    player.setHealth(Math.max(0.0F, current - drain));
+                }
+            }
+        }
+    }
+
     /** Allocation-free liveness test; false means the profile can be skipped this pass. */
     private static boolean isActive(MedicalProfile profile) {
-        if (profile.isDirty() || profile.getPainSuppression() > 0.0F) {
+        if (profile.isDirty() || profile.getPainSuppression() > 0.0F || profile.hasActiveTreatment()) {
+            return true;
+        }
+        // Keep ticking while a drug is on board or a blackout is in progress so the engine can decay the
+        // load and run the blackout timer instead of fast-path skipping the player.
+        if (profile.getDrugLoad() > 0.0F || profile.isBlackoutActive() || profile.getBlackoutUntilTick() > 0L) {
             return true;
         }
         DerivedStats c = profile.cached();
@@ -200,6 +267,9 @@ public final class MedicalEngine {
             } else if (nowTick - since >= params.knockdownBleedoutTicks()) {
                 profile.setState(HealthState.DEAD);
                 profile.setKnockdownSinceTick(-1L);
+                if (profile.hasActiveTreatment()) {
+                    MedicalActionService.cancel(player, "dead");
+                }
                 player.setHealth(0.0F); // bled out; vanilla death pipeline resolves the rest
             }
         } else if (profile.getKnockdownSinceTick() >= 0L) {
@@ -216,7 +286,9 @@ public final class MedicalEngine {
         MedicalProfile profile = data.getProfile();
         DerivedStats stats = profile.recompute(MedicalConfig.toPhysiologyParams());
         if (!((player.isCreative() || player.isSpectator()) && MedicalConfig.effectImmuneInCreative())) {
-            MedicalEffects.apply(player, stats);
+            // allowRaise=true: on join/respawn/dimension-change set health EXACTLY to the derived current
+            // health so a pristine player spawns at full derived health (30/30), not the vanilla 20/30.
+            MedicalEffects.apply(player, stats, true);
         }
         MedicalNetworking.sendFull(player, profile);
         data.markSynced();

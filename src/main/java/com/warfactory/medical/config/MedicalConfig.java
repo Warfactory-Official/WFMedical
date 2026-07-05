@@ -35,6 +35,11 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.BooleanValue EFFECT_IMMUNE_IN_CREATIVE;
     private static final ForgeConfigSpec.IntValue MAX_TRAUMA_PER_LIMB;
     private static final ForgeConfigSpec.DoubleValue LEG_FRACTURE_SPEED_MULTIPLIER;
+    private static final ForgeConfigSpec.BooleanValue ENABLE_INJECTABLES;
+    private static final ForgeConfigSpec.DoubleValue DRUG_DECAY_PER_TICK;
+    private static final ForgeConfigSpec.BooleanValue OVERDOSE_LETHAL_ENABLED;
+    private static final ForgeConfigSpec.DoubleValue OVERDOSE_LETHAL_THRESHOLD;
+    private static final ForgeConfigSpec.DoubleValue OVERDOSE_LETHAL_DRAIN_PER_TICK;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -66,6 +71,7 @@ public final class MedicalConfig {
         ENABLE_PAIN = b.comment("Master toggle for the pain system.").define("enablePain", true);
         ENABLE_KNOCKDOWN = b.comment("If true, lethal conditions knock the player down instead of instant death.").define("enableKnockdown", true);
         EFFECT_IMMUNE_IN_CREATIVE = b.comment("Creative-mode players ignore medical penalties.").define("effectImmuneInCreative", true);
+        ENABLE_INJECTABLES = b.comment("Master toggle for the injectable/opioid substance system (morphine, naloxone, ...).").define("enableInjectables", true);
         b.pop();
 
         b.push("balance");
@@ -78,6 +84,20 @@ public final class MedicalConfig {
         LEG_FRACTURE_SPEED_MULTIPLIER = b
                 .comment("Movement speed multiplier applied per fractured leg (1.0 = no penalty).")
                 .defineInRange("legFractureSpeedMultiplier", 0.40D, 0.0D, 1.0D);
+        DRUG_DECAY_PER_TICK = b
+                .comment("How much injectable drug load decays per tick (higher = shorter dosing window before it clears).")
+                .defineInRange("drugDecayPerTick", 0.0005D, 0.0D, 1.0D);
+        OVERDOSE_LETHAL_ENABLED = b
+                .comment("If true, a severe overdose (drug load >= overdoseLethalThreshold) drains health during blackout.")
+                .define("overdoseLethalEnabled", true);
+        OVERDOSE_LETHAL_THRESHOLD = b
+                .comment("Drug load at/above which a blackout also causes a slow respiratory-depression health drain.")
+                .defineInRange("overdoseLethalThreshold", 1.6D, 0.0D, 100.0D);
+        OVERDOSE_LETHAL_DRAIN_PER_TICK = b
+                .comment("Health points drained per tick during a severe (lethal-threshold) overdose blackout. "
+                        + "Tuned so a single severe dose-stack (drug load ~2.0) drains a full-health player before "
+                        + "the load decays back below the lethal threshold, yet leaves time for naloxone to reverse it.")
+                .defineInRange("overdoseLethalDrainPerTick", 0.05D, 0.0D, 20.0D);
         b.pop();
 
         SPEC = b.build();
@@ -152,6 +172,31 @@ public final class MedicalConfig {
 
     public static float legFractureSpeedMultiplier() {
         return LEG_FRACTURE_SPEED_MULTIPLIER.get().floatValue();
+    }
+
+    /** Master toggle for the injectable/opioid substance system. */
+    public static boolean enableInjectables() {
+        return ENABLE_INJECTABLES.get();
+    }
+
+    /** How much injectable drug load decays per tick. */
+    public static double drugDecayPerTick() {
+        return DRUG_DECAY_PER_TICK.get();
+    }
+
+    /** If true, a severe overdose drains health during blackout. */
+    public static boolean overdoseLethalEnabled() {
+        return OVERDOSE_LETHAL_ENABLED.get();
+    }
+
+    /** Drug load at/above which a blackout also causes a respiratory-depression health drain. */
+    public static double overdoseLethalThreshold() {
+        return OVERDOSE_LETHAL_THRESHOLD.get();
+    }
+
+    /** Health points drained per tick during a severe overdose blackout. */
+    public static double overdoseLethalDrainPerTick() {
+        return OVERDOSE_LETHAL_DRAIN_PER_TICK.get();
     }
 
     /**
