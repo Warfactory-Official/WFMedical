@@ -47,6 +47,7 @@ minecraft {
 
 
         client1 {
+            parent minecraft.runs.client
             workingDirectory project.file('run/client1')
             property 'forge.enabledGameTestNamespaces', mod_id
             args '--username', 'Player1'
@@ -54,6 +55,7 @@ minecraft {
         }
 
         client2 {
+            parent minecraft.runs.client
             workingDirectory project.file('run/client2')
             property 'forge.enabledGameTestNamespaces', mod_id
             args '--username', 'Player2'
@@ -76,7 +78,6 @@ minecraft {
     }
 }
 
------------------------------------------------------------------------------
 tasks.register('prepareDedicatedServer') {
     description = 'Accepts the EULA and forces offline mode for the dev dedicated server.'
     group = 'forgegradle runs'
