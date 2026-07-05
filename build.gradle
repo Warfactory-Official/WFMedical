@@ -45,6 +45,21 @@ minecraft {
             property 'forge.enabledGameTestNamespaces', mod_id
         }
 
+
+        client1 {
+            workingDirectory project.file('run/client1')
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '--username', 'Player1'
+            args '--quickPlayMultiplayer', 'localhost:25565'
+        }
+
+        client2 {
+            workingDirectory project.file('run/client2')
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '--username', 'Player2'
+            args '--quickPlayMultiplayer', 'localhost:25565'
+        }
+
         server {
             property 'forge.enabledGameTestNamespaces', mod_id
             args '--nogui'
@@ -59,6 +74,34 @@ minecraft {
             args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
         }
     }
+}
+
+-----------------------------------------------------------------------------
+tasks.register('prepareDedicatedServer') {
+    description = 'Accepts the EULA and forces offline mode for the dev dedicated server.'
+    group = 'forgegradle runs'
+
+    doLast {
+        def runDir = project.file('run')
+        runDir.mkdirs()
+
+        // Accept the EULA for the dev run directory.
+        new File(runDir, 'eula.txt').text = 'eula=true\n'
+
+        def propsFile = new File(runDir, 'server.properties')
+        def overrides = ['online-mode': 'false', 'enforce-secure-profile': 'false']
+        def lines = propsFile.exists() ? propsFile.readLines() : []
+        overrides.each { key, value ->
+            def i = lines.findIndexOf { it ==~ /\s*\Q${key}\E\s*=.*/ }
+            if (i >= 0) { lines[i] = "${key}=${value}" } else { lines << "${key}=${value}" }
+        }
+        propsFile.text = lines.join('\n').stripTrailing() + '\n'
+    }
+}
+
+
+tasks.matching { it.name in ['runServer', 'runGameTestServer'] }.configureEach {
+    dependsOn 'prepareDedicatedServer'
 }
 
 // Sponge Mixin plugin: generate and bundle the refmap for our mixin config.
