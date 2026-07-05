@@ -8,6 +8,7 @@
     "LivingEntityMixin"
   ],
   "client": [
+    "HumanoidModelMixin",
     "PostChainAccessor"
   ],
   "injectors": {

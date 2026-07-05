@@ -60,6 +60,14 @@ public final class MedicalProfile {
     /** Last {@link #isDowned()} value broadcast to trackers; engine edge-detects against this. Transient. */
     private transient boolean lastBroadcastDowned;
 
+    // --- Transient admin-forced state override. Deliberately NOT written to / read from NBT: a forced
+    //     state is a live debug/admin override (e.g. /wfmedical knockdown on an uninjured player) and must
+    //     never survive a save/reload or clone. Honoured by {@link Physiology}, which pins the derived
+    //     state to at least this severity so the forced state, its mobility lock and the downed pose survive
+    //     every recompute instead of being clobbered back to the pure physiology-derived state.
+    /** Admin-forced health state (nullable = no override); never downgrades a worse derived state. Transient. */
+    private transient HealthState forcedState;
+
     public MedicalProfile() {
         this(PhysiologyParams.defaults().maxBloodMl());
     }
@@ -106,6 +114,20 @@ public final class MedicalProfile {
 
     public void setState(HealthState state) {
         this.state = state;
+    }
+
+    /**
+     * The admin-forced health-state override (nullable). When set, {@link Physiology} pins the derived
+     * state to at least this severity, so an operator-pinned {@link HealthState#KNOCKED_DOWN}/
+     * {@link HealthState#CRITICAL} on a player whose blood/trauma would not independently produce it is not
+     * clobbered back to {@link HealthState#HEALTHY} on the next recompute. Transient, never persisted.
+     */
+    public HealthState getForcedState() {
+        return forcedState;
+    }
+
+    public void setForcedState(HealthState forcedState) {
+        this.forcedState = forcedState;
     }
 
     /**

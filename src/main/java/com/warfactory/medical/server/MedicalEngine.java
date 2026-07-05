@@ -119,6 +119,26 @@ public final class MedicalEngine {
             MedicalNetworking.sendFull(player, profile);
             data.markSynced();
         }
+
+        // (6) Downed-state broadcast: after every physiology transition has settled this tick, edge-detect
+        // the passed-out ("downed") predicate and push it to tracking clients only on change. This single
+        // hook uniformly covers blackout start/wake AND knockdown enter/exit (both of which force isActive
+        // true, so a downed-but-otherwise-idle player is still evaluated here every pass), and it naturally
+        // broadcasts false when the engine transitions the player to DEAD (a dead player is not downed).
+        reconcileDownedBroadcast(player, profile);
+    }
+
+    /**
+     * Broadcast the player's current downed state to trackers only when it differs from the last value we
+     * sent (tracked by the transient {@link MedicalProfile#isLastBroadcastDowned()} mirror). Cheap no-op
+     * on a steady state; a single packet on each enter / exit edge.
+     */
+    private static void reconcileDownedBroadcast(ServerPlayer player, MedicalProfile profile) {
+        boolean nowDowned = profile.isDowned();
+        if (nowDowned != profile.isLastBroadcastDowned()) {
+            MedicalNetworking.broadcastDowned(player, nowDowned);
+            profile.setLastBroadcastDowned(nowDowned);
+        }
     }
 
     /**
@@ -266,6 +286,9 @@ public final class MedicalEngine {
                 profile.setKnockdownSinceTick(nowTick);
             } else if (nowTick - since >= params.knockdownBleedoutTicks()) {
                 profile.setState(HealthState.DEAD);
+                // Drop any admin-forced knockdown so the DEAD state isn't immediately re-forced back to
+                // KNOCKED_DOWN by the physiology override on the next recompute (which would block the death).
+                profile.setForcedState(null);
                 profile.setKnockdownSinceTick(-1L);
                 if (profile.hasActiveTreatment()) {
                     MedicalActionService.cancel(player, "dead");
@@ -279,6 +302,24 @@ public final class MedicalEngine {
 
     /** Full sync on join/respawn/dimension change: rebuild caches, apply effects, push a snapshot. */
     public static void onPlayerJoin(ServerPlayer player) {
+        resync(player);
+    }
+
+    /**
+     * Authoritative full re-sync of a player's medical state onto the vanilla body and the client, used by
+     * join/respawn/dimension-change AND by every admin command mutation so a hand-edited profile updates
+     * instantly instead of waiting for the next physiology pass.
+     *
+     * <p>Recomputes the derived stats, applies them to the vanilla body ({@code allowRaise=true}, so a
+     * pristine player is set EXACTLY to the derived current health — e.g. 30/30 rather than the stale
+     * vanilla 20/30 — and a freshly-injured one is clamped straight to its lower derived health) unless the
+     * player is creative/spectator-immune, bumps the revision, pushes a full snapshot, and finally
+     * edge-reconciles the downed broadcast so trackers start/stop rendering the downed pose to match.</p>
+     */
+    public static void resync(ServerPlayer player) {
+        if (player == null) {
+            return;
+        }
         IMedicalData data = MedicalCapabilities.get(player);
         if (data == null) {
             return;
@@ -286,16 +327,25 @@ public final class MedicalEngine {
         MedicalProfile profile = data.getProfile();
         DerivedStats stats = profile.recompute(MedicalConfig.toPhysiologyParams());
         if (!((player.isCreative() || player.isSpectator()) && MedicalConfig.effectImmuneInCreative())) {
-            // allowRaise=true: on join/respawn/dimension-change set health EXACTLY to the derived current
-            // health so a pristine player spawns at full derived health (30/30), not the vanilla 20/30.
+            // allowRaise=true: set health EXACTLY to the derived current health so a pristine/healed player
+            // reads full (30/30) and a freshly-injured one is clamped down to its new derived value.
             MedicalEffects.apply(player, stats, true);
         }
+        data.bumpRevision();
         MedicalNetworking.sendFull(player, profile);
         data.markSynced();
+        reconcileDownedBroadcast(player, profile);
     }
 
     /** Cleanup on logout: remove our transient attribute modifiers from the vanilla body. */
     public static void onPlayerLeave(ServerPlayer player) {
         MedicalEffects.clear(player);
+        // Clear any lingering downed flag on observers so a player who logs out while downed doesn't leave
+        // a stale downed pose on the trackers that still had them rendered.
+        IMedicalData data = MedicalCapabilities.get(player);
+        if (data != null && data.getProfile().isLastBroadcastDowned()) {
+            MedicalNetworking.broadcastDowned(player, false);
+            data.getProfile().setLastBroadcastDowned(false);
+        }
     }
 }

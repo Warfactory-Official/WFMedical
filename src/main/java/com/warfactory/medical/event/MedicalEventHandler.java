@@ -16,6 +16,7 @@ import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
 import com.warfactory.medical.core.trauma.TraumaRegistry;
+import com.warfactory.medical.network.MedicalNetworking;
 import com.warfactory.medical.server.MedicalActionService;
 import com.warfactory.medical.server.MedicalEngine;
 import net.minecraft.resources.ResourceLocation;
@@ -199,6 +200,30 @@ public final class MedicalEventHandler {
             return;
         }
 
+        // Admin / void / generic kills MUST always kill, even with knockdown enabled. These sources bypass
+        // invulnerability (/kill's genericKill, the void, our own command-suite kill); a null source is an
+        // unknown out-of-band lethal cause treated the same. Never intercept them into a knockdown — let
+        // vanilla's death (die() -> LivingDeathEvent -> respawn) proceed. First clear any transient downed
+        // state and mark the profile DEAD so trackers stop rendering a downed pose on a player who is dying,
+        // and any re-entrant death event short-circuits on the DEAD check above.
+        DamageSource src = event.getSource();
+        if (src == null || src.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            profile.setState(HealthState.DEAD);
+            profile.setBlackoutActive(false);
+            profile.setBlackoutUntilTick(0L);
+            profile.setKnockdownSinceTick(-1L);
+            if (profile.hasActiveTreatment()) {
+                MedicalActionService.cancel(player, "dead");
+            }
+            if (profile.isLastBroadcastDowned()) {
+                MedicalNetworking.broadcastDowned(player, false);
+                profile.setLastBroadcastDowned(false);
+            }
+            profile.markDirty();
+            data.bumpRevision();
+            return;
+        }
+
         // A knockdown interrupts any in-progress timed treatment.
         if (profile.hasActiveTreatment()) {
             MedicalActionService.cancel(player, "knocked_down");
@@ -243,6 +268,27 @@ public final class MedicalEventHandler {
         if (event.getEntity() instanceof ServerPlayer player) {
             MedicalEngine.onPlayerLeave(player);
         }
+    }
+
+    /**
+     * Downed-state catch-up for late observers. Edge broadcasts only fire on a state change, so a viewer
+     * who begins tracking a player who is ALREADY downed would otherwise never learn it. When a server
+     * player starts tracking another server player, push the target's current downed state to just that
+     * viewer. Null-safe: if the target has no medical capability, nothing is sent.
+     */
+    @SubscribeEvent
+    public static void onStartTracking(PlayerEvent.StartTracking event) {
+        if (!(event.getTarget() instanceof ServerPlayer target)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer viewer)) {
+            return;
+        }
+        IMedicalData data = MedicalCapabilities.get(target);
+        if (data == null) {
+            return;
+        }
+        MedicalNetworking.sendDownedTo(viewer, target.getId(), data.getProfile().isDowned());
     }
 
     /**

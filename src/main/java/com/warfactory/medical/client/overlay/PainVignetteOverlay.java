@@ -136,11 +136,18 @@ public final class PainVignetteOverlay implements IGuiOverlay {
     @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class Registrar {
 
+        /** Guards against the mod-bus overlay event reaching this registrar more than once per launch. */
+        private static boolean registered;
+
         private Registrar() {
         }
 
         @SubscribeEvent
         public static void onRegisterOverlays(RegisterGuiOverlaysEvent event) {
+            if (registered) {
+                return;
+            }
+            registered = true;
             event.registerAboveAll(OVERLAY_ID, INSTANCE);
         }
     }

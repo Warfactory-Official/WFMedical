@@ -22,6 +22,9 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class WFMedicalClient {
 
+    /** Guards against the mod-bus overlay event reaching this subscriber more than once per launch. */
+    private static boolean overlaysRegistered;
+
     private WFMedicalClient() {
     }
 
@@ -38,6 +41,10 @@ public final class WFMedicalClient {
      */
     @SubscribeEvent
     public static void onRegisterOverlays(RegisterGuiOverlaysEvent event) {
+        if (overlaysRegistered) {
+            return;
+        }
+        overlaysRegistered = true;
         event.registerAbove(
                 VanillaGuiOverlay.PLAYER_HEALTH.id(),
                 "wfmedical_health",

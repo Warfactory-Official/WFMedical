@@ -85,6 +85,17 @@ public final class MedicalNetworking {
                     ctx.get().setPacketHandled(true);
                 })
                 .add();
+
+        // S2C: per-entity downed (passed-out) state, broadcast to trackers so an observer can render the
+        // downed body pose of a teammate who is blacked out or knocked down.
+        CHANNEL.messageBuilder(DownedStatePacket.class, 5, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(DownedStatePacket::encode)
+                .decoder(DownedStatePacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleClient();
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
     }
 
     /** Send a full authoritative snapshot to one player. */
@@ -100,6 +111,25 @@ public final class MedicalNetworking {
     /** Send the active-treatment progress state to one player (start / completion / cancellation). */
     public static void sendActiveTreatment(ServerPlayer player, ActiveTreatmentPacket packet) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+    }
+
+    /**
+     * Broadcast a player's downed (passed-out) state to every client tracking that player AND to the
+     * player itself. Called by the engine on each downed edge (enter / exit blackout or knockdown) so
+     * observers can render — or stop rendering — the downed body pose.
+     */
+    public static void broadcastDowned(ServerPlayer player, boolean downed) {
+        CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> player),
+                new DownedStatePacket(player.getId(), downed));
+    }
+
+    /**
+     * Send a single viewer the CURRENT downed state of an entity. Used for start-tracking catch-up so a
+     * late observer immediately learns a player is already downed (edge broadcasts alone would miss a
+     * player who was downed before the observer began tracking them).
+     */
+    public static void sendDownedTo(ServerPlayer viewer, int entityId, boolean downed) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> viewer), new DownedStatePacket(entityId, downed));
     }
 
     /**

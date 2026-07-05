@@ -88,10 +88,32 @@ public final class Physiology {
         boolean lethal = bloodMl <= deathMl || effectiveMaxHealth <= 0.0F;
         boolean knockdown = lethal && cfg.knockdownEnabled();
 
+        // Health-based state progression (Healthy -> Critical -> Knocked Down -> Dead), derived purely from
+        // blood / trauma / pain. Computed here (rather than at the tail) so mobility can react to a forced
+        // knockdown too.
+        HealthState state;
+        if (lethal) {
+            state = cfg.knockdownEnabled() ? HealthState.KNOCKED_DOWN : HealthState.DEAD;
+        } else if (effectiveCurrentHealth <= cfg.maxHealthPoints() * cfg.bloodCriticalFraction()
+                || bloodMl <= cfg.bloodCriticalFraction() * cfg.maxBloodMl()) {
+            state = HealthState.CRITICAL;
+        } else {
+            state = HealthState.HEALTHY;
+        }
+        // Admin-forced override: honour an operator-pinned state (e.g. /wfmedical knockdown on an uninjured
+        // player) that the pure physiology would not itself derive, but never DOWNGRADE a genuinely worse
+        // derived condition. This keeps the forced state, its mobility lock and the downed pose stable across
+        // every recompute instead of being clobbered back to the derived value.
+        HealthState forced = p.getForcedState();
+        if (forced != null && forced.ordinal() > state.ordinal()) {
+            state = forced;
+        }
+
         // Overdose blackout: an orthogonal incapacitation (unconscious). Treated like knockdown for mobility
-        // (movement 0, sprint blocked, no jump) but it does NOT change the health-based HealthState below.
+        // (movement 0, sprint blocked, no jump) but it does NOT change the health-based HealthState. A
+        // knocked-down player (derived OR admin-forced) is likewise incapacitated for mobility purposes.
         boolean blackout = p.isBlackoutActive();
-        boolean incapacitated = knockdown || blackout;
+        boolean incapacitated = knockdown || blackout || state == HealthState.KNOCKED_DOWN;
 
         // Movement: leg-fracture multipliers * pain slowdown, floored.
         float movement = movementFromLimbs;
@@ -119,16 +141,6 @@ public final class Physiology {
             if (jumpMultiplier < 0.0F) {
                 jumpMultiplier = 0.0F;
             }
-        }
-
-        HealthState state;
-        if (lethal) {
-            state = cfg.knockdownEnabled() ? HealthState.KNOCKED_DOWN : HealthState.DEAD;
-        } else if (effectiveCurrentHealth <= cfg.maxHealthPoints() * cfg.bloodCriticalFraction()
-                || bloodMl <= cfg.bloodCriticalFraction() * cfg.maxBloodMl()) {
-            state = HealthState.CRITICAL;
-        } else {
-            state = HealthState.HEALTHY;
         }
 
         return new DerivedStats(
