@@ -1,6 +1,7 @@
 package com.warfactory.medical.config;
 
 import com.warfactory.medical.core.PhysiologyParams;
+import com.warfactory.medical.core.damage.HitRegMode;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.config.ModConfig;
@@ -55,6 +56,18 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.IntValue ASPHYXIA_AIR_LOSS_PER_TICK;
     private static final ForgeConfigSpec.IntValue ASPHYXIA_UNCONSCIOUS_TICKS;
     private static final ForgeConfigSpec.IntValue ASPHYXIA_WEAKNESS_AMPLIFIER;
+    private static final ForgeConfigSpec.BooleanValue GEOMETRIC_HIT_LOCATION;
+    private static final ForgeConfigSpec.BooleanValue POSE_AWARE_ARMS;
+    private static final ForgeConfigSpec.DoubleValue HEAD_BAND_BOTTOM;
+    private static final ForgeConfigSpec.DoubleValue LEG_BAND_TOP;
+    private static final ForgeConfigSpec.DoubleValue ARM_SIDE_THRESHOLD;
+    private static final ForgeConfigSpec.DoubleValue MELEE_REACH;
+    private static final ForgeConfigSpec.BooleanValue RIGGED_LIMB_BOXES;
+    private static final ForgeConfigSpec.DoubleValue LIMB_BOX_PADDING;
+    private static final ForgeConfigSpec.BooleanValue OPEN_PERSISTENCE_COMPAT;
+    private static final ForgeConfigSpec.BooleanValue TACZ_ARM_POSE;
+    private static final ForgeConfigSpec.EnumValue<HitRegMode> HITREG_MODE;
+    private static final ForgeConfigSpec.DoubleValue HIT_ENVELOPE_INFLATION;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -173,6 +186,72 @@ public final class MedicalConfig {
         ASPHYXIA_WEAKNESS_AMPLIFIER = b
                 .comment("Amplifier of the Weakness effect applied while asphyxiating (0 = Weakness I, 1 = Weakness II, ...).")
                 .defineInRange("asphyxiaWeaknessAmplifier", 1, 0, 9);
+        b.pop();
+
+        b.push("hitlocation");
+        GEOMETRIC_HIT_LOCATION = b
+                .comment("Master switch. If true, incoming hits are mapped to a limb by projecting the reconstructed "
+                        + "hit position onto the victim's body geometry (deterministic). Off -> legacy weighted "
+                        + "random sampler everywhere.")
+                .define("geometricHitLocation", true);
+        POSE_AWARE_ARMS = b
+                .comment("If true, a victim actively aiming/using a weapon reassigns frontal-upper hits to the "
+                        + "raised arm instead of the torso.")
+                .define("poseAwareArms", true);
+        HEAD_BAND_BOTTOM = b
+                .comment("Fraction (0..1) of body height, measured from the feet, at/above which a hit counts as the head.")
+                .defineInRange("headBandBottom", 0.74D, 0.0D, 1.0D);
+        LEG_BAND_TOP = b
+                .comment("Fraction (0..1) of body height, measured from the feet, at/below which a hit counts as a leg.")
+                .defineInRange("legBandTop", 0.40D, 0.0D, 1.0D);
+        ARM_SIDE_THRESHOLD = b
+                .comment("Normalized horizontal offset (|nx|, 0..1 of the box half-width) at/above which a "
+                        + "torso-height hit is redirected to an arm.")
+                .defineInRange("armSideThreshold", 0.80D, 0.0D, 1.0D);
+        MELEE_REACH = b
+                .comment("Melee aim-ray length in blocks used when reconstructing the geometric hit location for melee attacks.")
+                .defineInRange("meleeReach", 3.0D, 0.0D, 8.0D);
+        RIGGED_LIMB_BOXES = b
+                .comment("If true, hits on players are classified against a server-side replica of the humanoid pose "
+                        + "(six oriented limb boxes posed as the renderer would pose them), so aiming/crouch/swing "
+                        + "arm positions are exact. Off -> fall back to the banded-AABB hit location.")
+                .define("riggedLimbBoxes", true);
+        LIMB_BOX_PADDING = b
+                .comment("Amount (in blocks) each rigged limb box is inflated to absorb pose-replica drift versus "
+                        + "vanilla/mod animations.")
+                .defineInRange("limbBoxPadding", 0.02D, 0.0D, 0.5D);
+        b.pop();
+
+        b.push("compat");
+        OPEN_PERSISTENCE_COMPAT = b
+                .comment("If true and Open Persistence is installed, a player's persistent logout body carries their "
+                        + "medical profile: it inherits their trauma on logout, accrues new trauma when hit while they "
+                        + "are offline, and the (possibly worse) state is restored to the player on login. The body "
+                        + "keeps vanilla health while offline -- there is no live physiology/bleed-out tick on it.")
+                .define("openPersistenceCompat", true);
+        TACZ_ARM_POSE = b
+                .comment("If true and TACZ is installed, a player holding a TACZ gun poses the rig's arms with the "
+                        + "baked TACZ third-person hold/ADS pose (driven by the gun's SYNCED aiming progress) instead "
+                        + "of the generic raised-forward approximation, so arm hits while aiming a gun land correctly.")
+                .define("taczArmPose", true);
+        b.pop();
+
+        b.push("hitregistration");
+        HITREG_MODE = b
+                .comment("How incoming attacks are registered against players / persistent bodies:",
+                        "  OFF      - vanilla: the ray clips the tight collision box; arms (which render outside",
+                        "             it) and prone bodies never register.",
+                        "  ENVELOPE - the hit-scan box is widened to the model silhouette so arm / prone hits",
+                        "             register (forgiving: a shot through the gap between an arm and the torso",
+                        "             still counts). Near-zero cost; collision/physics are unaffected.",
+                        "  PRECISE  - ENVELOPE registration, then a shot that actually threaded a gap between the",
+                        "             rigged limb boxes is rejected (whiffs). A centre-mass hit is a cheap tight-box",
+                        "             fast-path, so only grazing arm-margin shots ever build the rig.")
+                .defineEnum("hitRegistrationMode", HitRegMode.ENVELOPE);
+        HIT_ENVELOPE_INFLATION = b
+                .comment("Blocks the hit-scan box is widened (X/Z) to reach the arms for ENVELOPE / PRECISE "
+                        + "registration. ~0.15-0.2 covers the vanilla arm overhang.")
+                .defineInRange("hitEnvelopeInflation", 0.15D, 0.0D, 1.0D);
         b.pop();
 
         SPEC = b.build();
@@ -366,6 +445,94 @@ public final class MedicalConfig {
      */
     public static int asphyxiaWeaknessAmplifier() {
         return ASPHYXIA_WEAKNESS_AMPLIFIER.get();
+    }
+
+    /**
+     * Master switch for the geometric (deterministic) hit-location system. Off -> legacy weighted sampler.
+     */
+    public static boolean geometricHitLocation() {
+        return GEOMETRIC_HIT_LOCATION.get();
+    }
+
+    /**
+     * If true, an actively aiming victim has frontal-upper hits reassigned to the raised arm.
+     */
+    public static boolean poseAwareArms() {
+        return POSE_AWARE_ARMS.get();
+    }
+
+    /**
+     * Fraction (0..1) of body height at/above which a hit is classified as the head.
+     */
+    public static double headBandBottom() {
+        return HEAD_BAND_BOTTOM.get();
+    }
+
+    /**
+     * Fraction (0..1) of body height at/below which a hit is classified as a leg.
+     */
+    public static double legBandTop() {
+        return LEG_BAND_TOP.get();
+    }
+
+    /**
+     * Normalized horizontal offset (|nx|, 0..1) at/above which a torso-height hit is redirected to an arm.
+     */
+    public static double armSideThreshold() {
+        return ARM_SIDE_THRESHOLD.get();
+    }
+
+    /**
+     * Melee aim-ray length in blocks used when reconstructing the geometric hit location.
+     */
+    public static double meleeReach() {
+        return MELEE_REACH.get();
+    }
+
+    /**
+     * If true, player hits are classified against the server-side rigged limb boxes (Tier 2); otherwise
+     * the banded-AABB hit location is used.
+     */
+    public static boolean riggedLimbBoxes() {
+        return RIGGED_LIMB_BOXES.get();
+    }
+
+    /**
+     * Amount (in blocks) each rigged limb box is inflated to absorb pose-replica drift.
+     */
+    public static double limbBoxPadding() {
+        return LIMB_BOX_PADDING.get();
+    }
+
+    /**
+     * If true (and Open Persistence is present), persistent logout bodies carry/accrue the owner's medical
+     * profile and round-trip it player&harr;body on logout/login.
+     */
+    public static boolean openPersistenceCompat() {
+        return OPEN_PERSISTENCE_COMPAT.get();
+    }
+
+    /**
+     * If true (and TACZ is present), a held TACZ gun poses the rig's arms with the baked TACZ third-person
+     * pose driven by synced aiming progress, instead of the generic raised-forward approximation.
+     */
+    public static boolean taczArmPose() {
+        return TACZ_ARM_POSE.get();
+    }
+
+    /**
+     * How incoming attacks are registered against players / bodies (OFF = vanilla tight box, ENVELOPE = model
+     * silhouette, PRECISE = envelope + rig gap-rejection).
+     */
+    public static HitRegMode hitRegistrationMode() {
+        return HITREG_MODE.get();
+    }
+
+    /**
+     * Blocks the hit-scan box is widened (X/Z) to reach the arms for ENVELOPE / PRECISE registration.
+     */
+    public static double hitEnvelopeInflation() {
+        return HIT_ENVELOPE_INFLATION.get();
     }
 
     /**

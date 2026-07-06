@@ -52,15 +52,23 @@ public final class MedicalKeyMappings {
             GLFW.GLFW_KEY_J,
             CATEGORY);
 
+    public static final KeyMapping TOGGLE_HITBOX = new KeyMapping(
+            "key.wfmedical.toggle_hitbox",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_K,
+            CATEGORY);
+
     private MedicalKeyMappings() {
     }
 
     /**
-     * Register all three key mappings; called from the mod-bus {@link RegisterKeyMappingsEvent} handler.
+     * Register all key mappings; called from the mod-bus {@link RegisterKeyMappingsEvent} handler.
      */
     public static void register(RegisterKeyMappingsEvent event) {
         event.register(OPEN_SHEET);
         event.register(OPEN_RADIAL);
         event.register(TOGGLE_DEBUG);
+        event.register(TOGGLE_HITBOX);
     }
 }

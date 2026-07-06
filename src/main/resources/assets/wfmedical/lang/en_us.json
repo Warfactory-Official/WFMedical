@@ -15,6 +15,7 @@
   "key.wfmedical.open_sheet": "Open Medical Sheet",
   "key.wfmedical.open_radial": "Medical Interaction Menu",
   "key.wfmedical.toggle_debug": "Toggle Medical Debug",
+  "key.wfmedical.toggle_hitbox": "Toggle Limb Hitbox Overlay",
   "gui.wfmedical.health": "Health",
   "gui.wfmedical.blood": "Blood",
   "gui.wfmedical.pain": "Pain",

@@ -17,6 +17,9 @@ import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.MedicalProfile;
+import com.warfactory.medical.core.damage.HitGeometry;
+import com.warfactory.medical.core.damage.rig.HumanoidRig;
+import com.warfactory.medical.core.damage.rig.Obb;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.substance.Substance;
@@ -34,6 +37,11 @@ import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -42,6 +50,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Server-side admin / debug command suite for the medical system, rooted at {@code /wfmedical} (alias
@@ -274,6 +283,26 @@ public final class WFMedicalCommands {
                                                 StringArgumentType.getString(ctx, "limb"),
                                                 FloatArgumentType.getFloat(ctx, "severity")))))));
 
+        // --- hittest [maxDist]
+        //   Debug look-test: ray-cast from the caller's eye and classify the aimed-at entity's limb via
+        //   HitGeometry.classifyRay. Read-only, op-gated (inherited from root), server-authoritative.
+        root.then(Commands.literal("hittest")
+                .executes(ctx -> cmdHitTest(ctx.getSource(), 0.0D))
+                .then(Commands.argument("maxDist", DoubleArgumentType.doubleArg(0.0D))
+                        .executes(ctx -> cmdHitTest(ctx.getSource(),
+                                DoubleArgumentType.getDouble(ctx, "maxDist")))));
+
+        // --- rig [maxDist]
+        //   Debug Tier-2 rig dump: ray-cast from the caller's eye and, for the aimed-at LivingEntity, dump
+        //   the six posed limb OBBs (limb, entity-local centre, half-extents) from HumanoidRig.compute plus
+        //   the LimbType that HitGeometry.classifyRay resolves for the caller's aim ray. Read-only, op-gated
+        //   (inherited from root), server-authoritative.
+        root.then(Commands.literal("rig")
+                .executes(ctx -> cmdRig(ctx.getSource(), 0.0D))
+                .then(Commands.argument("maxDist", DoubleArgumentType.doubleArg(0.0D))
+                        .executes(ctx -> cmdRig(ctx.getSource(),
+                                DoubleArgumentType.getDouble(ctx, "maxDist")))));
+
         LiteralCommandNode<CommandSourceStack> node = dispatcher.register(root);
         dispatcher.register(Commands.literal("wfmed").requires(src -> src.hasPermission(2)).redirect(node));
     }
@@ -317,6 +346,89 @@ public final class WFMedicalCommands {
             count++;
         }
         return count;
+    }
+
+    /**
+     * Debug look-test for the geometric hit-location classifier. Ray-casts from the executing player's eye
+     * along their view vector (capped at {@code maxDist}, default {@code 5.0}) to find the nearest aimed-at
+     * {@link LivingEntity}, then runs {@link HitGeometry#classifyRay(LivingEntity, Vec3, Vec3)} on that
+     * entity's box and reports the classified {@link LimbType} plus the reconstructed world entry point.
+     * Read-only: no mutation, no resync. When nothing is aimed at, reports a friendly "no target".
+     */
+    private static int cmdHitTest(CommandSourceStack src, double maxDist) throws CommandSyntaxException {
+        ServerPlayer self = src.getPlayerOrException();
+        double reach = maxDist > 0.0D ? maxDist : 5.0D;
+
+        Vec3 eye = self.getEyePosition(1.0F);
+        Vec3 look = self.getViewVector(1.0F);
+        Vec3 end = eye.add(look.scale(reach));
+        // Nearest LivingEntity crossed by the eye->end segment (self excluded).
+        AABB search = self.getBoundingBox().expandTowards(look.scale(reach)).inflate(1.0D);
+        EntityHitResult result = ProjectileUtil.getEntityHitResult(self.level(), self, eye, end, search,
+                e -> e instanceof LivingEntity && e != self && e.isPickable());
+        if (result == null || !(result.getEntity() instanceof LivingEntity target)) {
+            src.sendFailure(Component.literal("[wfmedical] hittest: no target within "
+                    + fmt(reach) + " blocks of your aim."));
+            return 0;
+        }
+
+        LimbType limb = HitGeometry.classifyRay(target, eye, end);
+        Optional<Vec3> worldHit = target.getBoundingBox().clip(eye, end);
+        String targetName = target.getName().getString();
+        String limbText = (limb != null)
+                ? limb.name()
+                : "(none - downed/flattened box -> weighted-sampler fallback)";
+        String hitText = worldHit
+                .map(v -> " @ (" + fmt(v.x) + ", " + fmt(v.y) + ", " + fmt(v.z) + ")")
+                .orElse("");
+        src.sendSuccess(() -> Component.literal("[wfmedical] hittest -> " + targetName
+                + ": limb=" + limbText + hitText), false);
+        return 1;
+    }
+
+    /**
+     * Debug dump of the Tier-2 humanoid rig for the aimed-at entity. Ray-casts from the executing player's
+     * eye along their view vector.
+     */
+    private static int cmdRig(CommandSourceStack src, double maxDist) throws CommandSyntaxException {
+        ServerPlayer self = src.getPlayerOrException();
+        double reach = maxDist > 0.0D ? maxDist : 5.0D;
+
+        Vec3 eye = self.getEyePosition(1.0F);
+        Vec3 look = self.getViewVector(1.0F);
+        Vec3 end = eye.add(look.scale(reach));
+        // Nearest LivingEntity crossed by the eye->end segment (self excluded).
+        AABB search = self.getBoundingBox().expandTowards(look.scale(reach)).inflate(1.0D);
+        EntityHitResult result = ProjectileUtil.getEntityHitResult(self.level(), self, eye, end, search,
+                e -> e instanceof LivingEntity && e != self && e.isPickable());
+        if (result == null || !(result.getEntity() instanceof LivingEntity target)) {
+            src.sendFailure(Component.literal("[wfmedical] rig: no target within "
+                    + fmt(reach) + " blocks of your aim."));
+            return 0;
+        }
+
+        HumanoidRig.LocalRig rig = HumanoidRig.compute(target);
+        LimbType limb = HitGeometry.classifyRay(target, eye, end);
+        String limbText = (limb != null)
+                ? limb.name()
+                : "(none - rig miss / downed -> Tier-1 / weighted-sampler fallback)";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== wfmedical rig: ").append(target.getName().getString()).append(" ===");
+        sb.append("\n classifyRay(aim) -> ").append(limbText);
+        sb.append("\n local OBBs (feet origin, Y-up, X=right, Z=front):");
+        for (Obb obb : rig.all()) {
+            sb.append("\n [").append(obb.limb.name()).append("]")
+                    .append(" c=(").append(fmt(obb.center.x)).append(", ")
+                    .append(fmt(obb.center.y)).append(", ")
+                    .append(fmt(obb.center.z)).append(")")
+                    .append(" half=(").append(fmt(obb.half.x)).append(", ")
+                    .append(fmt(obb.half.y)).append(", ")
+                    .append(fmt(obb.half.z)).append(")");
+        }
+        String dump = sb.toString();
+        src.sendSuccess(() -> Component.literal(dump), false);
+        return 1;
     }
 
     /**

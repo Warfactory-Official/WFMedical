@@ -4,7 +4,10 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageType;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.fml.ModList;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.Collection;
 import java.util.Locale;
@@ -77,6 +80,26 @@ public final class TaczCompat {
             return matches(key.getPath()) || matches(key.getNamespace());
         }
         return false;
+    }
+
+
+    public static boolean isHeldGun(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return false;
+        }
+        ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
+        if (id == null) {
+            return false;
+        }
+        if (MOD_ID.equals(id.getNamespace())) {
+            return true;
+        }
+        return matches(id.getNamespace()) || matches(id.getPath());
+    }
+
+
+    public static Optional<Vec3> bulletHitPos(DamageSource src) {
+        return Optional.empty();
     }
 
     private static boolean matches(String value) {

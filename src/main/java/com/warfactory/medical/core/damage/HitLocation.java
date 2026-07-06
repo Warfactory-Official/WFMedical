@@ -1,20 +1,70 @@
 package com.warfactory.medical.core.damage;
 
+import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.limb.LimbType;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 
 /**
- * Picks which {@link LimbType} an incoming hit lands on. Uses each limb's base {@code hitWeight}, then
- * nudges the distribution by {@link DamageCategory}: ballistic/piercing projectiles slightly favour the
- * head and torso, while falls favour the legs. Fully deterministic for a given {@link RandomSource}.
+ * Picks which {@link LimbType} an incoming hit lands on. When the geometric hit-location path can
+ * reconstruct a hit position ({@link HitGeometry}), that decides the limb deterministically; otherwise
+ * (geometry-less/environmental damage, or the master toggle off) it delegates to the legacy weighted
+ * sampler, which nudges each limb's base {@code hitWeight} by {@link DamageCategory} and rolls.
  */
 public final class HitLocation {
 
     private HitLocation() {
     }
 
-    public static LimbType pick(DamageSource source, DamageCategory cat, RandomSource rand) {
+    /**
+     * Deterministic geometry first (when a hit position is recoverable), else the weighted sampler.
+     */
+    public static LimbType pick(LivingEntity victim, DamageSource src, DamageCategory cat, RandomSource rand) {
+        if (victim != null && MedicalConfig.geometricHitLocation()) {
+            LimbType g = HitGeometry.classifyHit(victim, src, cat);
+            if (g != null) {
+                return g;
+            }
+            warnUntraceable(victim, src, cat);
+        }
+        return pickWeighted(src, cat, rand);
+    }
+
+    /**
+     * When geometric reconstruction fails for a hit that clearly came FROM an attacker or projectile, log a
+     * diagnostic warning: the direction was untraceable and the limb was chosen by weighted sampling instead.
+     * Purely environmental / positionless damage (fire ticks, poison, drowning, ...) has no direction to trace
+     * and is skipped, so this never spams for ambient damage. Server-side only (the pick pipeline runs there).
+     */
+    private static void warnUntraceable(LivingEntity victim, DamageSource src, DamageCategory cat) {
+        if (src == null) {
+            return;
+        }
+        Entity attacker = src.getEntity();
+        Entity direct = src.getDirectEntity();
+        boolean directional = (attacker != null && attacker != victim) || (direct != null && direct != victim);
+        if (!directional) {
+            return;
+        }
+        // Distinguish a genuinely unreconstructable position from a deliberate pose fallback (downed /
+        // crawling / swimming), which still had a traceable direction and should stay quiet.
+        if (HitGeometry.resolveHitPoint(victim, src, cat) != null) {
+            return;
+        }
+        WFMedical.LOGGER.warn(
+                "Untraceable hit direction: could not reconstruct a hit position on {} for damage '{}' (category "
+                        + "{}, attacker={}, projectile={}) -- fell back to weighted limb sampling.",
+                victim.getName().getString(),
+                src.getMsgId(),
+                cat,
+                attacker != null ? attacker.getName().getString() : "none",
+                direct != null && direct != attacker ? direct.getName().getString() : "none");
+    }
+
+    private static LimbType pickWeighted(DamageSource source, DamageCategory cat, RandomSource rand) {
         LimbType[] limbs = LimbType.values();
         float[] weights = new float[limbs.length];
         float total = 0.0F;

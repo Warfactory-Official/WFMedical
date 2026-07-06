@@ -5,6 +5,7 @@ import com.warfactory.medical.api.MedicalState;
 import com.warfactory.medical.capability.IMedicalData;
 import com.warfactory.medical.capability.MedicalCapabilities;
 import com.warfactory.medical.capability.MedicalProvider;
+import com.warfactory.medical.compat.OpenPersistenceCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.MedicalProfile;
@@ -23,8 +24,10 @@ import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
@@ -34,10 +37,13 @@ import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.BlockEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * The Forge FORGE-bus event handler that drives the entire medical pipeline.
@@ -76,7 +82,11 @@ public final class MedicalEventHandler {
      */
     @SubscribeEvent
     public static void onAttachCapabilities(AttachCapabilitiesEvent<Entity> event) {
-        if (event.getObject() instanceof Player) {
+        Entity object = event.getObject();
+        // Players always get the medical capability; an Open Persistence logout body gets one too (gated on
+        // the compat toggle) so it can carry/accrue the owner's medical profile while they are offline.
+        if (object instanceof Player
+                || (OpenPersistenceCompat.isPersistentBody(object) && MedicalConfig.openPersistenceCompat())) {
             MedicalProvider provider = new MedicalProvider();
             event.addCapability(MEDICAL_KEY, provider);
             event.addListener(provider::invalidate);
@@ -191,7 +201,14 @@ public final class MedicalEventHandler {
         TraumaRegistry registry = TraumaRegistry.active();
 
         DamageCategory cat = DamageClassifier.classify(src);
-        LimbType limb = HitLocation.pick(src, cat, rand);
+        // PRECISE hit registration: an attack the envelope registered but which actually threaded a gap
+        // between the rigged limbs is a whiff -> cancel it (no damage, no trauma). Centre-mass hits take the
+        // cheap tight-box fast-path inside isGapShot, so only grazing arm-margin shots ever build the rig.
+        if (MedicalConfig.hitRegistrationMode() == HitRegMode.PRECISE && HitGeometry.isGapShot(player, src, cat)) {
+            event.setCanceled(true);
+            return;
+        }
+        LimbType limb = HitLocation.pick(player, src, cat, rand);
         ArmorEvaluation.Outcome outcome = ArmorEvaluation.evaluate(player, limb, cat, amount, rand);
         List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limb, amount, registry, nowTick, rand);
 
@@ -467,5 +484,119 @@ public final class MedicalEventHandler {
         } finally {
             original.invalidateCaps();
         }
+    }
+
+    // Open Persistence integration
+
+    @SubscribeEvent
+    public static void onPersistentBodyHurt(LivingHurtEvent event) {
+        if (!MedicalConfig.openPersistenceCompat()) {
+            return;
+        }
+        Entity entity = event.getEntity();
+        if (entity instanceof Player || entity.level().isClientSide) {
+            return;
+        }
+        if (!(entity instanceof LivingEntity victim) || !OpenPersistenceCompat.isPersistentBody(victim)) {
+            return;
+        }
+        DamageSource src = event.getSource();
+        if (src != null && src.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            return;
+        }
+        float amount = event.getAmount();
+        if (amount <= 0.0F) {
+            return;
+        }
+        IMedicalData data = victim.getCapability(MedicalCapabilities.MEDICAL).resolve().orElse(null);
+        if (data == null) {
+            return;
+        }
+        MedicalProfile profile = data.getProfile();
+
+        RandomSource rand = victim.getRandom();
+        long nowTick = victim.level().getGameTime();
+        TraumaRegistry registry = TraumaRegistry.active();
+        DamageCategory cat = DamageClassifier.classify(src);
+        if (MedicalConfig.hitRegistrationMode() == HitRegMode.PRECISE && HitGeometry.isGapShot(victim, src, cat)) {
+            event.setCanceled(true);
+            return;
+        }
+        LimbType limb = HitLocation.pick(victim, src, cat, rand);
+        ArmorEvaluation.Outcome outcome = ArmorEvaluation.evaluate(victim, limb, cat, amount, rand);
+        List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limb, amount, registry, nowTick, rand);
+
+        boolean added = false;
+        int maxPerLimb = MedicalConfig.maxTraumaPerLimb();
+        Limb targetLimb = profile.limb(limb);
+        for (int i = 0; i < generated.size(); i++) {
+            Trauma t = generated.get(i);
+            if (t.isFracture() && !MedicalConfig.enableFractures()) {
+                continue;
+            }
+            targetLimb.tryMerge(t, maxPerLimb);
+            added = true;
+        }
+        if (added) {
+            profile.markDirty();
+            data.bumpRevision();
+        }
+        // Deliberately NOT zeroing event.getAmount(): the body keeps vanilla health (no offline physiology
+        // tick), so Open Persistence's health/death handling is untouched -- we only stamp the carried profile.
+    }
+
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onLogoutCopyProfileToBody(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (!MedicalConfig.openPersistenceCompat() || !OpenPersistenceCompat.isLoaded()) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        IMedicalData playerData = MedicalCapabilities.get(player);
+        if (playerData == null) {
+            return;
+        }
+        findPersistentBody(player).ifPresent(body -> {
+            IMedicalData bodyData = body.getCapability(MedicalCapabilities.MEDICAL).resolve().orElse(null);
+            if (bodyData != null) {
+                bodyData.load(playerData.save());
+                bodyData.bumpRevision();
+            }
+        });
+    }
+
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onLoginCopyProfileFromBody(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!MedicalConfig.openPersistenceCompat() || !OpenPersistenceCompat.isLoaded()) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        IMedicalData playerData = MedicalCapabilities.get(player);
+        if (playerData == null) {
+            return;
+        }
+        findPersistentBody(player).ifPresent(body -> {
+            IMedicalData bodyData = body.getCapability(MedicalCapabilities.MEDICAL).resolve().orElse(null);
+            if (bodyData != null) {
+                playerData.load(bodyData.save());
+                playerData.bumpRevision();
+                MedicalEngine.resync(player, true);
+            }
+        });
+    }
+
+
+    private static Optional<Entity> findPersistentBody(ServerPlayer player) {
+        UUID id = player.getUUID();
+        AABB box = player.getBoundingBox().inflate(4.0);
+        List<Entity> found = player.level().getEntities((Entity) null, box,
+                e -> OpenPersistenceCompat.isPersistentBody(e)
+                        && OpenPersistenceCompat.bodyOwner(e).map(id::equals).orElse(false));
+        return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
     }
 }

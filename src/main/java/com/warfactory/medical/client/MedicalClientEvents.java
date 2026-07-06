@@ -1,10 +1,15 @@
 package com.warfactory.medical.client;
 
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.client.render.HitboxDebugRenderer;
 import com.warfactory.medical.client.screen.CharacterSheetUI;
 import com.warfactory.medical.client.screen.RadialMenuUI;
+import com.warfactory.medical.compat.TaczCompat;
+import com.warfactory.medical.compat.tacz.TaczPoseCaptureClient;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.DeathScreen;
@@ -12,6 +17,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.client.event.RenderGuiOverlayEvent;
 import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
 import net.minecraftforge.event.TickEvent;
@@ -51,6 +57,7 @@ public final class MedicalClientEvents {
             drain(MedicalKeyMappings.OPEN_SHEET);
             drain(MedicalKeyMappings.OPEN_RADIAL);
             drain(MedicalKeyMappings.TOGGLE_DEBUG);
+            drain(MedicalKeyMappings.TOGGLE_HITBOX);
             return;
         }
         while (MedicalKeyMappings.OPEN_SHEET.consumeClick()) {
@@ -61,6 +68,9 @@ public final class MedicalClientEvents {
         }
         while (MedicalKeyMappings.TOGGLE_DEBUG.consumeClick()) {
             ClientMedicalCache.toggleDebug();
+        }
+        while (MedicalKeyMappings.TOGGLE_HITBOX.consumeClick()) {
+            HitboxDebugRenderer.toggle();
         }
     }
 
@@ -135,5 +145,20 @@ public final class MedicalClientEvents {
     @SubscribeEvent
     public static void onLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientMedicalCache.clear();
+    }
+
+
+    @SubscribeEvent
+    public static void onRegisterClientCommands(RegisterClientCommandsEvent event) {
+        if (!TaczCompat.isLoaded()) {
+            return;
+        }
+        event.getDispatcher().register(Commands.literal("wfmedtaczdump").executes(ctx -> {
+            var player = Minecraft.getInstance().player;
+            if (player != null) {
+                TaczPoseCaptureClient.dump(player, s -> player.displayClientMessage(Component.literal(s), false));
+            }
+            return 1;
+        }));
     }
 }
