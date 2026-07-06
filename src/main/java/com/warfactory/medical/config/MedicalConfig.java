@@ -28,12 +28,19 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.DoubleValue MAX_BLOOD_ML;
     private static final ForgeConfigSpec.DoubleValue BLOOD_LOW_FRACTION;
     private static final ForgeConfigSpec.DoubleValue BLOOD_CRITICAL_FRACTION;
+    private static final ForgeConfigSpec.DoubleValue BLOOD_DEATH_LOSS_FRACTION;
+    private static final ForgeConfigSpec.DoubleValue BLOOD_UNCONSCIOUS_LOSS_FRACTION;
     private static final ForgeConfigSpec.DoubleValue PAIN_SHOCK_THRESHOLD;
+    private static final ForgeConfigSpec.DoubleValue PAIN_UNCONSCIOUS_THRESHOLD;
+    private static final ForgeConfigSpec.DoubleValue PAIN_UNCONSCIOUS_WEIGHT;
     private static final ForgeConfigSpec.BooleanValue ENABLE_FRACTURES;
     private static final ForgeConfigSpec.BooleanValue ENABLE_BLEEDING;
     private static final ForgeConfigSpec.BooleanValue ENABLE_PAIN;
     private static final ForgeConfigSpec.BooleanValue ENABLE_BLEEDOUT;
     private static final ForgeConfigSpec.IntValue BLEEDOUT_TICKS;
+    private static final ForgeConfigSpec.BooleanValue LETHAL_BLOWS_ENABLED;
+    private static final ForgeConfigSpec.DoubleValue LETHAL_BLOW_HEALTH_FRACTION;
+    private static final ForgeConfigSpec.BooleanValue FINISH_DOWNED_ON_HIT;
     private static final ForgeConfigSpec.BooleanValue EFFECT_IMMUNE_IN_CREATIVE;
     private static final ForgeConfigSpec.IntValue MAX_TRAUMA_PER_LIMB;
     private static final ForgeConfigSpec.DoubleValue LEG_FRACTURE_SPEED_MULTIPLIER;
@@ -68,9 +75,28 @@ public final class MedicalConfig {
         BLOOD_CRITICAL_FRACTION = b
                 .comment("Blood fraction (0..1) below which the player is critical.")
                 .defineInRange("bloodCriticalFraction", 0.35D, 0.0D, 1.0D);
+        BLOOD_DEATH_LOSS_FRACTION = b
+                .comment("Fraction of total blood volume that, once LOST, kills the player outright (bleeding out "
+                        + "totally). Default 0.40 = losing more than 40% of your blood is instantly fatal.")
+                .defineInRange("bloodDeathLossFraction", 0.40D, 0.05D, 1.0D);
+        BLOOD_UNCONSCIOUS_LOSS_FRACTION = b
+                .comment("Fraction of total blood volume LOST at which blood loss starts contributing to the "
+                        + "unconsciousness score. Between this and bloodDeathLossFraction (default 30%-40% loss) "
+                        + "blood loss ramps that score from 0 to 1; combined with pain it can knock the player out.")
+                .defineInRange("bloodUnconsciousLossFraction", 0.30D, 0.0D, 1.0D);
         PAIN_SHOCK_THRESHOLD = b
                 .comment("Pain (0..1) above which pain-shock penalties begin.")
                 .defineInRange("painShockThreshold", 0.60D, 0.0D, 1.0D);
+        PAIN_UNCONSCIOUS_THRESHOLD = b
+                .comment("Perceived pain (0..1) above which pain begins contributing to the unconsciousness score. "
+                        + "Severe pain past this point pushes the player toward passing out.")
+                .defineInRange("painUnconsciousThreshold", 0.70D, 0.0D, 1.0D);
+        PAIN_UNCONSCIOUS_WEIGHT = b
+                .comment("How much FULLY-saturated pain (1.0) contributes to the unconsciousness score. 1.0 means "
+                        + "max pain alone can knock you out; 0.5 (default) means pain can only tip you over when "
+                        + "combined with blood loss. The score is the sum of the blood-loss and pain contributions; "
+                        + "reaching 1.0 on any recalculation instantly renders the player unconscious.")
+                .defineInRange("painUnconsciousWeight", 0.50D, 0.0D, 4.0D);
         b.pop();
 
         b.push("features");
@@ -91,6 +117,22 @@ public final class MedicalConfig {
         BLEEDOUT_TICKS = b
                 .comment("Ticks a player may remain unconscious from bleeding out before dying.")
                 .defineInRange("bleedoutTicks", 2400, 20, 72000);
+        LETHAL_BLOWS_ENABLED = b
+                .comment("If true, a single blow big enough to deplete the player's current health kills them "
+                        + "outright (kill on impact) instead of dropping them into a survivable unconsciousness. "
+                        + "Unconsciousness then only happens from GRADUAL depletion (bleeding/accumulated trauma), "
+                        + "an overdose, or an admin override -- it is no longer a mandatory step before every death.")
+                .define("lethalBlowsEnabled", true);
+        LETHAL_BLOW_HEALTH_FRACTION = b
+                .comment("A blow is 'lethal on impact' when its damage is at least this fraction of the player's "
+                        + "current (derived) health. 1.0 = the hit must fully deplete remaining health; lower = "
+                        + "even near-fatal hits execute. Only consulted when lethalBlowsEnabled is true.")
+                .defineInRange("lethalBlowHealthFraction", 1.0D, 0.1D, 10.0D);
+        FINISH_DOWNED_ON_HIT = b
+                .comment("If true, any real damage taken while already unconscious/downed finishes the player "
+                        + "(they can be killed while helpless). If false, a downed player is immune to further "
+                        + "combat damage and can only die from the bleed-out timer.")
+                .define("finishDownedOnHit", true);
         MAX_TRAUMA_PER_LIMB = b
                 .comment("Hard cap on distinct trauma objects per limb; excess compatible trauma is merged.")
                 .defineInRange("maxTraumaPerLimb", 8, 1, 64);
@@ -175,8 +217,24 @@ public final class MedicalConfig {
         return BLOOD_CRITICAL_FRACTION.get();
     }
 
+    public static double bloodDeathLossFraction() {
+        return BLOOD_DEATH_LOSS_FRACTION.get();
+    }
+
+    public static double bloodUnconsciousLossFraction() {
+        return BLOOD_UNCONSCIOUS_LOSS_FRACTION.get();
+    }
+
     public static float painShockThreshold() {
         return PAIN_SHOCK_THRESHOLD.get().floatValue();
+    }
+
+    public static float painUnconsciousThreshold() {
+        return PAIN_UNCONSCIOUS_THRESHOLD.get().floatValue();
+    }
+
+    public static float painUnconsciousWeight() {
+        return PAIN_UNCONSCIOUS_WEIGHT.get().floatValue();
     }
 
     public static boolean enableFractures() {
@@ -197,6 +255,28 @@ public final class MedicalConfig {
 
     public static int bleedoutTicks() {
         return BLEEDOUT_TICKS.get();
+    }
+
+    /**
+     * If true, a single blow that would deplete the player's current health kills on impact instead of
+     * dropping them into a survivable unconsciousness.
+     */
+    public static boolean lethalBlowsEnabled() {
+        return LETHAL_BLOWS_ENABLED.get();
+    }
+
+    /**
+     * Fraction of current health a single blow must deal to count as a lethal (kill-on-impact) blow.
+     */
+    public static double lethalBlowHealthFraction() {
+        return LETHAL_BLOW_HEALTH_FRACTION.get();
+    }
+
+    /**
+     * If true, any real damage taken while already downed finishes the player.
+     */
+    public static boolean finishDownedOnHit() {
+        return FINISH_DOWNED_ON_HIT.get();
     }
 
     public static boolean effectImmuneInCreative() {
@@ -305,7 +385,11 @@ public final class MedicalConfig {
                 legFractureSpeedMultiplier(),
                 d.painSpeedFloor(),
                 enableBleedout(),
-                bleedoutTicks()
+                bleedoutTicks(),
+                bloodDeathLossFraction(),
+                bloodUnconsciousLossFraction(),
+                painUnconsciousThreshold(),
+                painUnconsciousWeight()
         );
     }
 }

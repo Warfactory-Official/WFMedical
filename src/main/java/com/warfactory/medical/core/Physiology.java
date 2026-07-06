@@ -52,8 +52,16 @@ public final class Physiology {
             }
         }
 
-        // Blood-loss penalty: 0 above the low fraction, ramping to full max-health at the death volume.
+        // Blood volume + LOSS fraction (0 = full, 1 = fully exsanguinated). All the death/unconsciousness
+        // thresholds below are expressed as fractions of blood LOST, mirroring the config.
         double bloodMl = p.getBloodMl();
+        double maxBlood = cfg.maxBloodMl();
+        double bloodLossFraction = maxBlood <= 0.0D ? 0.0D : 1.0D - (bloodMl / maxBlood);
+        if (bloodLossFraction < 0.0D) {
+            bloodLossFraction = 0.0D;
+        }
+
+        // Blood-loss penalty: 0 above the low fraction, ramping to full max-health at the death volume.
         double lowMl = cfg.bloodLowFraction() * cfg.maxBloodMl();
         double deathMl = cfg.bloodDeathMl();
         float bloodLossPenalty = 0.0F;
@@ -84,17 +92,44 @@ public final class Physiology {
         // In this model current health tracks the derived max; integration may clamp it lower.
         float effectiveCurrentHealth = effectiveMaxHealth;
 
-        // Determine the lethal (bleed-out) condition up front so mobility can react to it.
-        boolean lethal = bloodMl <= deathMl || effectiveMaxHealth <= 0.0F;
+        // --- Unconsciousness SCORE (0..1): a weighted, EXTENSIBLE combination of the factors that push a
+        // player toward passing out. Reaching 1.0 on this recalculation renders the player unconscious
+        // instantly. For now the factors are blood loss and severe pain; more can simply add to the sum.
+        float unconsciousScore = 0.0F;
+        // Blood loss: 0 below the unconscious-loss fraction (default 30% lost), ramping to 1 at the death-loss
+        // fraction (default 40% lost) -- i.e. the 30%-40% blood-loss band alone can knock you out.
+        double bloodBandSpan = cfg.bloodDeathLossFraction() - cfg.bloodUnconsciousLossFraction();
+        if (bloodLossFraction > cfg.bloodUnconsciousLossFraction() && bloodBandSpan > 0.0D) {
+            unconsciousScore += (float) ((bloodLossFraction - cfg.bloodUnconsciousLossFraction()) / bloodBandSpan);
+        }
+        // Severe pain: 0 below the pain threshold, ramping by the configured weight up to full pain, so pain
+        // can tip a partially-bled player over the edge (or, at weight >= 1, knock them out on its own).
+        float painBandSpan = 1.0F - cfg.painUnconsciousThreshold();
+        if (totalPain > cfg.painUnconsciousThreshold() && painBandSpan > 0.0F) {
+            unconsciousScore += cfg.painUnconsciousWeight()
+                    * (totalPain - cfg.painUnconsciousThreshold()) / painBandSpan;
+        }
+        if (unconsciousScore < 0.0F) {
+            unconsciousScore = 0.0F;
+        }
 
-        // Health-based state progression (Healthy -> Critical -> Unconscious -> Dead), derived purely from
-        // blood / trauma / pain. Computed here (rather than at the tail) so mobility can react to a forced /
-        // overdose unconsciousness too. A lethal bleed-out becomes UNCONSCIOUS (the engine's bleed-out timer
-        // then decides death) when bleed-out is enabled, otherwise it is immediately DEAD.
+        // Bleeding out TOTALLY (blood loss at/past the death fraction) kills outright -- the only instant-death
+        // physiology condition. The engine turns this derived DEAD into an actual death (drops health to 0).
+        boolean bloodDeath = bloodLossFraction >= cfg.bloodDeathLossFraction();
+        // A full unconsciousness score OR trauma zeroing the effective max health collapses the player. This
+        // is a SURVIVABLE downed state (blood loss, not trauma, is what actually kills) when bleed-out is on.
+        boolean unconsciousTrigger = unconsciousScore >= 1.0F || effectiveMaxHealth <= 0.0F;
+
+        // Health-based state progression (Healthy -> Critical -> Unconscious -> Dead). Catastrophic blood loss
+        // takes precedence; then the collapse trigger (downed while bleed-out is on, else death); the building
+        // score / low blood / low health reads as CRITICAL below that.
         HealthState state;
-        if (lethal) {
+        if (bloodDeath) {
+            state = HealthState.DEAD;
+        } else if (unconsciousTrigger) {
             state = cfg.bleedoutEnabled() ? HealthState.UNCONSCIOUS : HealthState.DEAD;
-        } else if (effectiveCurrentHealth <= cfg.maxHealthPoints() * cfg.bloodCriticalFraction()
+        } else if (unconsciousScore >= 0.5F
+                || effectiveCurrentHealth <= cfg.maxHealthPoints() * cfg.bloodCriticalFraction()
                 || bloodMl <= cfg.bloodCriticalFraction() * cfg.maxBloodMl()) {
             state = HealthState.CRITICAL;
         } else {

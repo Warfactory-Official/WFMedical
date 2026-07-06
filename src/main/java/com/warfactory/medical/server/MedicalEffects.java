@@ -110,7 +110,11 @@ public final class MedicalEffects {
         // Normal ticking only clamps downward (never heals); join/respawn sets health exactly to the
         // derived target so a pristine player spawns full instead of stuck at the old vanilla value.
         float clamped = allowRaise ? target : Math.min(current, target);
-        if (state == HealthState.UNCONSCIOUS && clamped < 1.0F) {
+        // The >=1 UNCONSCIOUS pin must NOT resurrect a player who has already died: if current health has hit
+        // 0 (a finishing blow, the expired bleed-out timer, a lethal overdose), raising it back to 1 makes the
+        // server ignore the respawn request (PERFORM_RESPAWN needs health <= 0) and leaves them stuck in the
+        // dying animation with a disabled respawn button. Only pin an ALREADY-ALIVE unconscious player.
+        if (state == HealthState.UNCONSCIOUS && current > 0.0F && clamped < 1.0F) {
             clamped = 1.0F;
         }
         if (clamped < 0.0F) {

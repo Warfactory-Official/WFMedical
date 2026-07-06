@@ -228,7 +228,8 @@ dependencies {
     implementation fg.deobf("curse.maven:ldlib-626676:7809449")
 
     // Soft TACZ compat only — no hard dependency. To reference TACZ directly:
-    // compileOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")
+     compileOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")
+    runtimeOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")
 }
 
 tasks.named('processResources', ProcessResources).configure {

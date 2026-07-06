@@ -80,6 +80,15 @@ public final class MedicalEngine {
             return;
         }
 
+        // A dead / dying player (health <= 0) is still in the player list until they click Respawn. Do NOT run
+        // physiology on them: their body is still injured, so a recompute would re-derive UNCONSCIOUS and the
+        // >=1 HP pin would raise health back above 0 -> the server then ignores PERFORM_RESPAWN (which requires
+        // health <= 0), leaving them stuck in the dying animation with a disabled respawn button. Their profile
+        // is discarded on the death-respawn clone anyway.
+        if (player.getHealth() <= 0.0F) {
+            return;
+        }
+
         // Fast path: nothing to simulate for a clean, full-blood, healthy player.
         if (!isActive(profile)) {
             return;
@@ -111,8 +120,15 @@ public final class MedicalEngine {
         boolean wasDirty = profile.isDirty();
         DerivedStats stats = wasDirty ? profile.recompute(params) : profile.cached();
 
-        // (2c) Advance the bleed-out death timer using the fresh state.
-        advanceBleedout(player, profile, params, nowTick);
+        // (2c) Keep the overlay's death-progress in sync with how close the blood pool is to the lethal
+        // loss threshold, then enact a derived DEATH: bleeding out totally (or having no effective health
+        // left) drops the player to 0 HP so the vanilla death pipeline (baseTick -> die ->
+        // onLivingDeath.markDead) finalizes. The health-<=0 skip at the top of tickPlayer then leaves the
+        // corpse untouched until respawn, so nothing re-pins it back above 0 and blocks the respawn button.
+        updateDeathProgress(profile, params);
+        if (stats.state() == HealthState.DEAD && player.getHealth() > 0.0F) {
+            player.setHealth(0.0F);
+        }
 
         // (4) Reconcile the vanilla body with the derived snapshot — only when the snapshot actually
         // changed (wasDirty). When nothing changed the attribute modifiers are already correct, so we skip
@@ -148,6 +164,10 @@ public final class MedicalEngine {
         if (nowDowned != profile.isLastBroadcastDowned()) {
             MedicalNetworking.broadcastDowned(player, nowDowned);
             profile.setLastBroadcastDowned(nowDowned);
+            // Swap the vanilla collision box / eye-height between standing and the rotated downed hitbox on the
+            // same enter/exit edge the pose is broadcast (PlayerMixin reads the fresh downed state). This keeps
+            // the server-authoritative hitbox in sync so a downed player can be hit, and reverts it on wake.
+            player.refreshDimensions();
         }
     }
 
@@ -370,45 +390,27 @@ public final class MedicalEngine {
     }
 
     /**
-     * Advance the BLEED-OUT death timer for an unconscious player, and only for a bleed-out cause.
+     * Recompute the client overlay's {@code deathProgress} (0..1) from how close the blood pool is to the
+     * lethal loss threshold: 0 at (or above) the unconsciousness-loss fraction, ramping to 1 at the
+     * death-loss fraction. The unconscious overlay uses this to ramp its extreme vignette into a full-screen
+     * blackout ONLY right before a bleed-out death (blood loss nearing the fatal fraction); an overdose
+     * unconsciousness that isn't losing blood keeps this at 0 and so never blacks out (it recovers instead).
      *
-     * <p>After the merge, {@link HealthState#UNCONSCIOUS} is entered from two internal causes: a bleed-out
-     * unconsciousness (lethal damage / blood loss / admin-forced bleed-out), which must DIE once the timer
-     * expires, and an opioid overdose unconsciousness, which must WAKE (handled in {@link #advanceSubstances})
-     * and must NEVER bleed out here. The two are distinguished by the {@code bleedoutSinceTick} bleed-out
-     * marker: it is set when entering via lethal damage ({@code onLivingDeath}) or an admin
-     * {@code /wfmedical unconscious}, and it is started here for a gradual bleed-out (blood at/below the death
-     * volume, or major trauma zeroing the effective max health) that never fired a damage event. An overdose
-     * leaves the marker at {@code -1}, so its timer never starts and it recovers instead of dying.</p>
+     * <p>Actual death is enacted by the caller (drop to 0 HP when {@link Physiology} derives {@code DEAD});
+     * the fixed bleed-out timer was replaced by this blood-fraction model per the score-based design.</p>
      */
-    private static void advanceBleedout(ServerPlayer player, MedicalProfile profile,
-                                        PhysiologyParams params, long nowTick) {
-        if (params.bleedoutEnabled() && profile.getState() == HealthState.UNCONSCIOUS) {
-            long since = profile.getBleedoutSinceTick();
-            if (since < 0L) {
-                // Only START a bleed-out timer for a genuine bleed-out cause. An overdose-only unconsciousness
-                // (which recovers via the wake timer) has a healthy underlying physiology and no marker, so it
-                // is left untouched here; a gradual bleed-out with a lethal underlying condition gets its
-                // marker (and thus its death timer) started now.
-                boolean lethalBleedout = profile.getBloodMl() <= params.bloodDeathMl()
-                        || profile.cached().effectiveMaxHealth() <= 0.0F;
-                if (lethalBleedout) {
-                    profile.setBleedoutSinceTick(nowTick);
-                }
-            } else if (nowTick - since >= params.bleedoutTicks()) {
-                profile.setState(HealthState.DEAD);
-                // Drop any admin-forced unconsciousness so the DEAD state isn't immediately re-forced back to
-                // UNCONSCIOUS by the physiology override on the next recompute (which would block the death).
-                profile.setForcedState(null);
-                profile.setBleedoutSinceTick(-1L);
-                if (profile.hasActiveTreatment()) {
-                    MedicalActionService.cancel(player, "dead");
-                }
-                player.setHealth(0.0F); // bled out; vanilla death pipeline resolves the rest
-            }
-        } else if (profile.getBleedoutSinceTick() >= 0L) {
-            profile.setBleedoutSinceTick(-1L);
+    private static void updateDeathProgress(MedicalProfile profile, PhysiologyParams params) {
+        double maxBlood = profile.getMaxBloodMl();
+        double lossFraction = maxBlood <= 0.0D ? 0.0D : 1.0D - (profile.getBloodMl() / maxBlood);
+        double start = params.bloodUnconsciousLossFraction();
+        double span = params.bloodDeathLossFraction() - start;
+        float progress;
+        if (span <= 0.0D) {
+            progress = lossFraction >= params.bloodDeathLossFraction() ? 1.0F : 0.0F;
+        } else {
+            progress = (float) ((lossFraction - start) / span);
         }
+        profile.setDeathProgress(progress); // setter clamps to [0,1] and only dirties on change
     }
 
     /**

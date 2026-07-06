@@ -15,6 +15,10 @@ package com.warfactory.medical.core;
  * @param painSpeedFloor             lower bound on the movement multiplier.
  * @param bleedoutEnabled            if true, lethal conditions render unconscious (bleed-out) instead of instant death.
  * @param bleedoutTicks              ticks a player may remain unconscious from bleeding out before dying.
+ * @param bloodDeathLossFraction     fraction of total blood volume that, once LOST, kills outright (bleeding out).
+ * @param bloodUnconsciousLossFraction fraction LOST at which blood loss starts feeding the unconsciousness score.
+ * @param painUnconsciousThreshold   perceived pain (0..1) above which pain feeds the unconsciousness score.
+ * @param painUnconsciousWeight      how much fully-saturated pain contributes to the unconsciousness score.
  */
 public record PhysiologyParams(
         float maxHealthPoints,
@@ -27,7 +31,11 @@ public record PhysiologyParams(
         float legFractureSpeedMultiplier,
         float painSpeedFloor,
         boolean bleedoutEnabled,
-        int bleedoutTicks
+        int bleedoutTicks,
+        double bloodDeathLossFraction,
+        double bloodUnconsciousLossFraction,
+        float painUnconsciousThreshold,
+        float painUnconsciousWeight
 ) {
     public static PhysiologyParams defaults() {
         return new PhysiologyParams(
@@ -41,7 +49,11 @@ public record PhysiologyParams(
                 0.40F,      // legFractureSpeedMultiplier
                 0.30F,      // painSpeedFloor
                 true,       // bleedoutEnabled
-                600         // bleedoutTicks
+                600,        // bleedoutTicks
+                0.40D,      // bloodDeathLossFraction
+                0.30D,      // bloodUnconsciousLossFraction
+                0.70F,      // painUnconsciousThreshold
+                0.50F       // painUnconsciousWeight
         );
     }
 }

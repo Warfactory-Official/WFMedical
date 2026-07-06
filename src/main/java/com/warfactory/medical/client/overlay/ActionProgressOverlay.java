@@ -3,6 +3,7 @@ package com.warfactory.medical.client.overlay;
 import com.lowdragmc.lowdraglib.gui.texture.ColorRectTexture;
 import com.lowdragmc.lowdraglib.gui.texture.ProgressTexture;
 import com.lowdragmc.lowdraglib.gui.texture.TextTexture;
+import com.warfactory.medical.client.UiText;
 import com.warfactory.medical.client.screen.MedicalUIParts;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.treatment.TreatmentAction;
@@ -137,15 +138,16 @@ public final class ActionProgressOverlay implements IGuiOverlay {
         int x = screenW / 2 - BAR_WIDTH / 2;
         int y = screenH - 60;
 
-        // Label sits just above the bar.
-        LABEL.updateText(label);
+        // Label sits just above the bar. Escape so a '%' in a (possibly modded) item name / label never
+        // renders as LDLib's "Format error:" (see UiText).
+        LABEL.updateText(UiText.escape(label));
         LABEL.draw(graphics, -1, -1, x, y - 11, BAR_WIDTH, 9);
 
         BACKGROUND.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT);
         FILL.setProgress(progress);
         FILL.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT);
 
-        PERCENT.updateText(Math.round(progress * 100.0F) + "%");
+        PERCENT.updateText(UiText.escape(Math.round(progress * 100.0F) + "%"));
         PERCENT.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT);
     }
 }

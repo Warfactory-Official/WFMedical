@@ -5,9 +5,12 @@
   "refmap": "wfmedical.refmap.json",
   "minVersion": "0.8.5",
   "mixins": [
-    "LivingEntityMixin"
+    "LivingEntityMixin",
+    "PlayerMixin"
   ],
   "client": [
+    "CameraMixin",
+    "EntityDownedLookMixin",
     "HumanoidModelMixin",
     "PostChainAccessor"
   ],

@@ -75,40 +75,33 @@ public final class UnconsciousOverlay implements IGuiOverlay {
      */
     private static final float VIGNETTE_STRENGTH = 1.0F;
     /**
-     * Hard clamp on the vignette alpha so the closing edges never become a perfectly opaque frame.
+     * Hard clamp on the vignette alpha so the edges are EXTREME but never a perfectly opaque frame on their own.
      */
-    private static final float VIGNETTE_MAX = 0.95F;
-
+    private static final float VIGNETTE_MAX = 0.97F;
     /**
-     * Uniform whole-screen darkening at full fade before the deep-fade boost (keeps the centre visible).
+     * Whole-screen dim while merely downed but NOT dying: kept low so the centre stays clearly visible (this is
+     * the "just extreme vignetting" look the design calls for outside of the final moments before death).
      */
     private static final float UNIFORM_DARK_BASE = 0.35F;
     /**
-     * Deepest uniform darkening at maximum fade; deliberately NOT opaque so the view stays faintly visible.
+     * Death-timer progress ({@link ClientMedicalCache#deathProgress()}) above which the FULL pre-death blackout
+     * begins ramping in. Below it there is no blackout at all — only the extreme vignette. Set high so the
+     * blackout is confined to the last stretch before death ("full screen blackout only right before death").
      */
-    private static final float UNIFORM_DARK_MAX = 0.60F;
-    /**
-     * Fade above which the uniform darkening ramps from BASE toward MAX (the centre dims further).
-     */
-    private static final float DEEPEN_THRESHOLD = 0.85F;
-
-    /**
-     * Above this fade the centred "unconscious" hint is legible against the dimmed view and gets drawn.
-     */
-    private static final float HINT_THRESHOLD = 0.85F;
+    private static final float BLACKOUT_START = 0.75F;
     /**
      * Draw z; matches vanilla's far-back vignette depth so world/HUD sit in front.
      */
     private static final int Z_OFFSET = -90;
-    /**
-     * Faint hint text drawn near the centre while deeply passed out.
-     */
-    private static final String HINT_TEXT = "...";
 
     /**
-     * Smoothed client-side fade toward the current passed-out target; persists across frames.
+     * Smoothed fade toward the passed-out target; drives the extreme vignette + the base dim.
      */
     private static float fade;
+    /**
+     * Smoothed fade toward the pre-death blackout target; drives the full-screen black, only near death.
+     */
+    private static float black;
 
     private UnconsciousOverlay() {
     }
@@ -123,37 +116,28 @@ public final class UnconsciousOverlay implements IGuiOverlay {
 
         // PASSED OUT = overdose-unconscious OR bleeding out; mirrors server-side isDowned.
         boolean passedOut = ClientMedicalCache.stats().unconscious();
-        float target = passedOut ? 1.0F : 0.0F;
+        fade = ease(fade, passedOut ? 1.0F : 0.0F);
 
-        // Ease toward the target and clamp; the vignette closes in and opens back up smoothly.
-        fade += (target - fade) * FADE_STEP;
-        if (fade < 0.0F) {
-            fade = 0.0F;
-        } else if (fade > 1.0F) {
-            fade = 1.0F;
-        }
+        // Pre-death blackout target: only in the last stretch of the bleed-out death timer. deathProgress stays
+        // 0 while merely downed (and for an overdose unconsciousness that will recover), so 'black' stays 0 and
+        // we render ONLY the extreme vignette; it ramps toward 1 (full-screen black) as death approaches.
+        float dp = passedOut ? ClientMedicalCache.deathProgress() : 0.0F;
+        float blackTarget = dp <= BLACKOUT_START ? 0.0F : (dp - BLACKOUT_START) / (1.0F - BLACKOUT_START);
+        black = ease(black, blackTarget);
+
         if (fade <= FADE_EPSILON) {
             return;
         }
 
-        // --- (1) Mild uniform darkening across the whole screen (never fully opaque). ---
-        // Drawn while the shader colour is still the default white so the batched fill keeps its ARGB.
-        float uniformDark = fade * UNIFORM_DARK_BASE;
-        if (fade > DEEPEN_THRESHOLD) {
-            float t = (fade - DEEPEN_THRESHOLD) / (1.0F - DEEPEN_THRESHOLD);
-            uniformDark += t * (UNIFORM_DARK_MAX - UNIFORM_DARK_BASE);
-        }
-        if (uniformDark > UNIFORM_DARK_MAX) {
-            uniformDark = UNIFORM_DARK_MAX;
-        }
+        // --- (1) Uniform darkening: a mild dim while downed (centre visible), ramping to a FULL black only as
+        // the pre-death 'black' fade approaches 1. Drawn while the shader colour is still white so the batched
+        // fill keeps its ARGB.
+        float uniformDark = clamp01(fade * UNIFORM_DARK_BASE + black);
         int dimArgb = ((int) (uniformDark * 255.0F) << 24); // black RGB, variable alpha
         graphics.fill(0, 0, screenW, screenH, dimArgb);
 
-        // --- (2) Closing DARK vignette hugging the edges (vanilla sprite tinted black, non-pulsing). ---
-        float vignetteAlpha = fade * VIGNETTE_STRENGTH;
-        if (vignetteAlpha > VIGNETTE_MAX) {
-            vignetteAlpha = VIGNETTE_MAX;
-        }
+        // --- (2) Extreme closing DARK vignette hugging the edges (vanilla sprite tinted black, non-pulsing). ---
+        float vignetteAlpha = Math.min(fade * VIGNETTE_STRENGTH, VIGNETTE_MAX);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc(); // SRC_ALPHA / ONE_MINUS_SRC_ALPHA: blend toward black at the edges.
         RenderSystem.depthMask(false);
@@ -161,19 +145,35 @@ public final class UnconsciousOverlay implements IGuiOverlay {
         // Stretch the whole vignette texture across the screen (uWidth==textureWidth => full 0..1 sample).
         graphics.blit(VIGNETTE_TEXTURE, 0, 0, Z_OFFSET, 0.0F, 0.0F, screenW, screenH, screenW, screenH);
 
-        // Restore GL state to defaults so nothing downstream (incl. the batched fill/hint) inherits it.
+        // Restore GL state to defaults so nothing downstream inherits it.
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         RenderSystem.depthMask(true);
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableBlend();
+    }
 
-        // --- (3) A faint centred hint once we're deep enough for it to read against the dimmed view. ---
-        if (fade >= HINT_THRESHOLD) {
-            int textWidth = mc.font.width(HINT_TEXT);
-            int tx = (screenW - textWidth) / 2;
-            int ty = screenH / 2;
-            graphics.drawString(mc.font, HINT_TEXT, tx, ty, 0x40FFFFFF, false);
-        }
+    /**
+     * Snap both fades to zero immediately (no easing). Called on respawn so a vignette / pre-death blackout
+     * that was on-screen at the moment of death does not linger and briefly black out the fresh life while it
+     * eases back down.
+     */
+    public static void reset() {
+        fade = 0.0F;
+        black = 0.0F;
+    }
+
+    /**
+     * Ease {@code value} one step toward {@code target} at {@link #FADE_STEP}, clamped to {@code [0,1]}.
+     */
+    private static float ease(float value, float target) {
+        return clamp01(value + (target - value) * FADE_STEP);
+    }
+
+    /**
+     * Clamp to {@code [0,1]}.
+     */
+    private static float clamp01(float v) {
+        return v < 0.0F ? 0.0F : (v > 1.0F ? 1.0F : v);
     }
 
     /**

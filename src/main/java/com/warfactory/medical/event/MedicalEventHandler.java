@@ -1,6 +1,7 @@
 package com.warfactory.medical.event;
 
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.api.MedicalState;
 import com.warfactory.medical.capability.IMedicalData;
 import com.warfactory.medical.capability.MedicalCapabilities;
 import com.warfactory.medical.capability.MedicalProvider;
@@ -27,8 +28,12 @@ import net.minecraft.world.level.GameType;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.living.LivingEntityUseItemEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
@@ -151,6 +156,31 @@ public final class MedicalEventHandler {
             return;
         }
 
+        // --- Lethal / finishing blow: die on impact instead of the damage->trauma translation below. ---
+        // Unconsciousness is a SURVIVABLE state reached by GRADUAL depletion (bleeding / accumulated
+        // trauma), an overdose, or an admin override -- it is NOT a mandatory step before every death. Two
+        // cases kill outright here:
+        //   (a) FINISH: the player is ALREADY downed/unconscious and takes a real hit -- helpless, so it
+        //       kills (fixes "an unconscious player can't be killed").
+        //   (b) KILL ON IMPACT: a single blow big enough to deplete their current derived health -- a
+        //       genuinely lethal hit (sniper / explosion / heavy weapon), distinct from the many small hits
+        //       that accumulate into a survivable unconsciousness.
+        // Everything else falls through to the normal damage->trauma translation (health stays derived).
+        float currentHealth = player.getHealth();
+        boolean alreadyDowned = profile.isDowned() || profile.getState() == HealthState.UNCONSCIOUS;
+        boolean finishDowned = alreadyDowned && MedicalConfig.finishDownedOnHit();
+        boolean killOnImpact = MedicalConfig.lethalBlowsEnabled()
+                && currentHealth > 0.0F
+                && amount >= currentHealth * (float) MedicalConfig.lethalBlowHealthFraction();
+        if (finishDowned || killOnImpact) {
+            markDead(player, data, profile);
+            // Guarantee the vanilla hit is fatal (this killing blow bypasses the derived-health model), then
+            // fall through to vanilla so actuallyHurt() -> die() -> LivingDeathEvent runs (which now only
+            // finalizes and never re-intercepts, because the profile is already DEAD).
+            event.setAmount(Math.max(amount, currentHealth + 1.0F));
+            return;
+        }
+
         // Taking damage interrupts any in-progress timed treatment.
         if (profile.hasActiveTreatment()) {
             MedicalActionService.cancel(player, "damaged");
@@ -197,14 +227,21 @@ public final class MedicalEventHandler {
         }
     }
 
-    // ------------------------------------------------------------------ lethal -> bleed-out unconscious
+    // ------------------------------------------------------------------ death finalization
 
     /**
-     * Intercept lethal damage: rather than dying instantly the player transitions to
-     * {@link HealthState#UNCONSCIOUS} (via the bleed-out cause — {@code bleedoutSinceTick} is set as the
-     * bleed-out marker) and is pinned at ~1 health. Real death is only permitted once the engine's bleed-out
-     * timer expires (it sets the state to {@link HealthState#DEAD} and drops health to zero); such a death is
-     * allowed straight through. Gated on {@link MedicalConfig#enableBleedout()}.
+     * Finalize a death. Unconsciousness is NOT a mandatory step before death: this handler NEVER cancels the
+     * event. Whatever made the blow lethal — a kill-on-impact / finishing blow already flagged DEAD in
+     * {@link #onLivingHurt}, the engine's expired bleed-out timer, a lethal overdose drain, {@code /kill}, the
+     * void, or plain vanilla damage that outran the derived-health model — is allowed straight through. All we
+     * do is finalize the medical bookkeeping (mark DEAD, clear every downed/overdose/bleed-out marker, cancel
+     * any treatment, broadcast the downed=false edge and restore the standing hitbox) so no tracker keeps
+     * rendering a downed pose on a dying player and the body doesn't die with the rotated downed collision box.
+     *
+     * <p>The actual "gradual depletion becomes a survivable unconsciousness" behaviour lives in
+     * {@link com.warfactory.medical.core.Physiology} (lethal condition -> UNCONSCIOUS while bleed-out is
+     * enabled) together with the &ge;1-HP pin in {@link MedicalEffects}: a player collapses BEFORE their health
+     * ever reaches zero, so a death event here only ever means a genuine kill.</p>
      */
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
@@ -214,62 +251,114 @@ public final class MedicalEventHandler {
         if (player.level().isClientSide) {
             return;
         }
-        if (!MedicalConfig.enableBleedout()) {
-            return;
-        }
-        if ((player.isCreative() || player.isSpectator()) && MedicalConfig.effectImmuneInCreative()) {
-            return;
-        }
-
         IMedicalData data = MedicalCapabilities.get(player);
         if (data == null) {
             return;
         }
         MedicalProfile profile = data.getProfile();
-
-        // The engine already ruled this a real bleed-out; let vanilla finish the kill.
-        if (profile.getState() == HealthState.DEAD) {
-            return;
+        // Only touch the profile if there is anything to finalize (already-DEAD, non-downed, treatment-free
+        // players need nothing) so a plain vanilla death stays cheap. markDead is idempotent.
+        if (profile.getState() != HealthState.DEAD
+                || profile.isLastBroadcastDowned()
+                || profile.hasActiveTreatment()) {
+            markDead(player, data, profile);
         }
+    }
 
-        // Admin / void / generic kills MUST always kill, even with bleed-out enabled. These sources bypass
-        // invulnerability (/kill's genericKill, the void, our own command-suite kill); a null source is an
-        // unknown out-of-band lethal cause treated the same. Never intercept them into a bleed-out — let
-        // vanilla's death (die() -> LivingDeathEvent -> respawn) proceed. First clear any transient downed
-        // state and mark the profile DEAD so trackers stop rendering a downed pose on a player who is dying,
-        // and any re-entrant death event short-circuits on the DEAD check above.
-        DamageSource src = event.getSource();
-        if (src == null || src.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
-            profile.setState(HealthState.DEAD);
-            profile.setOverdoseUnconscious(false);
-            profile.setOverdoseUntilTick(0L);
-            profile.setBleedoutSinceTick(-1L);
-            if (profile.hasActiveTreatment()) {
-                MedicalActionService.cancel(player, "dead");
-            }
-            if (profile.isLastBroadcastDowned()) {
-                MedicalNetworking.broadcastDowned(player, false);
-                profile.setLastBroadcastDowned(false);
-            }
-            profile.markDirty();
-            data.bumpRevision();
-            return;
-        }
-
-        // A bleed-out unconsciousness interrupts any in-progress timed treatment.
+    /**
+     * Finalize a player as DEAD in the medical model: set the state, clear every transient downed / overdose /
+     * bleed-out / asphyxia marker and any admin-forced override, cancel any in-progress treatment, broadcast
+     * the downed=false edge to trackers, and refresh the vanilla hitbox/eye-height back to standing. Idempotent
+     * and shared by {@link #onLivingHurt} (kill-on-impact / finishing a downed player) and {@link #onLivingDeath}.
+     */
+    private static void markDead(ServerPlayer player, IMedicalData data, MedicalProfile profile) {
+        profile.setState(HealthState.DEAD);
+        profile.setForcedState(null);
+        profile.setOverdoseUnconscious(false);
+        profile.setOverdoseUntilTick(0L);
+        profile.setBleedoutSinceTick(-1L);
+        profile.setAsphyxiating(false);
         if (profile.hasActiveTreatment()) {
-            MedicalActionService.cancel(player, "unconscious");
+            MedicalActionService.cancel(player, "dead");
         }
-
-        // Still have bleed-out budget: cancel death, crawl, keep bleeding until the timer runs out.
-        event.setCanceled(true);
-        profile.setState(HealthState.UNCONSCIOUS);
-        if (profile.getBleedoutSinceTick() < 0L) {
-            profile.setBleedoutSinceTick(player.level().getGameTime());
+        if (profile.isLastBroadcastDowned()) {
+            MedicalNetworking.broadcastDowned(player, false);
+            profile.setLastBroadcastDowned(false);
         }
+        // Restore the standing collision box / eye-height so the dying body isn't left with the rotated downed
+        // hitbox (and the low camera), which otherwise lingered into the respawn as a twisted pose.
+        player.refreshDimensions();
         profile.markDirty();
         data.bumpRevision();
-        player.setHealth(1.0F);
+    }
+
+    // ------------------------------------------------------------------ incapacitation (unconscious)
+
+    /**
+     * While unconscious, a player is fully helpless: they cannot act. Movement/sprint/jump are already
+     * derived-locked (speed 0, {@code jumpMultiplier}/sprint blocked via the mixin + attribute modifier), and
+     * jump is additionally hard-cancelled in {@code LivingEntityMixin}. The handlers below block the remaining
+     * interaction surface — using/placing items, breaking blocks, attacking and interacting with entities —
+     * for any unconscious player. They read the server-authoritative {@link MedicalState} (which is also
+     * client-correct for the local player), so they no-op for a conscious player and only ever cancel a downed
+     * player's own actions (a medic interacting WITH a downed player is a separate, conscious actor and is
+     * never blocked). Cancelling the event on both logical sides gives instant client feedback and stays
+     * server-authoritative.
+     */
+    @SubscribeEvent
+    public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        if (MedicalState.isUnconscious(event.getEntity())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
+        if (MedicalState.isUnconscious(event.getEntity())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
+        if (MedicalState.isUnconscious(event.getEntity())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (MedicalState.isUnconscious(event.getEntity())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
+        if (MedicalState.isUnconscious(event.getEntity())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onAttackEntity(AttackEntityEvent event) {
+        if (MedicalState.isUnconscious(event.getEntity())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (event.getPlayer() != null && MedicalState.isUnconscious(event.getPlayer())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onUseItemStart(LivingEntityUseItemEvent.Start event) {
+        if (event.getEntity() instanceof Player player && MedicalState.isUnconscious(player)) {
+            event.setCanceled(true);
+        }
     }
 
     // ------------------------------------------------------------------ lifecycle

@@ -89,6 +89,15 @@ public final class ClientMedicalCache {
         return s == null ? 0.0F : s.drugLoad();
     }
 
+    /**
+     * 0..1 bleed-out death-timer progress from the latest snapshot (0 = not dying / just downed, 1 = about to
+     * die); 0 when none received. Drives the pre-death blackout ramp in the unconscious overlay.
+     */
+    public static float deathProgress() {
+        MedicalSyncPacket s = snapshot;
+        return s == null ? 0.0F : s.deathProgress();
+    }
+
     // ------------------------------------------------------------------ active treatment
 
     /**

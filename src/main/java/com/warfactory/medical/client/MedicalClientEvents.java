@@ -5,6 +5,10 @@ import com.warfactory.medical.client.screen.CharacterSheetUI;
 import com.warfactory.medical.client.screen.RadialMenuUI;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.screens.DeathScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
@@ -22,6 +26,11 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class MedicalClientEvents {
 
+    /**
+     * Ticks the current {@link DeathScreen} has been open, for the stuck-respawn-button safety net.
+     */
+    private static int deathScreenTicks;
+
     private MedicalClientEvents() {
     }
 
@@ -36,6 +45,7 @@ public final class MedicalClientEvents {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
+        keepRespawnButtonUsable(mc);
         if (mc.player == null || mc.screen != null) {
             // Still drain any queued clicks so they don't fire the moment a screen closes.
             drain(MedicalKeyMappings.OPEN_SHEET);
@@ -57,6 +67,48 @@ public final class MedicalClientEvents {
     private static void drain(net.minecraft.client.KeyMapping key) {
         while (key.consumeClick()) {
             // discard
+        }
+    }
+
+    /**
+     * Safety net for the vanilla {@link DeathScreen} respawn/title buttons.
+     *
+     * <p>{@code DeathScreen} disables its buttons in {@code init()} and re-enables them only on the EXACT tick
+     * its internal counter reaches 20. If that precise tick is ever missed — e.g. an {@code init()} re-run on a
+     * window resize after the counter already passed 20, or a skipped screen tick — the buttons stay disabled
+     * forever and the player can never click "Respawn". (Our old death handling, which cancelled the death event
+     * and pinned the player alive, could also leave the client showing a death screen the server disagreed with;
+     * the death redesign removes that desync, and this is belt-and-braces on top.)</p>
+     *
+     * <p>Once a death screen has been open a little while with EVERY button still disabled, re-enable them all.
+     * We only act when nothing is active, so this never re-enables the respawn button that vanilla intentionally
+     * disables right after a click (the title button stays active, so the "stuck" condition is not detected).
+     * Uses only public API ({@link Screen#children()}, {@link AbstractWidget#active}).</p>
+     */
+    private static void keepRespawnButtonUsable(Minecraft mc) {
+        Screen screen = mc.screen;
+        if (!(screen instanceof DeathScreen)) {
+            deathScreenTicks = 0;
+            return;
+        }
+        // Give vanilla its normal ~1s delay to enable the buttons; only intervene if it never did.
+        if (++deathScreenTicks <= 25) {
+            return;
+        }
+        boolean anyActive = false;
+        for (GuiEventListener child : screen.children()) {
+            if (child instanceof AbstractWidget widget && widget.active) {
+                anyActive = true;
+                break;
+            }
+        }
+        if (anyActive) {
+            return;
+        }
+        for (GuiEventListener child : screen.children()) {
+            if (child instanceof AbstractWidget widget) {
+                widget.active = true;
+            }
         }
     }
 

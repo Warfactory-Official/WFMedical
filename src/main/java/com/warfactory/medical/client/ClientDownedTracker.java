@@ -5,6 +5,7 @@ import com.warfactory.medical.network.ClientMedicalCache;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -61,6 +62,15 @@ public final class ClientDownedTracker {
                 DOWNED.remove(entityId);
             }
         }
+        // Refresh that entity's collision box / eye-height on the client so the rotated downed hitbox (for the
+        // attacker's raytrace) and the lowered first-person camera apply immediately, and revert on wake. Runs
+        // on the client main (packet) thread. The subject receives its own edge (TRACKING_ENTITY_AND_SELF), so
+        // this also refreshes the LOCAL player. No-op if the entity isn't loaded yet.
+        Entity entity = Minecraft.getInstance().level == null ? null
+                : Minecraft.getInstance().level.getEntity(entityId);
+        if (entity != null) {
+            entity.refreshDimensions();
+        }
     }
 
     /**
@@ -108,6 +118,25 @@ public final class ClientDownedTracker {
         @SubscribeEvent
         public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
             clear();
+        }
+
+        /**
+         * On a death/respawn (or dimension change) the LOCAL player entity keeps its network id, so a downed
+         * flag set before death would survive onto the fresh body — rendering the respawned player twisted
+         * (laid-out pose), with the rotated hitbox and a locked look. Clear that id on the clone edge so the
+         * respawned body is upright and interactive. Other players' flags are untouched; the subject re-learns
+         * its own state from the resync/broadcast that follows a respawn.
+         */
+        @SubscribeEvent
+        public static void onRespawnClone(ClientPlayerNetworkEvent.Clone event) {
+            LocalPlayer player = event.getNewPlayer();
+            if (player != null) {
+                set(player.getId(), false);
+            }
+            // Snap the passed-out screen effects to clear so a vignette / blackout / blur that was on-screen at
+            // the moment of death doesn't linger and briefly black out the fresh life while it eases back down.
+            com.warfactory.medical.client.overlay.UnconsciousOverlay.reset();
+            com.warfactory.medical.client.effect.PassoutBlurEffect.reset();
         }
     }
 }

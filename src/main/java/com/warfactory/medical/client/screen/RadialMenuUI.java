@@ -10,6 +10,7 @@ import com.lowdragmc.lowdraglib.gui.util.ClickData;
 import com.lowdragmc.lowdraglib.gui.widget.ButtonWidget;
 import com.lowdragmc.lowdraglib.gui.widget.ImageWidget;
 import com.lowdragmc.lowdraglib.gui.widget.LabelWidget;
+import com.warfactory.medical.client.UiText;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.network.ClientMedicalCache;
@@ -169,10 +170,11 @@ public final class RadialMenuUI {
         button.setClientSideWidget();
         ui.mainGroup.addWidget(button);
 
-        // Short name label centred under the button.
+        // Short name label centred under the button. Escape so a '%' in a (possibly modded) item name
+        // doesn't render as LDLib's "Format error:" (see UiText).
         String shortName = shortName(stack);
         int labelX = centreX - shortName.length() * 3;
-        LabelWidget label = new LabelWidget(labelX, btnY + BUTTON_SIZE + 1, shortName);
+        LabelWidget label = new LabelWidget(labelX, btnY + BUTTON_SIZE + 1, UiText.escape(shortName));
         label.setColor(TEXT_COLOR);
         label.setClientSideWidget();
         ui.mainGroup.addWidget(label);
@@ -204,13 +206,14 @@ public final class RadialMenuUI {
         healthLabel.setClientSideWidget();
         ui.mainGroup.addWidget(healthLabel);
 
-        LabelWidget bloodLabel = new LabelWidget(cx - 50, topY + 2 * lineH, () -> "Blood " + bloodPercent() + "%");
+        LabelWidget bloodLabel = new LabelWidget(cx - 50, topY + 2 * lineH,
+                () -> UiText.escape("Blood " + bloodPercent() + "%"));
         bloodLabel.setColor(TEXT_COLOR);
         bloodLabel.setClientSideWidget();
         ui.mainGroup.addWidget(bloodLabel);
 
         LabelWidget painLabel = new LabelWidget(cx - 50, topY + 3 * lineH,
-                () -> "Pain " + Math.round(MedicalUIParts.stats().totalPain() * 100.0F) + "%");
+                () -> UiText.escape("Pain " + Math.round(MedicalUIParts.stats().totalPain() * 100.0F) + "%"));
         painLabel.setColor(TEXT_COLOR);
         painLabel.setClientSideWidget();
         ui.mainGroup.addWidget(painLabel);

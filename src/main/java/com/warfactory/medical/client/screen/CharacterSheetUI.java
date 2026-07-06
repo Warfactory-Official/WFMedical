@@ -11,6 +11,7 @@ import com.lowdragmc.lowdraglib.gui.widget.ButtonWidget;
 import com.lowdragmc.lowdraglib.gui.widget.DraggableScrollableWidgetGroup;
 import com.lowdragmc.lowdraglib.gui.widget.LabelWidget;
 import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
+import com.warfactory.medical.client.UiText;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.network.ActiveTreatmentPacket;
@@ -144,7 +145,7 @@ public final class CharacterSheetUI {
             if (limb == null) {
                 return "-";
             }
-            return "Health: " + Math.round(MedicalUIParts.limbSummary(limb).healthPercent() * 100.0F) + "%";
+            return UiText.escape("Health: " + Math.round(MedicalUIParts.limbSummary(limb).healthPercent() * 100.0F) + "%");
         }));
         y += DETAIL_LINE_H;
         root.addWidget(new LabelWidget(DETAIL_X, y, () -> {
@@ -193,7 +194,7 @@ public final class CharacterSheetUI {
         y += VITALS_LINE_H;
 
         root.addWidget(new LabelWidget(VITALS_X, y, () ->
-                "Pain: " + Math.round(MedicalUIParts.stats().totalPain() * 100.0F) + "%"));
+                UiText.escape("Pain: " + Math.round(MedicalUIParts.stats().totalPain() * 100.0F) + "%")));
         y += VITALS_LINE_H;
 
         // State line: colored live by health state.
@@ -209,7 +210,7 @@ public final class CharacterSheetUI {
         y += VITALS_LINE_H;
 
         root.addWidget(new LabelWidget(VITALS_X, y, () ->
-                "Movement: " + Math.round(MedicalUIParts.stats().movementMultiplier() * 100.0F) + "%"));
+                UiText.escape("Movement: " + Math.round(MedicalUIParts.stats().movementMultiplier() * 100.0F) + "%")));
         y += VITALS_LINE_H;
 
         root.addWidget(new LabelWidget(VITALS_X, y, () ->
@@ -252,7 +253,7 @@ public final class CharacterSheetUI {
         for (ItemStack stack : items) {
             int bx = ACTIONS_X + col * (ACTION_BTN_W + ACTION_GAP);
             int by = ACTIONS_Y + row * (ACTION_BTN_H + ACTION_GAP);
-            String name = stack.getHoverName().getString();
+            String name = UiText.escape(stack.getHoverName().getString());
             ButtonWidget button = new ButtonWidget(bx, by, ACTION_BTN_W, ACTION_BTN_H,
                     new GuiTextureGroup(ResourceBorderTexture.BUTTON_COMMON, new TextTexture(name)),
                     (ClickData cd) -> MedicalUIParts.requestAction(stack, MedicalUIParts.selectedLimb()));
@@ -334,9 +335,9 @@ public final class CharacterSheetUI {
         for (LimbType limb : LimbType.VALUES) {
             addDebugLine(group, y, () -> {
                 LimbSummary s = MedicalUIParts.limbSummary(limb);
-                return limb.name() + ": hp=" + Math.round(s.healthPercent() * 100.0F) + "%"
+                return UiText.escape(limb.name() + ": hp=" + Math.round(s.healthPercent() * 100.0F) + "%"
                         + " bl=" + fmt(s.bleeding()) + " pn=" + fmt(s.pain())
-                        + " fx=" + s.fracture();
+                        + " fx=" + s.fracture());
             });
             y += DEBUG_LINE_H;
         }

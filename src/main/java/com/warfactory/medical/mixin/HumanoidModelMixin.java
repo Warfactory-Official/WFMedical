@@ -79,6 +79,12 @@ public abstract class HumanoidModelMixin {
                                             float ageInTicks, float netHeadYaw, float headPitch,
                                             CallbackInfo callbackInfo) {
         try {
+            // Vanilla setupAnim re-sets head xRot/yRot every frame but NEVER touches head zRot (it assumes 0).
+            // Our downed head-roll below writes head.zRot, and because the PlayerModel is POOLED/shared across
+            // every player, that roll would otherwise persist into later, non-downed renders (a respawned or
+            // nearby player's head stays crooked). Clear it every render; we re-apply our own roll only while
+            // downed. (Arm/leg zRot are reset by setupAnim itself, so only the head needs this.)
+            this.head.zRot = 0.0F;
             if (!(entity instanceof Player player) || !ClientDownedTracker.isDowned(player.getId())) {
                 return;
             }
@@ -90,7 +96,13 @@ public abstract class HumanoidModelMixin {
                 return;
             }
             Random rng = new Random(player.getId());
-            wfmedical$sprawl(this.head, rng);
+            // Head: OVERWRITE (not add) to a near-neutral resting pose so a passed-out player's head does not
+            // stay cranked toward wherever they were looking when they went down (the animator sets head.yRot
+            // from the frozen look yaw). A tiny seeded tilt keeps it from looking rigid.
+            this.head.xRot = wfmedical$tilt(rng) * 0.5F;
+            this.head.yRot = wfmedical$tilt(rng) * 0.5F;
+            this.head.zRot = wfmedical$tilt(rng);
+            // Limbs: additive sprawl on top of the freshly-animated pose.
             wfmedical$sprawl(this.rightArm, rng);
             wfmedical$sprawl(this.leftArm, rng);
             wfmedical$sprawl(this.rightLeg, rng);

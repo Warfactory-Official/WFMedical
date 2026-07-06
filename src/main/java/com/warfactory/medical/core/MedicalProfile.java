@@ -83,6 +83,14 @@ public final class MedicalProfile {
      */
     private transient boolean lastBroadcastDowned;
 
+    /**
+     * Transient 0..1 "closeness to actual death": how far the bleed-out death timer has run (0 = just went
+     * down / not dying — e.g. an overdose unconsciousness that will recover, 1 = about to die). Derived by the
+     * engine each tick and synced so the client overlay can ramp from an extreme vignette (while merely downed)
+     * to a full-screen blackout only right before death. Never persisted (a live, engine-driven value).
+     */
+    private transient float deathProgress;
+
     // --- Transient admin-forced state override. Deliberately NOT written to / read from NBT: a forced
     //     state is a live debug/admin override (e.g. /wfmedical unconscious on an uninjured player) and must
     //     never survive a save/reload or clone. Honoured by {@link Physiology}, which pins the derived
@@ -249,6 +257,21 @@ public final class MedicalProfile {
 
     public void setLastBroadcastDowned(boolean value) {
         this.lastBroadcastDowned = value;
+    }
+
+    /**
+     * Current 0..1 bleed-out death-timer progress (0 = not dying, 1 = about to die). Transient, never NBT.
+     */
+    public float getDeathProgress() {
+        return deathProgress;
+    }
+
+    public void setDeathProgress(float value) {
+        float clamped = value < 0.0F ? 0.0F : (value > 1.0F ? 1.0F : value);
+        if (clamped != this.deathProgress) {
+            this.deathProgress = clamped;
+            this.dirty = true;
+        }
     }
 
     public boolean isDirty() {

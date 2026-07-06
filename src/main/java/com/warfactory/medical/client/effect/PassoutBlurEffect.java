@@ -146,6 +146,14 @@ public final class PassoutBlurEffect {
         closeChain();
     }
 
+    /**
+     * Snap the blur fade to zero immediately on respawn so a passed-out blur does not linger and blur the
+     * fresh life while it eases back down.
+     */
+    public static void reset() {
+        fade = 0.0F;
+    }
+
     // ------------------------------------------------------------------ internals
 
     /**

@@ -15,7 +15,7 @@ import net.minecraft.network.FriendlyByteBuf;
  * incremental updates go through {@link TraumaDeltaPacket}.</p>
  */
 public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double bloodMl, double maxBloodMl,
-                                float painSuppression, float drugLoad, HealthState state) {
+                                float painSuppression, float drugLoad, HealthState state, float deathProgress) {
 
     /**
      * Build a snapshot from the authoritative server-side profile (reads cached limb aggregates).
@@ -47,7 +47,8 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
                 profile.getMaxBloodMl(),
                 profile.getPainSuppression(),
                 profile.getDrugLoad(),
-                profile.getState());
+                profile.getState(),
+                profile.getDeathProgress());
     }
 
     public static MedicalSyncPacket decode(FriendlyByteBuf buf) {
@@ -79,7 +80,9 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
                     buf.readFloat(),
                     buf.readBoolean());
         }
-        return new MedicalSyncPacket(stats, limbs, bloodMl, maxBloodMl, painSuppression, drugLoad, state);
+        float deathProgress = buf.readFloat();
+        return new MedicalSyncPacket(stats, limbs, bloodMl, maxBloodMl, painSuppression, drugLoad, state,
+                deathProgress);
     }
 
     /**
@@ -127,6 +130,8 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
             buf.writeFloat(s.pain());
             buf.writeBoolean(s.fracture());
         }
+        // 0..1 bleed-out death-timer progress (drives the pre-death blackout ramp on the client overlay).
+        buf.writeFloat(deathProgress);
     }
 
     /**
