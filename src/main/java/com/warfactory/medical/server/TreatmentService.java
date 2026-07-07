@@ -74,7 +74,8 @@ public final class TreatmentService {
             return changed;
         }
 
-        //Generalized
+        // Generalized: a systemic painkiller / analgesia masks pain across the WHOLE body and ignores any
+        // selected limb (contrast NUMB_LIMB below — a locally-applied anesthetic that must be aimed at a limb).
         if (action == TreatmentAction.REDUCE_PAIN) {
             float mag = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;
             float before = profile.getPainSuppression();
@@ -90,22 +91,13 @@ public final class TreatmentService {
 
         //Localized
         if (action == TreatmentAction.NUMB_LIMB) {
-            LimbType targetLimb = limbHint;
-            if (targetLimb == null) {
-                float worst = 0.0F;
-                for (LimbType lt : LimbType.VALUES) {
-                    float pain = profile.limb(lt).getCachedPain();
-                    if (pain > worst) {
-                        worst = pain;
-                        targetLimb = lt;
-                    }
-                }
-            }
-            if (targetLimb == null) {
-                return false; // nothing hurts anywhere
+            // A locally-applied anesthetic must be AIMED: it numbs only the selected limb (no whole-body
+            // effect, no auto-pick). With no limb selected it does nothing (and the item is not consumed).
+            if (limbHint == null) {
+                return false;
             }
             float mag = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;
-            Limb limb = profile.limb(targetLimb);
+            Limb limb = profile.limb(limbHint);
             float before = limb.getLocalNumbing();
             limb.setLocalNumbing(Math.max(before, mag));
             if (limb.getLocalNumbing() == before) {
@@ -114,7 +106,7 @@ public final class TreatmentService {
             profile.markDirty();
             data.bumpRevision();
             MedicalNetworking.sendDelta(player,
-                    new TraumaDeltaPacket(TraumaDeltaPacket.Op.CHANGED, targetLimb, "", 0.0F));
+                    new TraumaDeltaPacket(TraumaDeltaPacket.Op.CHANGED, limbHint, "", 0.0F));
             return true;
         }
 

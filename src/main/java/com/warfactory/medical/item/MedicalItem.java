@@ -26,16 +26,20 @@ import net.minecraft.world.level.Level;
 public class MedicalItem extends Item {
 
     private final Treatment treatment;
-    private final boolean eatAnim;
+    private final UseAnim useAnim;
 
     public MedicalItem(Properties properties, Treatment treatment) {
-        this(properties, treatment, false);
+        this(properties, treatment, UseAnim.BOW);
     }
 
     public MedicalItem(Properties properties, Treatment treatment, boolean eatAnim) {
+        this(properties, treatment, eatAnim ? UseAnim.EAT : UseAnim.BOW);
+    }
+
+    public MedicalItem(Properties properties, Treatment treatment, UseAnim useAnim) {
         super(properties);
         this.treatment = treatment;
-        this.eatAnim = eatAnim;
+        this.useAnim = useAnim;
     }
 
     public Treatment getTreatment() {
@@ -50,7 +54,7 @@ public class MedicalItem extends Item {
 
     @Override
     public UseAnim getUseAnimation(ItemStack stack) {
-        return eatAnim ? UseAnim.EAT : UseAnim.BOW;
+        return useAnim;
     }
 
     @Override

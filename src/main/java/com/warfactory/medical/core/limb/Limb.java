@@ -21,9 +21,9 @@ public final class Limb {
     private float maxHealth;
     private float minorDamage;
     /**
-     * LOCALIZED numbing (0..1) on this limb from a local anesthetic: strongly reduces this limb's felt pain
-     * without touching the underlying injury. Persisted; decays over time in the engine. Distinct from the
-     * profile-wide GENERAL numbing (painkillers) which masks every limb at once.
+     * LOCAL ANESTHETIC numbing (0..1) on this limb: strongly reduces this limb's felt pain without touching
+     * the underlying injury. Persisted; decays over time in the engine. Distinct from the profile-wide
+     * systemic ANALGESIA (painkillers) which masks every limb at once.
      */
     private float localNumbing;
     // Cached aggregates (valid while !dirty).

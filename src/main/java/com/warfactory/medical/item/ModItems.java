@@ -7,6 +7,7 @@ import com.warfactory.medical.core.trauma.TraumaCategory;
 import com.warfactory.medical.core.treatment.Treatment;
 import com.warfactory.medical.core.treatment.TreatmentAction;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.UseAnim;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -43,9 +44,11 @@ public final class ModItems {
     public static final RegistryObject<Item> PAINKILLERS = medical("painkillers",
             new Treatment(TreatmentAction.REDUCE_PAIN,
                     cats(), 0.5F, 0.0D, 30, false), true);
+    // Local anesthetic: a locally-APPLIED medicine — injected into a single limb (SPEAR/needle pose), unlike
+    // the swallowed general painkiller (EAT). Numbs only the aimed limb.
     public static final RegistryObject<Item> LOCAL_ANESTHETIC = medical("local_anesthetic",
             new Treatment(TreatmentAction.NUMB_LIMB,
-                    cats(), 0.9F, 0.0D, 50, false), true);
+                    cats(), 0.9F, 0.0D, 50, false), UseAnim.SPEAR);
     public static final RegistryObject<Item> TOURNIQUET = medical("tourniquet",
             new Treatment(TreatmentAction.REDUCE_BLEEDING,
                     cats(TraumaCategory.LACERATION, TraumaCategory.PUNCTURE, TraumaCategory.INTERNAL_BLEEDING),
@@ -76,6 +79,11 @@ public final class ModItems {
     private static RegistryObject<Item> medical(String name, Treatment treatment, boolean eatAnim) {
         return ITEMS.register(name,
                 () -> new MedicalItem(new Item.Properties().stacksTo(16), treatment, eatAnim));
+    }
+
+    private static RegistryObject<Item> medical(String name, Treatment treatment, UseAnim useAnim) {
+        return ITEMS.register(name,
+                () -> new MedicalItem(new Item.Properties().stacksTo(16), treatment, useAnim));
     }
 
     private static RegistryObject<Item> injectable(String name, Substance substance) {

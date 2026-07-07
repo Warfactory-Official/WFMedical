@@ -26,9 +26,9 @@ public final class MedicalProfile {
     private HealthState state = HealthState.HEALTHY;
     private long bleedoutSinceTick = -1L;
     /**
-     * GENERAL numbing (0..1) from systemic painkillers/opioids: a body-wide subtractive mask applied to
-     * every limb's felt pain (small pains vanish, big ones are lessened). Decays over time, never heals the
-     * wound. Localized numbing (a single limb) lives per-{@link Limb} instead.
+     * ANALGESIA (0..1) from systemic painkillers/opioids: a body-wide subtractive mask applied to every
+     * limb's felt pain (small pains vanish, big ones are lessened). Decays over time, never heals the wound.
+     * The LOCAL ANESTHETIC (a single limb) lives per-{@link Limb} instead — that is the local/general split.
      */
     private float painSuppression;
     /**

@@ -38,18 +38,18 @@ public final class Physiology {
         }
 
         // --- PAIN (per body part, capped by a configurable SHARE) --------------------------------------
-        // Each limb's raw pain saturates locally (diminishing returns), is reduced by any LOCALIZED numbing
-        // on that limb, then has the GENERAL numbing mask subtracted (a systemic painkiller floor: small
+        // Each limb's raw pain saturates locally (diminishing returns), is reduced by any LOCAL ANESTHETIC
+        // on that limb, then has the systemic ANALGESIA (painkiller) mask subtracted (a body-wide floor: small
         // pains vanish entirely, large ones are merely lessened). Two aggregates come out of this:
         //   perceivedPain = the worst single limb's masked pain -> what the player FEELS (sway/vignette/HUD)
         //   systemicPain  = SUM over limbs of (bodyPartShare * maskedPain), clamped to 1 -> what drives
         //                   shock + unconsciousness. Because arms carry a tiny share, an agonising arm reads
         //                   high on perceived pain yet contributes almost nothing to shock.
-        float generalNumb = p.getPainSuppression();
-        if (generalNumb < 0.0F) {
-            generalNumb = 0.0F;
-        } else if (generalNumb > 1.0F) {
-            generalNumb = 1.0F;
+        float analgesia = p.getPainSuppression();
+        if (analgesia < 0.0F) {
+            analgesia = 0.0F;
+        } else if (analgesia > 1.0F) {
+            analgesia = 1.0F;
         }
         float saturationK = cfg.painSaturationK();
         if (saturationK <= 0.0F) {
@@ -64,11 +64,11 @@ public final class Physiology {
                 continue;
             }
             float local = raw / (raw + saturationK);            // per-limb diminishing returns (0..1)
-            float localNumb = limb.getLocalNumbing();
-            if (localNumb > 0.0F) {                              // localized anesthetic on THIS limb
-                local *= (1.0F - (Math.min(localNumb, 1.0F)));
+            float anesthetic = limb.getLocalNumbing();
+            if (anesthetic > 0.0F) {                             // local anesthetic on THIS limb
+                local *= (1.0F - (Math.min(anesthetic, 1.0F)));
             }
-            float masked = local - generalNumb;                 // general (systemic) numbing subtractive mask
+            float masked = local - analgesia;                   // systemic analgesia (painkiller) subtractive mask
             if (masked <= 0.0F) {
                 continue;
             }

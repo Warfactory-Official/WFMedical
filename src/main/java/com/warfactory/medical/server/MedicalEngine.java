@@ -35,13 +35,13 @@ public final class MedicalEngine {
      */
     private static final float MAJOR_WORSEN_PER_TICK = 0.00015F;
     /**
-     * Rate at which the GENERAL numbing (systemic painkiller) mask wears off, per tick (a full dose lasts
-     * ~tens of seconds).
+     * Rate at which the systemic ANALGESIA (painkiller) mask wears off, per tick (a full dose lasts ~tens of
+     * seconds).
      */
     private static final float PAIN_SUPPRESSION_DECAY_PER_TICK = 0.0008F;
     /**
-     * Rate at which a limb's LOCALIZED numbing (local anesthetic) wears off, per tick. Slower than the general
-     * mask so a targeted block lasts a good while (a full 0.9 dose at the engine cadence lasts ~1.5 minutes).
+     * Rate at which a limb's LOCAL ANESTHETIC wears off, per tick. Slower than the systemic analgesia mask so
+     * a targeted block lasts a good while (a full 0.9 dose at the engine cadence lasts ~1.5 minutes).
      */
     private static final float LOCAL_NUMB_DECAY_PER_TICK = 0.0005F;
 

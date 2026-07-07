@@ -1033,7 +1033,7 @@ public final class WFMedicalCommands {
         sb.append("\n blood: ").append(fmt(profile.getBloodMl())).append(" / ").append(fmt(profile.getMaxBloodMl())).append(" ml");
         sb.append("\n pain: perceived=").append(fmt(stats.totalPain()))
                 .append("  systemic=").append(fmt(stats.systemicPain()))
-                .append("  generalNumb=").append(fmt(profile.getPainSuppression()))
+                .append("  analgesia=").append(fmt(profile.getPainSuppression()))
                 .append("  drugLoad=").append(fmt(profile.getDrugLoad()));
         sb.append("\n adrenaline: painKoPending=").append(stats.painKoPending())
                 .append("  exhausted=").append(profile.isAdrenalineExhausted())
@@ -1070,7 +1070,7 @@ public final class WFMedicalCommands {
             sb.append("\n [").append(lt.name()).append("] hp~").append(fmt(pct)).append("%")
                     .append(" bleed=").append(fmt(limb.getCachedBleeding()))
                     .append(" pain=").append(fmt(limb.getCachedPain()))
-                    .append(" numb=").append(fmt(limb.getLocalNumbing()))
+                    .append(" anesthetic=").append(fmt(limb.getLocalNumbing()))
                     .append(" fracture=").append(limb.hasCachedFracture());
             List<Trauma> traumas = limb.getTraumas();
             if (traumas.isEmpty()) {
