@@ -2,6 +2,7 @@ package com.warfactory.medical.client.effect;
 
 import com.mojang.blaze3d.shaders.AbstractUniform;
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.mixin.PostChainAccessor;
 import com.warfactory.medical.network.ClientMedicalCache;
 import com.warfactory.medical.network.MedicalSyncPacket;
@@ -40,20 +41,20 @@ import java.util.List;
  * </ul>
  *
  * <h2>Intensity model</h2>
- * <p>{@code f = bloodMl / maxBloodMl}. Above {@link #LOW_FRACTION} the effect is off. Below it the effect
- * ramps linearly with {@code t = (LOW - f) / LOW} (so {@code t = 0} at the threshold, {@code t = 1} at an
- * empty pool), and {@code amount = MAX_DESATURATION * t}. The shader receives {@code Saturation = 1 - amount}
- * (1 = full color, 0 = grayscale).</p>
+ * <p>Anchored to the bleed-out DEATH threshold, not an empty pool. Blood LOSS fraction
+ * {@code loss = 1 - bloodMl/maxBloodMl} is mapped as {@code t = loss / bloodDeathLossFraction} (clamped
+ * 0..1), so {@code t = 0} at full blood and {@code t = 1} exactly at the loss that kills you
+ * ({@link MedicalConfig#bloodDeathLossFraction()}, default 0.40 = 60% remaining). Because death fires at that
+ * point, blood never drops further, so anchoring here is what actually makes the greyout visible as you bleed
+ * toward death (the old {@code < 0.60 remaining} start sat right on the death line, leaving zero range).
+ * {@code amount = MAX_DESATURATION * t}; the shader receives {@code Saturation = 1 - amount} (1 = full color,
+ * 0 = grayscale).</p>
  */
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class BloodDesaturationEffect {
 
     /**
-     * Blood fraction at/above which no desaturation is applied (mirrors PhysiologyParams bloodLowFraction).
-     */
-    private static final float LOW_FRACTION = 0.60F;
-    /**
-     * Maximum desaturation amount at an empty blood pool (0 = untouched, 1 = full grayscale).
+     * Maximum desaturation amount at the bleed-out death threshold (0 = untouched, 1 = full grayscale).
      */
     private static final float MAX_DESATURATION = 0.85F;
     /**
@@ -181,7 +182,8 @@ public final class BloodDesaturationEffect {
     }
 
     /**
-     * @return the current desaturation amount (0..MAX_DESATURATION) from the synced blood fraction.
+     * @return the current desaturation amount (0..MAX_DESATURATION) from the synced blood fraction, ramped so
+     * it reaches maximum exactly at the bleed-out death loss ({@link MedicalConfig#bloodDeathLossFraction()}).
      */
     private static float desaturationAmount() {
         MedicalSyncPacket snap = ClientMedicalCache.get();
@@ -192,11 +194,13 @@ public final class BloodDesaturationEffect {
         if (maxBloodMl <= 0.0D) {
             return 0.0F;
         }
-        float f = (float) (snap.bloodMl() / maxBloodMl);
-        if (f >= LOW_FRACTION) {
+        float remaining = (float) (snap.bloodMl() / maxBloodMl);
+        float loss = 1.0F - remaining;
+        float deathLoss = (float) MedicalConfig.bloodDeathLossFraction();
+        if (deathLoss <= 0.0F) {
             return 0.0F;
         }
-        float t = (LOW_FRACTION - f) / LOW_FRACTION;
+        float t = loss / deathLoss;
         if (t < 0.0F) {
             t = 0.0F;
         } else if (t > 1.0F) {

@@ -8,6 +8,7 @@ public enum DamageCategory {
     BALLISTIC,
     SLASHING,
     BLUNT,
+    UNARMED,
     PIERCING,
     FIRE,
     EXPLOSION,

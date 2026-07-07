@@ -2,6 +2,7 @@ package com.warfactory.medical.client.overlay;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -18,17 +19,16 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * CLIENT-ONLY screen effect: a pulsating RED vignette hugging the screen edges whose intensity scales
- * with perceived pain ({@link ClientMedicalCache#stats()}.{@code totalPain()}, already a saturated 0..1
- * value with painkiller masking applied). This mirrors the vanilla low-health / portal vignette drawn by
- * {@code net.minecraft.client.gui.Gui#renderVignette} using {@code textures/misc/vignette.png}, but tinted
- * red and animated with a sine pulse.
+ * CLIENT-ONLY screen effect: a pulsating BLACK vignette closing in from the screen edges whose intensity
+ * scales with perceived pain ({@link ClientMedicalCache#stats()}.{@code totalPain()}, already a saturated
+ * 0..1 value with painkiller masking applied), reaching full at the pain that knocks you unconscious
+ * ({@link MedicalConfig#painUnconsciousThreshold()}). Mirrors the vanilla low-health / portal vignette drawn
+ * by {@code net.minecraft.client.gui.Gui#renderVignette} using {@code textures/misc/vignette.png}, animated
+ * with a sine pulse (a throb that quickens as pain rises).
  *
- * <p>Unlike vanilla's darkening blend ({@code ZERO / ONE_MINUS_SRC_COLOR}), this uses an ADDITIVE blend
- * ({@code SRC_ALPHA / ONE}) so the vignette texture's opaque edges GLOW red rather than darken, reading as
- * pain rather than dying. The shader colour is set to {@code (1, 0.05, 0.05, alpha)} so only the red
- * channel meaningfully contributes; the additive destination factor means the alpha in the shader colour
- * scales the emitted red per-texel.</p>
+ * <p>Like vanilla, this DARKENS the edges rather than glowing: a {@code ZERO / ONE_MINUS_SRC_ALPHA} colour
+ * blend multiplies the framebuffer toward black at the edges by the texture's alpha gradient scaled by our
+ * alpha, so the screen edges close in dark as pain rises (tunnel vision) while the centre stays clear.</p>
  *
  * <p>Cost is ~zero for a healthy player: {@link #render} early-returns before touching any GL state while
  * {@code pain <= 0.02}. It reads synced client state only, never mutates medical state, guards every
@@ -105,13 +105,19 @@ public final class PainVignetteOverlay implements IGuiOverlay {
         if (pain <= PAIN_THRESHOLD) {
             return;
         }
-        if (pain > 1.0F) {
-            pain = 1.0F;
+        // Ramp so the vignette reaches full intensity at the pain that KNOCKS YOU OUT
+        // (painUnconsciousThreshold, default 0.70), not at the near-unreachable pain=1. t=0 at the visibility
+        // threshold, t=1 at passout -- the pain analogue of anchoring the blood greyout to the death loss.
+        float passout = MedicalConfig.painUnconsciousThreshold();
+        float span = passout - PAIN_THRESHOLD;
+        float intensity = span <= 0.0F ? 1.0F : (pain - PAIN_THRESHOLD) / span;
+        if (intensity > 1.0F) {
+            intensity = 1.0F;
         }
 
         // Time base in ticks + partial for a smooth (frame-rate independent) pulse.
         ClientLevel level = mc.level;
-        float pulseSpeed = Mth.lerp(pain, PULSE_SPEED_MIN, PULSE_SPEED_MAX);
+        float pulseSpeed = Mth.lerp(intensity, PULSE_SPEED_MIN, PULSE_SPEED_MAX);
         // getGameTime() grows without bound; multiplying it (as a float) into Mth.sin loses sub-index
         // precision on established worlds, stalling the pulse. Reduce the phase modulo one period in
         // double first so the argument stays small and the sine keeps advancing smoothly.
@@ -119,7 +125,7 @@ public final class PainVignetteOverlay implements IGuiOverlay {
         float pulse = 0.5F + 0.5F * Mth.sin((float) (phase % (2.0 * Math.PI))); // 0..1
         float modulation = (1.0F - PULSE_DEPTH) + PULSE_DEPTH * pulse; // steady floor + throb
 
-        float alpha = pain * BASE_STRENGTH * modulation;
+        float alpha = intensity * BASE_STRENGTH * modulation;
         if (alpha <= 0.0F) {
             return;
         }
@@ -127,16 +133,18 @@ public final class PainVignetteOverlay implements IGuiOverlay {
             alpha = MAX_ALPHA;
         }
 
-        // --- Vanilla renderVignette idiom, tinted red + additive so edges GLOW instead of darken. ---
+        // --- Vanilla renderVignette idiom: BLACK edge darkening (tunnel vision), intensity scaled by pain. ---
         RenderSystem.enableBlend();
-        // SRC_ALPHA / ONE for colour = additive red edge glow; keep alpha channel intact (ONE / ZERO).
+        // ZERO / ONE_MINUS_SRC_ALPHA on colour multiplies the framebuffer toward black at the edges, by the
+        // vignette texture's alpha gradient scaled by our alpha (so the edges close in dark as pain rises);
+        // keep the destination alpha channel intact (ONE / ZERO).
         RenderSystem.blendFuncSeparate(
-                com.mojang.blaze3d.platform.GlStateManager.SourceFactor.SRC_ALPHA,
-                com.mojang.blaze3d.platform.GlStateManager.DestFactor.ONE,
+                com.mojang.blaze3d.platform.GlStateManager.SourceFactor.ZERO,
+                com.mojang.blaze3d.platform.GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
                 com.mojang.blaze3d.platform.GlStateManager.SourceFactor.ONE,
                 com.mojang.blaze3d.platform.GlStateManager.DestFactor.ZERO);
         RenderSystem.depthMask(false);
-        RenderSystem.setShaderColor(1.0F, 0.05F, 0.05F, alpha);
+        RenderSystem.setShaderColor(0.0F, 0.0F, 0.0F, alpha);
         // Stretch the whole vignette texture across the screen (uWidth==textureWidth => full 0..1 sample).
         graphics.blit(VIGNETTE_TEXTURE, 0, 0, Z_OFFSET, 0.0F, 0.0F, screenW, screenH, screenW, screenH);
 

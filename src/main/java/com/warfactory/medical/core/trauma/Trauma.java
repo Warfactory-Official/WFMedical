@@ -12,6 +12,11 @@ public final class Trauma {
     private final TraumaType type;
     private final LimbType limb;
     private float severity;
+    /**
+     * Severity as originally inflicted (grows only by stacking/merge, never by time-worsening). Bleeding is
+     * capped to this so untreated-major worsening ramps PAIN but NOT the blood-loss rate.
+     */
+    private float baseSeverity;
     private boolean treated;
     private boolean sutured;
     private boolean stabilized;
@@ -22,6 +27,7 @@ public final class Trauma {
         this.type = type;
         this.limb = limb;
         this.severity = clampSeverity(severity);
+        this.baseSeverity = this.severity;
         this.timestamp = timestamp;
     }
 
@@ -36,6 +42,8 @@ public final class Trauma {
         }
         LimbType limb = LimbType.byOrdinal(tag.getInt("Limb"));
         Trauma t = new Trauma(type, limb, tag.getFloat("Severity"), tag.getLong("Timestamp"));
+        // Older saves lack BaseSeverity -> fall back to the (already-clamped) current severity.
+        t.baseSeverity = tag.contains("BaseSeverity") ? t.clampSeverity(tag.getFloat("BaseSeverity")) : t.severity;
         t.treated = tag.getBoolean("Treated");
         t.sutured = tag.getBoolean("Sutured");
         t.stabilized = tag.getBoolean("Stabilized");
@@ -110,7 +118,10 @@ public final class Trauma {
         if (sutured) {
             return 0.0F;
         }
-        float base = type.getBleedingPerSeverity() * severity;
+        // Cap at the ORIGINAL severity: an untreated wound worsens over time (which raises pain), but its
+        // bleeding rate must stay flat -- stacking new wounds still adds, healing still lowers it.
+        float bleedSeverity = Math.min(severity, baseSeverity);
+        float base = type.getBleedingPerSeverity() * bleedSeverity;
         return treated ? base * 0.25F : base;
     }
 
@@ -153,6 +164,7 @@ public final class Trauma {
      */
     public void mergeIn(Trauma other) {
         this.severity = clampSeverity(this.severity + other.severity);
+        this.baseSeverity = clampSeverity(this.baseSeverity + other.baseSeverity);
         // A merged wound is only as "handled" as its least-treated component.
         this.treated = this.treated && other.treated;
         this.sutured = this.sutured && other.sutured;
@@ -166,6 +178,7 @@ public final class Trauma {
         tag.putString("Type", type.getId());
         tag.putInt("Limb", limb.ordinal());
         tag.putFloat("Severity", severity);
+        tag.putFloat("BaseSeverity", baseSeverity);
         tag.putBoolean("Treated", treated);
         tag.putBoolean("Sutured", sutured);
         tag.putBoolean("Stabilized", stabilized);

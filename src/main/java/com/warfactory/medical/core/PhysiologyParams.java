@@ -19,6 +19,7 @@ package com.warfactory.medical.core;
  * @param bloodUnconsciousLossFraction fraction LOST at which blood loss starts feeding the unconsciousness score.
  * @param painUnconsciousThreshold   perceived pain (0..1) above which pain feeds the unconsciousness score.
  * @param painUnconsciousWeight      how much fully-saturated pain contributes to the unconsciousness score.
+ * @param bloodMovementPenaltyLossFraction fraction of blood LOST above which walk/jump speed is penalised.
  */
 public record PhysiologyParams(
         float maxHealthPoints,
@@ -35,7 +36,8 @@ public record PhysiologyParams(
         double bloodDeathLossFraction,
         double bloodUnconsciousLossFraction,
         float painUnconsciousThreshold,
-        float painUnconsciousWeight
+        float painUnconsciousWeight,
+        double bloodMovementPenaltyLossFraction
 ) {
     public static PhysiologyParams defaults() {
         return new PhysiologyParams(
@@ -53,7 +55,8 @@ public record PhysiologyParams(
                 0.40D,      // bloodDeathLossFraction
                 0.30D,      // bloodUnconsciousLossFraction
                 0.70F,      // painUnconsciousThreshold
-                0.50F       // painUnconsciousWeight
+                1.00F,      // painUnconsciousWeight
+                0.25D       // bloodMovementPenaltyLossFraction
         );
     }
 }

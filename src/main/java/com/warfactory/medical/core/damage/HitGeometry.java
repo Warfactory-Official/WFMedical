@@ -119,12 +119,36 @@ public final class HitGeometry {
         if (seg == null) {
             return false; // point-only / no-ray source -> not a gap
         }
-        // Fast path: the ray crosses the real collision box -> a solid centre-mass hit, no rig needed.
-        if (victim.getBoundingBox().clip(seg[0], seg[1]).isPresent()) {
+
+        return rigRayPick(victim, seg[0], seg[1]) == null;
+    }
+
+
+    public static boolean shouldRejectGap(LivingEntity victim, DamageSource src, DamageCategory cat) {
+        HitRegMode mode = MedicalConfig.hitRegistrationMode();
+        if (mode == HitRegMode.OFF) {
             return false;
         }
-        // Margin shot only: build the rig and test the actual limb boxes. Gap (whiff) if it hits none.
-        return rigRayPick(victim, seg[0], seg[1]) == null;
+        if (isDirectMelee(src)) {
+            // Melee: only a PLAYER's crosshair is precise enough to gap-test; skip mob melee entirely.
+            if (!(src.getEntity() instanceof Player)) {
+                return false;
+            }
+            return isGapShot(victim, src, cat);
+        }
+        // Ranged / positional: strict only in PRECISE.
+        if (mode != HitRegMode.PRECISE) {
+            return false;
+        }
+        return isGapShot(victim, src, cat);
+    }
+
+    public static boolean isDirectMelee(DamageSource src) {
+        if (src == null) {
+            return false;
+        }
+        var attacker = src.getEntity();
+        return attacker instanceof LivingEntity && src.getDirectEntity() == attacker;
     }
 
 

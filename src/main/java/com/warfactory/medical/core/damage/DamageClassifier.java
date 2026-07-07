@@ -4,6 +4,7 @@ import com.warfactory.medical.compat.TaczCompat;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.entity.LivingEntity;
 
 import java.util.Locale;
 
@@ -58,10 +59,14 @@ public final class DamageClassifier {
             return DamageCategory.PIERCING;
         }
 
-        // Sharp melee from mobs/players is treated as slashing.
+        // Melee from mobs/players. A bare-handed strike (empty main hand) is UNARMED – blunt, mostly bruising;
+        // an armed strike (or an environmental sting/thorn) is treated as slashing.
         if (is(source, DamageTypes.PLAYER_ATTACK) || is(source, DamageTypes.MOB_ATTACK)
-                || is(source, DamageTypes.MOB_ATTACK_NO_AGGRO) || is(source, DamageTypes.STING)
-                || is(source, DamageTypes.SWEET_BERRY_BUSH) || is(source, DamageTypes.CACTUS)) {
+                || is(source, DamageTypes.MOB_ATTACK_NO_AGGRO)) {
+            return isUnarmed(source) ? DamageCategory.UNARMED : DamageCategory.SLASHING;
+        }
+        if (is(source, DamageTypes.STING) || is(source, DamageTypes.SWEET_BERRY_BUSH)
+                || is(source, DamageTypes.CACTUS)) {
             return DamageCategory.SLASHING;
         }
 
@@ -72,6 +77,11 @@ public final class DamageClassifier {
         }
 
         return DamageCategory.GENERIC;
+    }
+
+    /** True when the melee attacker is striking with an empty main hand (a punch). */
+    private static boolean isUnarmed(DamageSource source) {
+        return source.getEntity() instanceof LivingEntity attacker && attacker.getMainHandItem().isEmpty();
     }
 
     private static boolean is(DamageSource source, net.minecraft.tags.TagKey<net.minecraft.world.damagesource.DamageType> tag) {

@@ -68,6 +68,15 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.BooleanValue TACZ_ARM_POSE;
     private static final ForgeConfigSpec.EnumValue<HitRegMode> HITREG_MODE;
     private static final ForgeConfigSpec.DoubleValue HIT_ENVELOPE_INFLATION;
+    private static final ForgeConfigSpec.DoubleValue BLOOD_MOVEMENT_PENALTY_LOSS_FRACTION;
+    private static final ForgeConfigSpec.DoubleValue BLEEDING_SELF_HEAL_THRESHOLD;
+    private static final ForgeConfigSpec.DoubleValue BLEEDING_SELF_HEAL_RATE;
+    private static final ForgeConfigSpec.DoubleValue FRACTURE_SELF_HEAL_MINUTES;
+    private static final ForgeConfigSpec.DoubleValue UNARMED_MAJOR_CHANCE;
+    private static final ForgeConfigSpec.BooleanValue PAIN_SWAY_ENABLED;
+    private static final ForgeConfigSpec.DoubleValue PAIN_SWAY_STRENGTH;
+    private static final ForgeConfigSpec.DoubleValue BROKEN_ARM_AIM_SWAY;
+    private static final ForgeConfigSpec.IntValue BROKEN_ARM_MELEE_WEAKNESS_LEVEL;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -105,11 +114,31 @@ public final class MedicalConfig {
                         + "Severe pain past this point pushes the player toward passing out.")
                 .defineInRange("painUnconsciousThreshold", 0.70D, 0.0D, 1.0D);
         PAIN_UNCONSCIOUS_WEIGHT = b
-                .comment("How much FULLY-saturated pain (1.0) contributes to the unconsciousness score. 1.0 means "
-                        + "max pain alone can knock you out; 0.5 (default) means pain can only tip you over when "
-                        + "combined with blood loss. The score is the sum of the blood-loss and pain contributions; "
-                        + "reaching 1.0 on any recalculation instantly renders the player unconscious.")
-                .defineInRange("painUnconsciousWeight", 0.50D, 0.0D, 4.0D);
+                .comment("Weight of the pain factor in the unconsciousness score. The score is the SUM of an "
+                        + "independent blood-loss factor (reaches 1.0 at bloodUnconsciousLossFraction) and a pain "
+                        + "factor (reaches 1.0 at painUnconsciousThreshold, then scaled by this weight); reaching "
+                        + "1.0 total knocks the player out. 1.0 (default) = severe pain alone can down you; lower "
+                        + "= pain only contributes toward a combined blood-loss + pain knockout.")
+                .defineInRange("painUnconsciousWeight", 1.00D, 0.0D, 4.0D);
+        BLOOD_MOVEMENT_PENALTY_LOSS_FRACTION = b
+                .comment("Fraction of total blood LOST above which walk/jump speed is penalised (ramping to the "
+                        + "pain-speed floor at the death loss). Non-leg injuries and general pain never affect "
+                        + "speed; only leg injuries and blood loss past this threshold do. Default 0.25 = 25% lost.")
+                .defineInRange("bloodMovementPenaltyLossFraction", 0.25D, 0.0D, 1.0D);
+        BLEEDING_SELF_HEAL_THRESHOLD = b
+                .comment("Severity (0..1) at or below which an UNTREATED bleeding wound slowly clots and closes on "
+                        + "its own (natural hemostasis). A more severe bleed cannot be stopped by the body alone "
+                        + "and keeps bleeding (worsening) until treated. Default 0.30.")
+                .defineInRange("bleedingSelfHealThreshold", 0.30D, 0.0D, 1.0D);
+        BLEEDING_SELF_HEAL_RATE = b
+                .comment("Severity reduction PER TICK applied to a self-clotting wound (one at or below the "
+                        + "self-heal threshold). Small = the wound takes a long while to close. Default 0.0003.")
+                .defineInRange("bleedingSelfHealRate", 0.0003D, 0.0D, 1.0D);
+        FRACTURE_SELF_HEAL_MINUTES = b
+                .comment("Real-time minutes for a full-severity fracture to knit and heal ON ITS OWN while "
+                        + "untreated (a partial fracture heals proportionally faster). Splinting/treating it is "
+                        + "faster. 0 = fractures never self-heal (they worsen until treated). Default 20.")
+                .defineInRange("fractureSelfHealMinutes", 20.0D, 0.0D, 600.0D);
         b.pop();
 
         b.push("features");
@@ -152,6 +181,26 @@ public final class MedicalConfig {
         LEG_FRACTURE_SPEED_MULTIPLIER = b
                 .comment("Movement speed multiplier applied per fractured leg (1.0 = no penalty).")
                 .defineInRange("legFractureSpeedMultiplier", 0.40D, 0.0D, 1.0D);
+        UNARMED_MAJOR_CHANCE = b
+                .comment("Chance (0..1) that a bare-handed PUNCH to the torso or head produces a minor internal "
+                        + "bleed (major trauma) instead of just a bruise. Punches to any other limb are always "
+                        + "just bruising. Default 0.15.")
+                .defineInRange("unarmedMajorChance", 0.15D, 0.0D, 1.0D);
+        PAIN_SWAY_ENABLED = b
+                .comment("If true, high pain makes the local player's aim drift/tremble (harder to aim). Client-side.")
+                .define("painSwayEnabled", true);
+        PAIN_SWAY_STRENGTH = b
+                .comment("Multiplier on the pain aim-sway amplitude (0 = off, 1 = default, higher = shakier).")
+                .defineInRange("painSwayStrength", 1.0D, 0.0D, 5.0D);
+        BROKEN_ARM_AIM_SWAY = b
+                .comment("Aim-sway intensity (0..1) forced while aiming a bow / crossbow / TACZ gun with a broken "
+                        + "arm: a broken arm cannot hold a weapon steady, and ADS does not brace it away. 1.0 = "
+                        + "full sway. Default 0.9.")
+                .defineInRange("brokenArmAimSway", 0.90D, 0.0D, 1.0D);
+        BROKEN_ARM_MELEE_WEAKNESS_LEVEL = b
+                .comment("Weakness effect level applied to a player with a broken arm, weakening their MELEE "
+                        + "attacks. 1 = Weakness I, 2 = Weakness II, etc.; 0 = disabled. Default 1.")
+                .defineInRange("brokenArmMeleeWeaknessLevel", 1, 0, 10);
         DRUG_DECAY_PER_TICK = b
                 .comment("How much injectable drug load decays per tick (higher = shorter dosing window before it clears).")
                 .defineInRange("drugDecayPerTick", 0.0005D, 0.0D, 1.0D);
@@ -314,6 +363,42 @@ public final class MedicalConfig {
 
     public static float painUnconsciousWeight() {
         return PAIN_UNCONSCIOUS_WEIGHT.get().floatValue();
+    }
+
+    public static double bloodMovementPenaltyLossFraction() {
+        return BLOOD_MOVEMENT_PENALTY_LOSS_FRACTION.get();
+    }
+
+    public static double bleedingSelfHealThreshold() {
+        return BLEEDING_SELF_HEAL_THRESHOLD.get();
+    }
+
+    public static double bleedingSelfHealRate() {
+        return BLEEDING_SELF_HEAL_RATE.get();
+    }
+
+    public static double fractureSelfHealMinutes() {
+        return FRACTURE_SELF_HEAL_MINUTES.get();
+    }
+
+    public static double unarmedMajorChance() {
+        return UNARMED_MAJOR_CHANCE.get();
+    }
+
+    public static boolean painSwayEnabled() {
+        return PAIN_SWAY_ENABLED.get();
+    }
+
+    public static double painSwayStrength() {
+        return PAIN_SWAY_STRENGTH.get();
+    }
+
+    public static double brokenArmAimSway() {
+        return BROKEN_ARM_AIM_SWAY.get();
+    }
+
+    public static int brokenArmMeleeWeaknessLevel() {
+        return BROKEN_ARM_MELEE_WEAKNESS_LEVEL.get();
     }
 
     public static boolean enableFractures() {
@@ -556,7 +641,8 @@ public final class MedicalConfig {
                 bloodDeathLossFraction(),
                 bloodUnconsciousLossFraction(),
                 painUnconsciousThreshold(),
-                painUnconsciousWeight()
+                painUnconsciousWeight(),
+                bloodMovementPenaltyLossFraction()
         );
     }
 }

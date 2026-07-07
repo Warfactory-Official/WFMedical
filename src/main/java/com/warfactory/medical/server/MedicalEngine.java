@@ -137,6 +137,14 @@ public final class MedicalEngine {
             MedicalEffects.apply(player, stats);
         }
 
+        // (4.5) Broken arm -> weakened melee: apply Weakness while any arm is fractured. Re-applied each pass
+        // (short duration) so it outlives the engine cadence and lapses on its own shortly after the fracture
+        // is treated. Ranged aim is separately ruined by the client aim-sway floor; this is the melee half.
+        int armWeakness = MedicalConfig.brokenArmMeleeWeaknessLevel();
+        if (armWeakness > 0 && stats.anyArmFracture()) {
+            player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 60, armWeakness - 1, true, false, true));
+        }
+
         // (5) Delta-ish sync: only when the authoritative revision moved past the last sent one.
         if (wasDirty) {
             data.bumpRevision();
@@ -371,10 +379,34 @@ public final class MedicalEngine {
                             }
                             changed = true;
                         }
-                    } else if (t.getSeverity() < t.getType().getMaxSeverity()) {
-                        // Untreated major trauma slowly worsens.
-                        t.setSeverity(t.getSeverity() + MAJOR_WORSEN_PER_TICK * interval);
-                        changed = true;
+                    } else {
+                        // Untreated MAJOR trauma evolves on its own:
+                        //  - a bleeding wound the body can keep up with (severity at/below the self-heal
+                        //    threshold, default 0.3) slowly CLOTS -- the wound closes and its bleeding fades;
+                        //  - a FRACTURE slowly KNITS over a long time (fractureSelfHealMinutes, default 20 min),
+                        //    even untreated -- splinting just makes it faster (the treated branch above);
+                        //  - anything else (a severe bleed) slowly WORSENS until it is treated.
+                        boolean bleeds = t.getType().getBleedingPerSeverity() > 0.0F;
+                        double fractureMinutes = MedicalConfig.fractureSelfHealMinutes();
+                        if (bleeds && t.getSeverity() <= (float) MedicalConfig.bleedingSelfHealThreshold()) {
+                            t.setSeverity(t.getSeverity() - (float) MedicalConfig.bleedingSelfHealRate() * interval);
+                            if (t.getSeverity() <= 0.0F && !t.getType().isPermanent()) {
+                                traumas.remove(i);
+                            }
+                            changed = true;
+                        } else if (t.isFracture() && fractureMinutes > 0.0) {
+                            // A full-severity fracture heals in fractureMinutes real minutes (1200 ticks/min);
+                            // a partial one heals proportionally faster.
+                            float rate = (float) (1.0 / (fractureMinutes * 1200.0));
+                            t.setSeverity(t.getSeverity() - rate * interval);
+                            if (t.getSeverity() <= 0.0F && !t.getType().isPermanent()) {
+                                traumas.remove(i);
+                            }
+                            changed = true;
+                        } else if (t.getSeverity() < t.getType().getMaxSeverity()) {
+                            t.setSeverity(t.getSeverity() + MAJOR_WORSEN_PER_TICK * interval);
+                            changed = true;
+                        }
                     }
                 }
             }

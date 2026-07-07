@@ -92,26 +92,31 @@ public final class Physiology {
         // In this model current health tracks the derived max; integration may clamp it lower.
         float effectiveCurrentHealth = effectiveMaxHealth;
 
-        // --- Unconsciousness SCORE (0..1): a weighted, EXTENSIBLE combination of the factors that push a
-        // player toward passing out. Reaching 1.0 on this recalculation renders the player unconscious
-        // instantly. For now the factors are blood loss and severe pain; more can simply add to the sum.
-        float unconsciousScore = 0.0F;
-        // Blood loss: 0 below the unconscious-loss fraction (default 30% lost), ramping to 1 at the death-loss
-        // fraction (default 40% lost) -- i.e. the 30%-40% blood-loss band alone can knock you out.
-        double bloodBandSpan = cfg.bloodDeathLossFraction() - cfg.bloodUnconsciousLossFraction();
-        if (bloodLossFraction > cfg.bloodUnconsciousLossFraction() && bloodBandSpan > 0.0D) {
-            unconsciousScore += (float) ((bloodLossFraction - cfg.bloodUnconsciousLossFraction()) / bloodBandSpan);
+        // --- Unconsciousness SCORE: the SUM of two INDEPENDENT factors, each of which can reach 1.0 on its
+        // own, so blood loss alone (at its threshold) OR severe pain alone can knock you out, while lesser
+        // amounts of BOTH combine to tip the player over. Reaching 1.0 renders the player unconscious.
+        // Blood-loss factor: 0 with no loss, ramping to 1.0 AT the unconscious-loss fraction (default 30%
+        // lost) and held there up to the death loss -- losing 30% of your blood is enough to pass out by itself.
+        float bloodScore = 0.0F;
+        if (cfg.bloodUnconsciousLossFraction() > 0.0D) {
+            bloodScore = (float) (bloodLossFraction / cfg.bloodUnconsciousLossFraction());
         }
-        // Severe pain: 0 below the pain threshold, ramping by the configured weight up to full pain, so pain
-        // can tip a partially-bled player over the edge (or, at weight >= 1, knock them out on its own).
-        float painBandSpan = 1.0F - cfg.painUnconsciousThreshold();
-        if (totalPain > cfg.painUnconsciousThreshold() && painBandSpan > 0.0F) {
-            unconsciousScore += cfg.painUnconsciousWeight()
-                    * (totalPain - cfg.painUnconsciousThreshold()) / painBandSpan;
+        if (bloodScore > 1.0F) {
+            bloodScore = 1.0F;
         }
-        if (unconsciousScore < 0.0F) {
-            unconsciousScore = 0.0F;
+        // Pain factor: 0 below the pain-shock threshold, ramping to 1.0 at the pain-unconscious threshold, then
+        // scaled by painUnconsciousWeight (default 1.0 = severe pain alone can knock you out; lower = pain only
+        // contributes toward a combined knockout).
+        float painScore = 0.0F;
+        float painSpan = cfg.painUnconsciousThreshold() - cfg.painShockThreshold();
+        if (painSpan > 0.0F && totalPain > cfg.painShockThreshold()) {
+            painScore = (totalPain - cfg.painShockThreshold()) / painSpan;
+            if (painScore > 1.0F) {
+                painScore = 1.0F;
+            }
         }
+        painScore *= cfg.painUnconsciousWeight();
+        float unconsciousScore = bloodScore + painScore;
 
         // Bleeding out TOTALLY (blood loss at/past the death fraction) kills outright -- the only instant-death
         // physiology condition. The engine turns this derived DEAD into an actual death (drops health to 0).
@@ -164,32 +169,36 @@ public final class Physiology {
         // applies (the merged unconscious handling takes over).
         boolean asphyxiating = p.isAsphyxiating() && !incapacitated && state != HealthState.DEAD;
 
-        // Movement: leg-fracture multipliers * pain slowdown, floored.
+        // Movement & jump are affected ONLY by LEG injuries and SEVERE BLOOD LOSS -- never by general pain or
+        // by arm/head/torso wounds. movementFromLimbs is already leg-only (the per-limb cache leaves non-leg
+        // limbs at 1.0). Severe blood loss ramps a slowdown in from bloodMovementPenaltyLossFraction (default
+        // 25% lost) down to the pain-speed floor at the death loss.
+        float bloodMove = bloodMovementMultiplier(bloodLossFraction, cfg);
+        boolean severeBloodLoss = bloodLossFraction >= cfg.bloodMovementPenaltyLossFraction();
+
         float movement = movementFromLimbs;
         for (int i = 0; i < fracturedLegs; i++) {
             movement *= cfg.legFractureSpeedMultiplier();
         }
-        movement *= (1.0F - 0.5F * totalPain);
+        movement *= bloodMove;
         if (incapacitated) {
             movement = 0.0F;
         } else if (movement < cfg.painSpeedFloor()) {
             movement = cfg.painSpeedFloor();
         }
 
-        boolean lowBlood = bloodMl < lowMl;
-        boolean sprintBlocked = legFracture
-                || totalPain > cfg.painShockThreshold()
-                || lowBlood
-                || incapacitated
-                || asphyxiating;
+        boolean sprintBlocked = legFracture || severeBloodLoss || incapacitated || asphyxiating;
 
         float jumpMultiplier;
         if (legFracture || incapacitated) {
             jumpMultiplier = 0.0F;
         } else {
-            jumpMultiplier = 1.0F - totalPain;
+            // Leg trauma + severe blood loss reduce jump; general pain and non-leg wounds do not.
+            jumpMultiplier = movementFromLimbs * bloodMove;
             if (jumpMultiplier < 0.0F) {
                 jumpMultiplier = 0.0F;
+            } else if (jumpMultiplier > 1.0F) {
+                jumpMultiplier = 1.0F;
             }
         }
 
@@ -207,5 +216,23 @@ public final class Physiology {
                 armFracture,
                 asphyxiating
         );
+    }
+
+    /**
+     * Movement/jump multiplier from blood loss: {@code 1.0} until {@code bloodMovementPenaltyLossFraction} is
+     * lost, then ramping linearly down to {@code painSpeedFloor} at the death loss. This is the ONLY way blood
+     * loss slows the player, and it is independent of pain / non-leg trauma.
+     */
+    private static float bloodMovementMultiplier(double lossFraction, PhysiologyParams cfg) {
+        double onset = cfg.bloodMovementPenaltyLossFraction();
+        if (lossFraction <= onset) {
+            return 1.0F;
+        }
+        double span = cfg.bloodDeathLossFraction() - onset;
+        double t = span <= 0.0D ? 1.0D : (lossFraction - onset) / span;
+        if (t > 1.0D) {
+            t = 1.0D;
+        }
+        return (float) (1.0D - (1.0D - cfg.painSpeedFloor()) * t);
     }
 }

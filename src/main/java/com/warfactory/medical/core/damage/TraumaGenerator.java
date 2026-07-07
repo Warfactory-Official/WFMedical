@@ -1,5 +1,6 @@
 package com.warfactory.medical.core.damage;
 
+import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
 import com.warfactory.medical.core.trauma.TraumaCategory;
@@ -45,46 +46,62 @@ public final class TraumaGenerator {
         }
         DamageCategory category = cat == null ? DamageCategory.GENERIC : cat;
         ArmorEvaluation.Outcome result = outcome == null ? ArmorEvaluation.Outcome.FULL : outcome;
-        float e = energy < 0.0F ? 0.0F : energy;
+        float e = Math.max(energy, 0.0F);
         // Growth factor from remaining energy; clamped so a single huge hit still stays bounded.
         float energyFactor = clampF(e * 0.1F, 0.1F, 1.5F);
 
         switch (category) {
-            case FIRE:
+            case FIRE -> {
                 add(out, registry, BURN, TraumaCategory.BURN, limb, 0.9F * energyFactor, nowTick);
                 return out;
-            case RADIATION:
+            }
+            case RADIATION -> {
                 add(out, registry, RADIATION_BURN, TraumaCategory.RADIATION_BURN, limb, 0.8F * energyFactor, nowTick);
                 return out;
-            case CHEMICAL:
+            }
+            case CHEMICAL -> {
                 add(out, registry, CHEMICAL_BURN, TraumaCategory.CHEMICAL_BURN, limb, 0.8F * energyFactor, nowTick);
                 return out;
-            case EXPLOSION:
+            }
+            case EXPLOSION -> {
                 // Blast -> crushing + burning; heavy blasts can fracture.
                 add(out, registry, CRUSH_INJURY, TraumaCategory.CRUSH_INJURY, limb, energyFactor, nowTick);
                 add(out, registry, BURN, TraumaCategory.BURN, limb, 0.6F * energyFactor, nowTick);
                 maybeFracture(out, registry, limb, nowTick, rand, fractureChance(category, limb, energyFactor));
                 return out;
-            case FALL:
+            }
+            case FALL -> {
                 // Impact -> bruising, with real fracture risk on legs.
                 add(out, registry, BRUISE, TraumaCategory.BRUISE, limb, 0.7F * energyFactor, nowTick);
                 maybeFracture(out, registry, limb, nowTick, rand, fractureChance(category, limb, energyFactor));
                 return out;
-            default:
-                break;
+            }
+            case UNARMED -> {
+                //TODO: Tweak fruther
+                add(out, registry, BRUISE, TraumaCategory.BRUISE, limb, 0.5F * energyFactor, nowTick);
+                if ((limb == LimbType.TORSO || limb == LimbType.HEAD) && rand != null
+                        && rand.nextFloat() < (float) MedicalConfig.unarmedMajorChance()) {
+                    add(out, registry, INTERNAL_BLEEDING, TraumaCategory.INTERNAL_BLEEDING, limb,
+                            0.4F * energyFactor, nowTick);
+                }
+                return out;
+            }
+            default -> {
+            }
         }
 
         // Kinetic categories: BALLISTIC, SLASHING, PIERCING, BLUNT, GENERIC. Driven by armor outcome.
         switch (result) {
-            case BLOCKED:
+            case BLOCKED -> {
                 add(out, registry, BRUISE, TraumaCategory.BRUISE, limb, 0.4F * energyFactor, nowTick);
                 return out;
-            case PARTIAL:
+            }
+            case PARTIAL -> {
                 add(out, registry, BRUISE, TraumaCategory.BRUISE, limb, 0.5F * energyFactor, nowTick);
                 add(out, registry, LACERATION_SMALL, TraumaCategory.LACERATION, limb, 0.6F * energyFactor, nowTick);
                 return out;
-            case FULL:
-            default:
+            }
+            default -> {
                 if (category == DamageCategory.BALLISTIC) {
                     // Bullet defeats armor -> puncture + large tearing + bleeding, plus fracture chance.
                     add(out, registry, PUNCTURE, TraumaCategory.PUNCTURE, limb, 0.9F * energyFactor, nowTick);
@@ -96,28 +113,18 @@ public final class TraumaGenerator {
                 }
                 maybeFracture(out, registry, limb, nowTick, rand, fractureChance(category, limb, energyFactor));
                 return out;
+            }
         }
     }
 
     private static float fractureChance(DamageCategory cat, LimbType limb, float energyFactor) {
-        float base;
-        switch (cat) {
-            case BALLISTIC:
-                base = 0.35F;
-                break;
-            case EXPLOSION:
-                base = 0.5F;
-                break;
-            case FALL:
-                base = limb.isLeg() ? 0.6F : 0.2F;
-                break;
-            case BLUNT:
-                base = 0.4F;
-                break;
-            default:
-                base = 0.2F;
-                break;
-        }
+        float base = switch (cat) {
+            case BALLISTIC -> 0.35F;
+            case EXPLOSION -> 0.5F;
+            case FALL -> limb.isLeg() ? 0.6F : 0.2F;
+            case BLUNT -> 0.4F;
+            default -> 0.2F;
+        };
         return clampF(base * energyFactor, 0.0F, 0.85F);
     }
 
@@ -150,6 +157,6 @@ public final class TraumaGenerator {
     }
 
     private static float clampF(float v, float lo, float hi) {
-        return v < lo ? lo : (v > hi ? hi : v);
+        return v < lo ? lo : (Math.min(v, hi));
     }
 }

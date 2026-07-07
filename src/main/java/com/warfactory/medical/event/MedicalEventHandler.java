@@ -30,6 +30,7 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingEntityUseItemEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
@@ -130,6 +131,29 @@ public final class MedicalEventHandler {
 
     // ------------------------------------------------------------------ damage -> trauma
 
+
+    @SubscribeEvent
+    public static void onLivingAttackGapReject(LivingAttackEvent event) {
+        LivingEntity victim = event.getEntity();
+        if (victim.level().isClientSide) {
+            return;
+        }
+        boolean isPlayer = victim instanceof Player;
+        boolean isBody = !isPlayer && OpenPersistenceCompat.isPersistentBody(victim)
+                && MedicalConfig.openPersistenceCompat();
+        if (!isPlayer && !isBody) {
+            return;
+        }
+        DamageSource src = event.getSource();
+        if (src == null || src.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            return;
+        }
+        DamageCategory cat = DamageClassifier.classify(src);
+        if (HitGeometry.shouldRejectGap(victim, src, cat)) {
+            event.setCanceled(true);
+        }
+    }
+
     /**
      * Translate incoming damage into persistent trauma instead of directly draining health. Runs only for
      * a server-side player that is neither creative/spectator-immune nor being hit by an
@@ -200,14 +224,8 @@ public final class MedicalEventHandler {
         long nowTick = player.level().getGameTime();
         TraumaRegistry registry = TraumaRegistry.active();
 
+
         DamageCategory cat = DamageClassifier.classify(src);
-        // PRECISE hit registration: an attack the envelope registered but which actually threaded a gap
-        // between the rigged limbs is a whiff -> cancel it (no damage, no trauma). Centre-mass hits take the
-        // cheap tight-box fast-path inside isGapShot, so only grazing arm-margin shots ever build the rig.
-        if (MedicalConfig.hitRegistrationMode() == HitRegMode.PRECISE && HitGeometry.isGapShot(player, src, cat)) {
-            event.setCanceled(true);
-            return;
-        }
         LimbType limb = HitLocation.pick(player, src, cat, rand);
         ArmorEvaluation.Outcome outcome = ArmorEvaluation.evaluate(player, limb, cat, amount, rand);
         List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limb, amount, registry, nowTick, rand);
@@ -517,11 +535,9 @@ public final class MedicalEventHandler {
         RandomSource rand = victim.getRandom();
         long nowTick = victim.level().getGameTime();
         TraumaRegistry registry = TraumaRegistry.active();
+        // Gap-rejection is handled pre-hit in onLivingAttackGapReject (persistent bodies included), so this
+        // only sees attacks that connected with a limb.
         DamageCategory cat = DamageClassifier.classify(src);
-        if (MedicalConfig.hitRegistrationMode() == HitRegMode.PRECISE && HitGeometry.isGapShot(victim, src, cat)) {
-            event.setCanceled(true);
-            return;
-        }
         LimbType limb = HitLocation.pick(victim, src, cat, rand);
         ArmorEvaluation.Outcome outcome = ArmorEvaluation.evaluate(victim, limb, cat, amount, rand);
         List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limb, amount, registry, nowTick, rand);
