@@ -43,6 +43,9 @@ public final class ModItems {
     public static final RegistryObject<Item> PAINKILLERS = medical("painkillers",
             new Treatment(TreatmentAction.REDUCE_PAIN,
                     cats(), 0.5F, 0.0D, 30, false), true);
+    public static final RegistryObject<Item> LOCAL_ANESTHETIC = medical("local_anesthetic",
+            new Treatment(TreatmentAction.NUMB_LIMB,
+                    cats(), 0.9F, 0.0D, 50, false), true);
     public static final RegistryObject<Item> TOURNIQUET = medical("tourniquet",
             new Treatment(TreatmentAction.REDUCE_BLEEDING,
                     cats(TraumaCategory.LACERATION, TraumaCategory.PUNCTURE, TraumaCategory.INTERNAL_BLEEDING),

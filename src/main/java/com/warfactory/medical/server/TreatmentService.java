@@ -74,8 +74,7 @@ public final class TreatmentService {
             return changed;
         }
 
-        // REDUCE_PAIN (painkillers) suppresses PERCEIVED pain globally without healing any injury — it
-        // must not touch trauma severity (which drives bleeding and max-health), only the pain mask.
+        //Generalized
         if (action == TreatmentAction.REDUCE_PAIN) {
             float mag = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;
             float before = profile.getPainSuppression();
@@ -87,6 +86,36 @@ public final class TreatmentService {
                         new TraumaDeltaPacket(TraumaDeltaPacket.Op.CHANGED, LimbType.TORSO, "", 0.0F));
             }
             return changed;
+        }
+
+        //Localized
+        if (action == TreatmentAction.NUMB_LIMB) {
+            LimbType targetLimb = limbHint;
+            if (targetLimb == null) {
+                float worst = 0.0F;
+                for (LimbType lt : LimbType.VALUES) {
+                    float pain = profile.limb(lt).getCachedPain();
+                    if (pain > worst) {
+                        worst = pain;
+                        targetLimb = lt;
+                    }
+                }
+            }
+            if (targetLimb == null) {
+                return false; // nothing hurts anywhere
+            }
+            float mag = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;
+            Limb limb = profile.limb(targetLimb);
+            float before = limb.getLocalNumbing();
+            limb.setLocalNumbing(Math.max(before, mag));
+            if (limb.getLocalNumbing() == before) {
+                return false;
+            }
+            profile.markDirty();
+            data.bumpRevision();
+            MedicalNetworking.sendDelta(player,
+                    new TraumaDeltaPacket(TraumaDeltaPacket.Op.CHANGED, targetLimb, "", 0.0F));
+            return true;
         }
 
         Trauma target = pickTarget(profile, treatment, action, limbHint);

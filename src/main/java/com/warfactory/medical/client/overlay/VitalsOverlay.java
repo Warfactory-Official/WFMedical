@@ -20,9 +20,9 @@ import net.minecraftforge.client.gui.overlay.IGuiOverlay;
  * {@link ClientMedicalCache} snapshot, never mutates state.
  *
  * <p>Both quantities are already normalized: the blood fraction is {@code bloodMl / maxBloodMl}, and
- * {@link DerivedStats#totalPain()} is a saturated 0..1 value (the physiology computes
- * {@code painSum / (painSum + 1)} and then applies painkiller suppression), so no extra scaling guesswork
- * is needed.</p>
+ * {@link DerivedStats#totalPain()} is a 0..1 value — the PERCEIVED pain (the worst limb's felt pain after
+ * local + general numbing), which is exactly what should drive a felt-pain readout — so no extra scaling
+ * guesswork is needed.</p>
  *
  * <p>CLIENT-ONLY. This overlay is NOT part of the scaffolding's mandatory registration contract (only the
  * health and action-progress overlays are). It exposes {@link #INSTANCE} so a later agent can register it

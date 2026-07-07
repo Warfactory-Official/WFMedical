@@ -289,7 +289,11 @@ public final class CharacterSheetUI {
         y += DEBUG_LINE_H;
         addDebugLine(group, y, () -> "totalBleeding=" + fmt((float) MedicalUIParts.stats().totalBleeding()));
         y += DEBUG_LINE_H;
-        addDebugLine(group, y, () -> "totalPain=" + fmt(MedicalUIParts.stats().totalPain()));
+        addDebugLine(group, y, () -> "totalPain(perceived)=" + fmt(MedicalUIParts.stats().totalPain()));
+        y += DEBUG_LINE_H;
+        addDebugLine(group, y, () -> "systemicPain=" + fmt(MedicalUIParts.stats().systemicPain()));
+        y += DEBUG_LINE_H;
+        addDebugLine(group, y, () -> "painKoPending=" + MedicalUIParts.stats().painKoPending());
         y += DEBUG_LINE_H;
         addDebugLine(group, y, () -> "moveMult=" + fmt(MedicalUIParts.stats().movementMultiplier()));
         y += DEBUG_LINE_H;

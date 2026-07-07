@@ -16,7 +16,6 @@ public final class Physiology {
 
     public static DerivedStats compute(MedicalProfile p, PhysiologyParams cfg) {
         double bleeding = 0.0D;
-        float painSum = 0.0F;
         float limbHealthReduction = 0.0F;
         float movementFromLimbs = 1.0F;
         boolean legFracture = false;
@@ -26,7 +25,6 @@ public final class Physiology {
         for (LimbType lt : LimbType.VALUES) {
             Limb limb = p.limb(lt);
             bleeding += limb.getCachedBleeding();
-            painSum += limb.getCachedPain();
             limbHealthReduction += limb.getCachedHealthReduction();
             movementFromLimbs *= limb.getCachedMovementMultiplier();
             if (limb.hasCachedFracture()) {
@@ -39,18 +37,49 @@ public final class Physiology {
             }
         }
 
-        // Pain saturates to 0..1 via a smooth diminishing-returns curve.
-        float totalPain = painSum <= 0.0F ? 0.0F : painSum / (painSum + 1.0F);
-
-        // Painkillers reduce PERCEIVED pain without healing the injury (severity/bleeding/health untouched).
-        // The suppression fraction decays over time in the engine; here it only masks the derived pain.
-        float suppression = p.getPainSuppression();
-        if (suppression > 0.0F) {
-            totalPain *= (1.0F - (suppression > 1.0F ? 1.0F : suppression));
-            if (totalPain < 0.0F) {
-                totalPain = 0.0F;
-            }
+        // --- PAIN (per body part, capped by a configurable SHARE) --------------------------------------
+        // Each limb's raw pain saturates locally (diminishing returns), is reduced by any LOCALIZED numbing
+        // on that limb, then has the GENERAL numbing mask subtracted (a systemic painkiller floor: small
+        // pains vanish entirely, large ones are merely lessened). Two aggregates come out of this:
+        //   perceivedPain = the worst single limb's masked pain -> what the player FEELS (sway/vignette/HUD)
+        //   systemicPain  = SUM over limbs of (bodyPartShare * maskedPain), clamped to 1 -> what drives
+        //                   shock + unconsciousness. Because arms carry a tiny share, an agonising arm reads
+        //                   high on perceived pain yet contributes almost nothing to shock.
+        float generalNumb = p.getPainSuppression();
+        if (generalNumb < 0.0F) {
+            generalNumb = 0.0F;
+        } else if (generalNumb > 1.0F) {
+            generalNumb = 1.0F;
         }
+        float saturationK = cfg.painSaturationK();
+        if (saturationK <= 0.0F) {
+            saturationK = 0.0001F;
+        }
+        float perceivedPain = 0.0F;
+        float systemicPainSum = 0.0F;
+        for (LimbType lt : LimbType.VALUES) {
+            Limb limb = p.limb(lt);
+            float raw = limb.getCachedPain();
+            if (raw <= 0.0F) {
+                continue;
+            }
+            float local = raw / (raw + saturationK);            // per-limb diminishing returns (0..1)
+            float localNumb = limb.getLocalNumbing();
+            if (localNumb > 0.0F) {                              // localized anesthetic on THIS limb
+                local *= (1.0F - (Math.min(localNumb, 1.0F)));
+            }
+            float masked = local - generalNumb;                 // general (systemic) numbing subtractive mask
+            if (masked <= 0.0F) {
+                continue;
+            }
+            if (masked > perceivedPain) {
+                perceivedPain = masked;
+            }
+            systemicPainSum += cfg.painShare(lt) * masked;
+        }
+        float systemicPain = Math.min(systemicPainSum, 1.0F);
+        // "totalPain" in the snapshot is the PERCEIVED pain (feedback); systemicPain drives shock/KO below.
+        float totalPain = perceivedPain;
 
         // Blood volume + LOSS fraction (0 = full, 1 = fully exsanguinated). All the death/unconsciousness
         // thresholds below are expressed as fractions of blood LOST, mirroring the config.
@@ -76,11 +105,11 @@ public final class Physiology {
             bloodLossPenalty = (float) (cfg.maxHealthPoints() * t);
         }
 
-        // Pain-shock penalty: 0 below the threshold, scaling to painMaxHealthPenalty at full pain.
+        // Pain-shock penalty: 0 below the threshold, scaling to painMaxHealthPenalty at full SYSTEMIC pain.
         float painShockPenalty = 0.0F;
-        if (totalPain > cfg.painShockThreshold()) {
+        if (systemicPain > cfg.painShockThreshold()) {
             float span = 1.0F - cfg.painShockThreshold();
-            float t = span <= 0.0F ? 1.0F : (totalPain - cfg.painShockThreshold()) / span;
+            float t = span <= 0.0F ? 1.0F : (systemicPain - cfg.painShockThreshold()) / span;
             painShockPenalty = cfg.painMaxHealthPenalty() * t;
         }
 
@@ -109,8 +138,8 @@ public final class Physiology {
         // contributes toward a combined knockout).
         float painScore = 0.0F;
         float painSpan = cfg.painUnconsciousThreshold() - cfg.painShockThreshold();
-        if (painSpan > 0.0F && totalPain > cfg.painShockThreshold()) {
-            painScore = (totalPain - cfg.painShockThreshold()) / painSpan;
+        if (painSpan > 0.0F && systemicPain > cfg.painShockThreshold()) {
+            painScore = (systemicPain - cfg.painShockThreshold()) / painSpan;
             if (painScore > 1.0F) {
                 painScore = 1.0F;
             }
@@ -118,12 +147,22 @@ public final class Physiology {
         painScore *= cfg.painUnconsciousWeight();
         float unconsciousScore = bloodScore + painScore;
 
+        // Pain-driven knockout is gated by ADRENALINE: when enabled, pain contributes to the ACTUAL knockout
+        // only once the engine's grace timer has run out (p.isAdrenalineExhausted()). Until then the player
+        // stays up on adrenaline no matter how much it hurts -- though blood loss can still drop them. The
+        // painKoPending flag marks (adrenaline-independently) that PAIN, not blood, is the thing trying to
+        // knock the player out (blood alone would not), so the engine knows to start / hold that timer.
+        boolean painKoAllowed = !cfg.adrenalineEnabled() || p.isAdrenalineExhausted();
+        float koScore = bloodScore + (painKoAllowed ? painScore : 0.0F);
+        boolean painKoPending = (bloodScore + painScore) >= 1.0F && bloodScore < 1.0F;
+
         // Bleeding out TOTALLY (blood loss at/past the death fraction) kills outright -- the only instant-death
         // physiology condition. The engine turns this derived DEAD into an actual death (drops health to 0).
         boolean bloodDeath = bloodLossFraction >= cfg.bloodDeathLossFraction();
-        // A full unconsciousness score OR trauma zeroing the effective max health collapses the player. This
-        // is a SURVIVABLE downed state (blood loss, not trauma, is what actually kills) when bleed-out is on.
-        boolean unconsciousTrigger = unconsciousScore >= 1.0F || effectiveMaxHealth <= 0.0F;
+        // A full knockout score (koScore -- pain gated by adrenaline) OR trauma zeroing the effective max
+        // health collapses the player. This is a SURVIVABLE downed state (blood loss, not trauma, is what
+        // actually kills) when bleed-out is on.
+        boolean unconsciousTrigger = koScore >= 1.0F || effectiveMaxHealth <= 0.0F;
 
         // Health-based state progression (Healthy -> Critical -> Unconscious -> Dead). Catastrophic blood loss
         // takes precedence; then the collapse trigger (downed while bleed-out is on, else death); the building
@@ -208,13 +247,15 @@ public final class Physiology {
                 effectiveCurrentHealth,
                 bleeding,
                 totalPain,
+                systemicPain,
                 movement,
                 sprintBlocked,
                 jumpMultiplier,
                 state,
                 legFracture,
                 armFracture,
-                asphyxiating
+                asphyxiating,
+                painKoPending
         );
     }
 

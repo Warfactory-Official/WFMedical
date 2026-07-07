@@ -35,9 +35,15 @@ public final class MedicalEngine {
      */
     private static final float MAJOR_WORSEN_PER_TICK = 0.00015F;
     /**
-     * Rate at which painkiller pain-suppression wears off, per tick (a full dose lasts ~tens of seconds).
+     * Rate at which the GENERAL numbing (systemic painkiller) mask wears off, per tick (a full dose lasts
+     * ~tens of seconds).
      */
     private static final float PAIN_SUPPRESSION_DECAY_PER_TICK = 0.0008F;
+    /**
+     * Rate at which a limb's LOCALIZED numbing (local anesthetic) wears off, per tick. Slower than the general
+     * mask so a targeted block lasts a good while (a full 0.9 dose at the engine cadence lasts ~1.5 minutes).
+     */
+    private static final float LOCAL_NUMB_DECAY_PER_TICK = 0.0005F;
 
     private static int tickCounter;
 
@@ -119,6 +125,27 @@ public final class MedicalEngine {
         // (3) Recompute derived stats only when something is dirty (rebuilds only dirty limb caches).
         boolean wasDirty = profile.isDirty();
         DerivedStats stats = wasDirty ? profile.recompute(params) : profile.cached();
+
+        // (3.5) Adrenaline: hold off a PURELY pain-driven knockout for a grace period. When pain reaches
+        // knockout level (stats.painKoPending), start / hold the timer while keeping the player conscious; once
+        // the grace elapses, flag adrenaline exhausted so the NEXT recompute lets the pain knockout land. If
+        // pain eases below that level first, the timer resets and adrenaline recharges. (A blood-loss knockout
+        // sets painKoPending=false and so is never delayed here.)
+        if (params.adrenalineEnabled()) {
+            if (stats.painKoPending()) {
+                if (profile.getPainKoSince() <= 0L) {
+                    profile.setPainKoSince(nowTick);
+                } else if (!profile.isAdrenalineExhausted()
+                        && nowTick - profile.getPainKoSince() >= MedicalConfig.adrenalinePainKoDelayTicks()) {
+                    profile.setAdrenalineExhausted(true);
+                    profile.markDirty();
+                }
+            } else if (profile.getPainKoSince() > 0L || profile.isAdrenalineExhausted()) {
+                profile.setPainKoSince(0L);
+                profile.setAdrenalineExhausted(false);
+                profile.markDirty();
+            }
+        }
 
         // (2c) Keep the overlay's death-progress in sync with how close the blood pool is to the lethal
         // loss threshold, then enact a derived DEATH: bleeding out totally (or having no effective health
@@ -321,7 +348,9 @@ public final class MedicalEngine {
         }
         // Keep ticking while a drug is on board or an overdose unconsciousness is in progress so the engine can
         // decay the load and run the overdose-unconsciousness timer instead of fast-path skipping the player.
-        if (profile.getDrugLoad() > 0.0F || profile.isOverdoseUnconscious() || profile.getOverdoseUntilTick() > 0L) {
+        // Also keep ticking while any localized numbing is decaying, or an adrenaline pain-KO timer is running.
+        if (profile.getDrugLoad() > 0.0F || profile.isOverdoseUnconscious() || profile.getOverdoseUntilTick() > 0L
+                || profile.anyLocalNumbing() || profile.getPainKoSince() > 0L || profile.isAdrenalineExhausted()) {
             return true;
         }
         DerivedStats c = profile.cached();
@@ -348,6 +377,11 @@ public final class MedicalEngine {
         }
         for (LimbType lt : LimbType.VALUES) {
             Limb limb = profile.limb(lt);
+            // Localized anesthetic wears off over time (per limb), regardless of whether the limb has trauma.
+            if (limb.getLocalNumbing() > 0.0F) {
+                limb.setLocalNumbing(limb.getLocalNumbing() - LOCAL_NUMB_DECAY_PER_TICK * interval);
+                profile.markDirty();
+            }
             List<Trauma> traumas = limb.getTraumas();
             if (traumas.isEmpty()) {
                 // Still let a regenerating minor-damage pool tick down.

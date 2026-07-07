@@ -92,6 +92,7 @@ public final class ActionProgressOverlay implements IGuiOverlay {
             case STABILIZE_FRACTURE -> "Splinting Fracture";
             case RESTORE_BLOOD -> "Restoring Blood";
             case REDUCE_PAIN -> "Administering Painkiller";
+            case NUMB_LIMB -> "Administering Anesthetic";
             case HEAL_TRAUMA -> "Treating Wound";
             case TREAT_BURN -> "Treating Burn";
             case TREAT_RADIATION -> "Treating Radiation";

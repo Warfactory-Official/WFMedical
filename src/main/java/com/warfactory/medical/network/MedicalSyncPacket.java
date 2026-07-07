@@ -53,18 +53,20 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
 
     public static MedicalSyncPacket decode(FriendlyByteBuf buf) {
         DerivedStats stats = new DerivedStats(
-                buf.readFloat(),
-                buf.readFloat(),
-                buf.readFloat(),
-                buf.readDouble(),
-                buf.readFloat(),
-                buf.readFloat(),
-                buf.readBoolean(),
-                buf.readFloat(),
+                buf.readFloat(),   // effectiveMaxHealth
+                buf.readFloat(),   // healthModifier
+                buf.readFloat(),   // effectiveCurrentHealth
+                buf.readDouble(),  // totalBleeding
+                buf.readFloat(),   // totalPain (perceived)
+                buf.readFloat(),   // systemicPain
+                buf.readFloat(),   // movementMultiplier
+                buf.readBoolean(), // sprintBlocked
+                buf.readFloat(),   // jumpMultiplier
                 buf.readEnum(HealthState.class),
-                buf.readBoolean(),
-                buf.readBoolean(),
-                buf.readBoolean());
+                buf.readBoolean(), // anyLegFracture
+                buf.readBoolean(), // anyArmFracture
+                buf.readBoolean(), // asphyxiating
+                buf.readBoolean()); // painKoPending
         double bloodMl = buf.readDouble();
         double maxBloodMl = buf.readDouble();
         float painSuppression = buf.readFloat();
@@ -108,6 +110,7 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
         buf.writeFloat(stats.effectiveCurrentHealth());
         buf.writeDouble(stats.totalBleeding());
         buf.writeFloat(stats.totalPain());
+        buf.writeFloat(stats.systemicPain());
         buf.writeFloat(stats.movementMultiplier());
         buf.writeBoolean(stats.sprintBlocked());
         buf.writeFloat(stats.jumpMultiplier());
@@ -115,6 +118,7 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
         buf.writeBoolean(stats.anyLegFracture());
         buf.writeBoolean(stats.anyArmFracture());
         buf.writeBoolean(stats.asphyxiating());
+        buf.writeBoolean(stats.painKoPending());
         // Blood + high-level state
         buf.writeDouble(bloodMl);
         buf.writeDouble(maxBloodMl);

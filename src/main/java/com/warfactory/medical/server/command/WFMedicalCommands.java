@@ -439,6 +439,8 @@ public final class WFMedicalCommands {
             clearAllTrauma(profile);
             profile.setBloodMl(profile.getMaxBloodMl());
             profile.setPainSuppression(0.0F);
+            profile.setPainKoSince(0L);
+            profile.setAdrenalineExhausted(false);
             profile.setDrugLoad(0.0F);
             profile.setOverdoseUnconscious(false);
             profile.setOverdoseUntilTick(0L);
@@ -946,6 +948,7 @@ public final class WFMedicalCommands {
             limb.getTraumas().clear();
         }
         limb.setMinorDamage(0.0F);
+        limb.setLocalNumbing(0.0F);
         limb.markDirty();
     }
 
@@ -1028,9 +1031,13 @@ public final class WFMedicalCommands {
                 .append(" / ").append(fmt(stats.effectiveMaxHealth()))
                 .append("  |  vanilla: ").append(fmt(p.getHealth())).append(" / ").append(fmt(p.getMaxHealth()));
         sb.append("\n blood: ").append(fmt(profile.getBloodMl())).append(" / ").append(fmt(profile.getMaxBloodMl())).append(" ml");
-        sb.append("\n pain(total): ").append(fmt(stats.totalPain()))
-                .append("  suppression: ").append(fmt(profile.getPainSuppression()))
-                .append("  drugLoad: ").append(fmt(profile.getDrugLoad()));
+        sb.append("\n pain: perceived=").append(fmt(stats.totalPain()))
+                .append("  systemic=").append(fmt(stats.systemicPain()))
+                .append("  generalNumb=").append(fmt(profile.getPainSuppression()))
+                .append("  drugLoad=").append(fmt(profile.getDrugLoad()));
+        sb.append("\n adrenaline: painKoPending=").append(stats.painKoPending())
+                .append("  exhausted=").append(profile.isAdrenalineExhausted())
+                .append("  since=").append(profile.getPainKoSince() > 0L ? (now - profile.getPainKoSince()) + "t" : "-");
         sb.append("\n state: ").append(profile.getState())
                 .append("  isDowned: ").append(profile.isDowned());
         // Unified unconsciousness line: one externally-visible UNCONSCIOUS state, with an internal cause hint
@@ -1063,6 +1070,7 @@ public final class WFMedicalCommands {
             sb.append("\n [").append(lt.name()).append("] hp~").append(fmt(pct)).append("%")
                     .append(" bleed=").append(fmt(limb.getCachedBleeding()))
                     .append(" pain=").append(fmt(limb.getCachedPain()))
+                    .append(" numb=").append(fmt(limb.getLocalNumbing()))
                     .append(" fracture=").append(limb.hasCachedFracture());
             List<Trauma> traumas = limb.getTraumas();
             if (traumas.isEmpty()) {

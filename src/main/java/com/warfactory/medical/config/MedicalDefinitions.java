@@ -278,6 +278,8 @@ public final class MedicalDefinitions {
                 Collections.emptySet(), 0.0F, 1000.0D, 120, false));
         itemTreatments.put("wfmedical:painkillers", new Treatment(TreatmentAction.REDUCE_PAIN,
                 Collections.emptySet(), 0.5F, 0.0D, 30, false));
+        itemTreatments.put("wfmedical:local_anesthetic", new Treatment(TreatmentAction.NUMB_LIMB,
+                Collections.emptySet(), 0.9F, 0.0D, 50, false));
         itemTreatments.put("wfmedical:tourniquet", new Treatment(TreatmentAction.REDUCE_BLEEDING,
                 EnumSet.of(TraumaCategory.LACERATION, TraumaCategory.PUNCTURE, TraumaCategory.INTERNAL_BLEEDING), 0.9F, 0.0D, 60, false));
         itemTreatments.put("wfmedical:medkit", new Treatment(TreatmentAction.HEAL_TRAUMA,

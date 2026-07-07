@@ -77,6 +77,13 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.DoubleValue PAIN_SWAY_STRENGTH;
     private static final ForgeConfigSpec.DoubleValue BROKEN_ARM_AIM_SWAY;
     private static final ForgeConfigSpec.IntValue BROKEN_ARM_MELEE_WEAKNESS_LEVEL;
+    private static final ForgeConfigSpec.DoubleValue PAIN_SATURATION_K;
+    private static final ForgeConfigSpec.DoubleValue PAIN_SHARE_HEAD;
+    private static final ForgeConfigSpec.DoubleValue PAIN_SHARE_TORSO;
+    private static final ForgeConfigSpec.DoubleValue PAIN_SHARE_ARM;
+    private static final ForgeConfigSpec.DoubleValue PAIN_SHARE_LEG;
+    private static final ForgeConfigSpec.BooleanValue ADRENALINE_ENABLED;
+    private static final ForgeConfigSpec.IntValue ADRENALINE_PAIN_KO_DELAY_TICKS;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -139,6 +146,43 @@ public final class MedicalConfig {
                         + "untreated (a partial fracture heals proportionally faster). Splinting/treating it is "
                         + "faster. 0 = fractures never self-heal (they worsen until treated). Default 20.")
                 .defineInRange("fractureSelfHealMinutes", 20.0D, 0.0D, 600.0D);
+        b.pop();
+
+        b.push("pain");
+        PAIN_SATURATION_K = b
+                .comment("Per-limb pain diminishing-returns constant. A limb's LOCAL pain (0..1) = raw / (raw + "
+                        + "k): a smaller k saturates a limb's pain faster, a larger k needs more/worse wounds on "
+                        + "the SAME limb to approach that limb's share cap. Default 1.0.")
+                .defineInRange("painSaturationK", 1.0D, 0.05D, 20.0D);
+        PAIN_SHARE_HEAD = b
+                .comment("Max SHARE of total pain (0..1) a fully-painful HEAD can contribute to the SYSTEMIC pain "
+                        + "that drives shock / unconsciousness. Per-limb shares are caps and may sum ABOVE 1.0 "
+                        + "(the total is clamped), so COMBINATIONS cause shock while no single limb can. Default 0.35.")
+                .defineInRange("painShareHead", 0.35D, 0.0D, 1.0D);
+        PAIN_SHARE_TORSO = b
+                .comment("Max SHARE of total pain (0..1) a fully-painful TORSO can contribute. The torso carries "
+                        + "most of the shock-inducing weight; at the default it sits just under the shock "
+                        + "threshold, so torso trauma plus one more injury tips into shock. Default 0.50.")
+                .defineInRange("painShareTorso", 0.50D, 0.0D, 1.0D);
+        PAIN_SHARE_ARM = b
+                .comment("Max SHARE of total pain (0..1) a fully-painful ARM can contribute (per arm). Deliberately "
+                        + "small: an agonising arm still hurts (aim sway / screen effects) but cannot, by itself, "
+                        + "put you into shock. Default 0.10.")
+                .defineInRange("painShareArm", 0.10D, 0.0D, 1.0D);
+        PAIN_SHARE_LEG = b
+                .comment("Max SHARE of total pain (0..1) a fully-painful LEG can contribute (per leg). Femoral "
+                        + "trauma is genuinely shock-grade, so legs weigh more than arms. Default 0.20.")
+                .defineInRange("painShareLeg", 0.20D, 0.0D, 1.0D);
+        ADRENALINE_ENABLED = b
+                .comment("If true, a PURELY pain-driven knockout (one that blood loss alone would not cause) is "
+                        + "held off for adrenalinePainKoDelayTicks, mimicking adrenaline: the player keeps their "
+                        + "feet through the pain before finally collapsing. Blood-loss knockouts are never delayed.")
+                .define("adrenalineEnabled", true);
+        ADRENALINE_PAIN_KO_DELAY_TICKS = b
+                .comment("Ticks a pain-driven knockout is delayed by adrenaline once pain reaches knockout level "
+                        + "(20 ticks = 1 second). If pain drops below that level within the window, adrenaline "
+                        + "recharges and the timer resets. Default 120 (6 seconds).")
+                .defineInRange("adrenalinePainKoDelayTicks", 120, 0, 12000);
         b.pop();
 
         b.push("features");
@@ -363,6 +407,40 @@ public final class MedicalConfig {
 
     public static float painUnconsciousWeight() {
         return PAIN_UNCONSCIOUS_WEIGHT.get().floatValue();
+    }
+
+    public static float painSaturationK() {
+        return PAIN_SATURATION_K.get().floatValue();
+    }
+
+    public static float painShareHead() {
+        return PAIN_SHARE_HEAD.get().floatValue();
+    }
+
+    public static float painShareTorso() {
+        return PAIN_SHARE_TORSO.get().floatValue();
+    }
+
+    public static float painShareArm() {
+        return PAIN_SHARE_ARM.get().floatValue();
+    }
+
+    public static float painShareLeg() {
+        return PAIN_SHARE_LEG.get().floatValue();
+    }
+
+    /**
+     * If true, a purely pain-driven knockout is delayed by the adrenaline grace timer.
+     */
+    public static boolean adrenalineEnabled() {
+        return ADRENALINE_ENABLED.get();
+    }
+
+    /**
+     * Ticks a pain-driven knockout is held off by adrenaline once pain reaches knockout level.
+     */
+    public static int adrenalinePainKoDelayTicks() {
+        return ADRENALINE_PAIN_KO_DELAY_TICKS.get();
     }
 
     public static double bloodMovementPenaltyLossFraction() {
@@ -642,7 +720,13 @@ public final class MedicalConfig {
                 bloodUnconsciousLossFraction(),
                 painUnconsciousThreshold(),
                 painUnconsciousWeight(),
-                bloodMovementPenaltyLossFraction()
+                bloodMovementPenaltyLossFraction(),
+                painShareHead(),
+                painShareTorso(),
+                painShareArm(),
+                painShareLeg(),
+                painSaturationK(),
+                adrenalineEnabled()
         );
     }
 }

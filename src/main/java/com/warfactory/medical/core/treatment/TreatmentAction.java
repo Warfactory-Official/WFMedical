@@ -10,6 +10,7 @@ public enum TreatmentAction {
     STABILIZE_FRACTURE,
     RESTORE_BLOOD,
     REDUCE_PAIN,
+    NUMB_LIMB,
     HEAL_TRAUMA,
     TREAT_BURN,
     TREAT_RADIATION

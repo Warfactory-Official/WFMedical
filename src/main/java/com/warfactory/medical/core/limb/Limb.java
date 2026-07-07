@@ -20,6 +20,12 @@ public final class Limb {
     private final List<Trauma> traumas = new ArrayList<>();
     private float maxHealth;
     private float minorDamage;
+    /**
+     * LOCALIZED numbing (0..1) on this limb from a local anesthetic: strongly reduces this limb's felt pain
+     * without touching the underlying injury. Persisted; decays over time in the engine. Distinct from the
+     * profile-wide GENERAL numbing (painkillers) which masks every limb at once.
+     */
+    private float localNumbing;
     // Cached aggregates (valid while !dirty).
     private double cachedBleeding;
     private float cachedPain;
@@ -58,6 +64,21 @@ public final class Limb {
 
     public void setMinorDamage(float minorDamage) {
         this.minorDamage = minorDamage < 0.0F ? 0.0F : minorDamage;
+    }
+
+    /**
+     * Localized numbing (0..1) currently on this limb
+     */
+    public float getLocalNumbing() {
+        return localNumbing;
+    }
+
+    public void setLocalNumbing(float value) {
+        float clamped = value < 0.0F ? 0.0F : (Math.min(value, 1.0F));
+        if (clamped != this.localNumbing) {
+            this.localNumbing = clamped;
+            this.dirty = true;
+        }
     }
 
     public List<Trauma> getTraumas() {
@@ -225,6 +246,7 @@ public final class Limb {
         tag.putInt("Type", type.ordinal());
         tag.putFloat("MaxHealth", maxHealth);
         tag.putFloat("MinorDamage", minorDamage);
+        tag.putFloat("LocalNumb", localNumbing);
         ListTag list = new ListTag();
         for (Trauma t : traumas) {
             list.add(t.save());
@@ -236,6 +258,7 @@ public final class Limb {
     public void load(CompoundTag tag, TraumaRegistry registry) {
         this.maxHealth = tag.getFloat("MaxHealth");
         this.minorDamage = tag.getFloat("MinorDamage");
+        this.localNumbing = Math.max(0.0F, Math.min(tag.getFloat("LocalNumb"), 1.0F));
         traumas.clear();
         ListTag list = tag.getList("Traumas", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {

@@ -26,7 +26,9 @@ public final class MedicalProfile {
     private HealthState state = HealthState.HEALTHY;
     private long bleedoutSinceTick = -1L;
     /**
-     * Perceived-pain suppression (0..1) from painkillers; decays over time, never heals the wound.
+     * GENERAL numbing (0..1) from systemic painkillers/opioids: a body-wide subtractive mask applied to
+     * every limb's felt pain (small pains vanish, big ones are lessened). Decays over time, never heals the
+     * wound. Localized numbing (a single limb) lives per-{@link Limb} instead.
      */
     private float painSuppression;
     /**
@@ -73,6 +75,21 @@ public final class MedicalProfile {
      * the player tips into {@link #overdoseUnconscious}. Transient (a live timed state; never persisted).
      */
     private transient boolean asphyxiating;
+
+    // --- Transient ADRENALINE bookkeeping for the delayed pain knockout. A pain-driven collapse (one blood
+    //     loss alone would not cause) is held off for a grace period, mimicking adrenaline keeping the player
+    //     on their feet through the pain before they finally drop. painKoSince records when pain first reached
+    //     knockout level (0 = pain is not currently trying to knock them out); adrenalineExhausted is set by
+    //     the engine once that grace has elapsed, at which point Physiology lets the pain knockout land. Both
+    //     are transient live state driven by the engine each tick and are deliberately never persisted.
+    /**
+     * Game time at which pain first reached knockout level ({@code 0} = not currently pain-KO-pending). Transient.
+     */
+    private transient long painKoSince;
+    /**
+     * Whether the adrenaline grace has run out, so pain may now actually knock the player out. Transient.
+     */
+    private transient boolean adrenalineExhausted;
 
     // --- Transient downed-broadcast bookkeeping. Deliberately NOT written to / read from NBT: it mirrors
     //     the last {@link #isDowned()} value the server broadcast to tracking clients so the engine can
@@ -246,6 +263,41 @@ public final class MedicalProfile {
 
     public void setAsphyxiating(boolean value) {
         this.asphyxiating = value;
+    }
+
+    /**
+     * Game time at which pain first reached knockout level ({@code 0} = not pain-KO-pending). Transient, never NBT.
+     */
+    public long getPainKoSince() {
+        return painKoSince;
+    }
+
+    public void setPainKoSince(long tick) {
+        this.painKoSince = tick;
+    }
+
+    /**
+     * Whether the adrenaline grace has elapsed, letting a pain-driven knockout land. Transient, never NBT.
+     */
+    public boolean isAdrenalineExhausted() {
+        return adrenalineExhausted;
+    }
+
+    public void setAdrenalineExhausted(boolean value) {
+        this.adrenalineExhausted = value;
+    }
+
+    /**
+     * Whether ANY limb currently carries localized numbing (a local anesthetic still in effect). Used by the
+     * engine to keep decaying it even when no other physiology condition is active.
+     */
+    public boolean anyLocalNumbing() {
+        for (LimbType lt : LimbType.VALUES) {
+            if (limbs.get(lt).getLocalNumbing() > 0.0F) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.warfactory.medical.core;
 
+import com.warfactory.medical.core.limb.LimbType;
+
 /**
  * Immutable bundle of physiology tunables. Kept config-free so the core stays pure; the config module
  * builds one of these from TOML and hands it to {@link Physiology}.
@@ -20,6 +22,12 @@ package com.warfactory.medical.core;
  * @param painUnconsciousThreshold   perceived pain (0..1) above which pain feeds the unconsciousness score.
  * @param painUnconsciousWeight      how much fully-saturated pain contributes to the unconsciousness score.
  * @param bloodMovementPenaltyLossFraction fraction of blood LOST above which walk/jump speed is penalised.
+ * @param painShareHead              max SYSTEMIC pain (0..1) a fully-painful head can contribute.
+ * @param painShareTorso             max SYSTEMIC pain (0..1) a fully-painful torso can contribute.
+ * @param painShareArm               max SYSTEMIC pain (0..1) a fully-painful arm can contribute (per arm).
+ * @param painShareLeg               max SYSTEMIC pain (0..1) a fully-painful leg can contribute (per leg).
+ * @param painSaturationK            per-limb diminishing-returns constant: local pain = raw / (raw + k).
+ * @param adrenalineEnabled          if true, a PAIN-driven knockout is held off for a grace period (engine-timed).
  */
 public record PhysiologyParams(
         float maxHealthPoints,
@@ -37,8 +45,28 @@ public record PhysiologyParams(
         double bloodUnconsciousLossFraction,
         float painUnconsciousThreshold,
         float painUnconsciousWeight,
-        double bloodMovementPenaltyLossFraction
+        double bloodMovementPenaltyLossFraction,
+        float painShareHead,
+        float painShareTorso,
+        float painShareArm,
+        float painShareLeg,
+        float painSaturationK,
+        boolean adrenalineEnabled
 ) {
+    /**
+     * Max SYSTEMIC pain share (0..1) a fully-painful limb of this type can contribute to the pooled pain
+     * that drives shock / unconsciousness. Arms are deliberately small so an agonising arm cannot, on its
+     * own, put the player into shock; the torso/head carry most of the shock-inducing weight.
+     */
+    public float painShare(LimbType lt) {
+        if (lt == LimbType.HEAD) {
+            return painShareHead;
+        }
+        if (lt == LimbType.TORSO) {
+            return painShareTorso;
+        }
+        return lt.isLeg() ? painShareLeg : painShareArm;
+    }
     public static PhysiologyParams defaults() {
         return new PhysiologyParams(
                 30.0F,      // maxHealthPoints
@@ -56,7 +84,13 @@ public record PhysiologyParams(
                 0.30D,      // bloodUnconsciousLossFraction
                 0.70F,      // painUnconsciousThreshold
                 1.00F,      // painUnconsciousWeight
-                0.25D       // bloodMovementPenaltyLossFraction
+                0.25D,      // bloodMovementPenaltyLossFraction
+                0.35F,      // painShareHead
+                0.50F,      // painShareTorso
+                0.10F,      // painShareArm
+                0.20F,      // painShareLeg
+                1.00F,      // painSaturationK
+                true        // adrenalineEnabled
         );
     }
 }
