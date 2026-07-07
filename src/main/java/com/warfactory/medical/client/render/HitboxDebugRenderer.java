@@ -40,7 +40,36 @@ public final class HitboxDebugRenderer {
             {0, 2}, {1, 3}, {4, 6}, {5, 7}, // along Y
             {0, 4}, {1, 5}, {2, 6}, {3, 7}  // along Z
     };
+    /**
+     * The six box faces as corner-index quads (corner bits: x=1, y=2, z=4), each drawn as two triangles for
+     * the FILLED style. Winding is irrelevant &mdash; {@link HitboxRenderType#FILLED} disables face culling.
+     */
+    private static final int[][] FACES = {
+            {0, 2, 6, 4}, {1, 3, 7, 5}, // -X, +X
+            {0, 4, 5, 1}, {2, 3, 7, 6}, // -Y, +Y
+            {0, 1, 3, 2}, {4, 6, 7, 5}  // -Z, +Z
+    };
+    /**
+     * Face alpha for the half-opaque FILLED style.
+     */
+    private static final float FILL_ALPHA = 0.30F;
     public static boolean enabled = false;
+
+    /**
+     * The overlay draw style, scrolled through while the overlay is on.
+     */
+    public enum Style {
+        /**
+         * Wireframe box edges only (the original overlay).
+         */
+        EDGES,
+        /**
+         * Wireframe edges plus translucent filled faces on the rig limb boxes, for reading the solid volume.
+         */
+        FILLED
+    }
+
+    public static Style style = Style.EDGES;
 
     private HitboxDebugRenderer() {
     }
@@ -50,6 +79,16 @@ public final class HitboxDebugRenderer {
      */
     public static void toggle() {
         enabled = !enabled;
+    }
+
+    /**
+     * Scroll the draw style by {@code dir} (+1 / -1), wrapping. Returns the new style for a status message.
+     */
+    public static Style cycleStyle(int dir) {
+        Style[] all = Style.values();
+        int next = Math.floorMod(style.ordinal() + dir, all.length);
+        style = all[next];
+        return style;
     }
 
     @SubscribeEvent
@@ -73,13 +112,26 @@ public final class HitboxDebugRenderer {
         float pt = event.getPartialTick();
         PoseStack ps = event.getPoseStack();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
-        VertexConsumer vc = buffers.getBuffer(RenderType.lines());
 
         ps.pushPose();
         ps.translate(-cam.x, -cam.y, -cam.z);
         Matrix4f mat = ps.last().pose();
         Matrix3f nrm = ps.last().normal();
         boolean regActive = MedicalConfig.hitRegistrationMode() != HitRegMode.OFF;
+
+        // FILLED style: the translucent faces go in their own pass, fully emitted and flushed BEFORE the lines.
+        // The lines buffer and the fill buffer share the immediate-mode fallback BufferBuilder, so the two
+        // formats must never be written interleaved -- hence separate passes with an endBatch between them.
+        if (style == Style.FILLED) {
+            VertexConsumer fillVc = buffers.getBuffer(HitboxRenderType.FILLED);
+            for (LivingEntity e : targets) {
+                float rigAlpha = HitGeometry.rigPoseSupported(e) ? 1.0F : 0.4F;
+                fillRig(mat, fillVc, e, pt, rigAlpha);
+            }
+            buffers.endBatch(HitboxRenderType.FILLED);
+        }
+
+        VertexConsumer vc = buffers.getBuffer(RenderType.lines());
         for (LivingEntity e : targets) {
             //vanilla collision box
             AABB tight = e.getBoundingBox();
@@ -100,30 +152,71 @@ public final class HitboxDebugRenderer {
 
     private static void renderRig(Matrix4f mat, Matrix3f nrm, VertexConsumer vc, LivingEntity e, float pt, float alpha) {
         HumanoidRig.LocalRig rig = HumanoidRig.compute(e);
+        double[] frame = frame(e, pt);
+        LimbType hl = RigTuning.ACTIVE ? RigTuning.highlight : null;
+        for (Obb obb : rig.all()) {
+            float[] c = colorFor(obb.limb());
+            float a = limbAlpha(obb.limb(), hl, alpha);
+            Vec3[] corners = cornersOf(obb, frame);
+            for (int[] edge : EDGES) {
+                line(mat, nrm, vc, corners[edge[0]], corners[edge[1]], c[0], c[1], c[2], a);
+            }
+        }
+    }
+
+    private static void fillRig(Matrix4f mat, VertexConsumer fillVc, LivingEntity e, float pt, float alpha) {
+        HumanoidRig.LocalRig rig = HumanoidRig.compute(e);
+        double[] frame = frame(e, pt);
+        LimbType hl = RigTuning.ACTIVE ? RigTuning.highlight : null;
+        for (Obb obb : rig.all()) {
+            float[] c = colorFor(obb.limb());
+            float a = limbAlpha(obb.limb(), hl, alpha) * FILL_ALPHA;
+            Vec3[] corners = cornersOf(obb, frame);
+            for (int[] face : FACES) {
+                Vec3 v0 = corners[face[0]];
+                Vec3 v1 = corners[face[1]];
+                Vec3 v2 = corners[face[2]];
+                Vec3 v3 = corners[face[3]];
+                fillTri(mat, fillVc, v0, v1, v2, c[0], c[1], c[2], a);
+                fillTri(mat, fillVc, v0, v2, v3, c[0], c[1], c[2], a);
+            }
+        }
+    }
+
+    /**
+     * The entity's interpolated feet position and yaw frame as {@code {px, py, pz, fx, fz, rx, rz}}.
+     */
+    private static double[] frame(LivingEntity e, float pt) {
         double px = Mth.lerp(pt, e.xOld, e.getX());
         double py = Mth.lerp(pt, e.yOld, e.getY());
         double pz = Mth.lerp(pt, e.zOld, e.getZ());
         double yaw = Math.toRadians(Mth.rotLerp(pt, e.yBodyRotO, e.yBodyRot));
         double fx = -Math.sin(yaw);
         double fz = Math.cos(yaw);   // front = (-sin, 0, cos)
-        double rx = -fz;
-        double rz = fx;              // right = (-front.z, 0, front.x)
-        // While tuning, spotlight the limb being edited: brighten it, fade the rest so the target reads clearly.
-        LimbType hl = RigTuning.ACTIVE ? RigTuning.highlight : null;
-        for (Obb obb : rig.all()) {
-            float[] c = colorFor(obb.limb());
-            float a = alpha;
-            if (hl != null) {
-                a = obb.limb() == hl ? Math.min(1.0F, alpha + 0.4F) : alpha * 0.3F;
-            }
-            drawObb(mat, nrm, vc, obb, px, py, pz, fx, fz, rx, rz, c[0], c[1], c[2], a);
-        }
+        return new double[]{px, py, pz, fx, fz, -fz, fx}; // ..., rx = -fz, rz = fx
     }
 
-    private static void drawObb(Matrix4f mat, Matrix3f nrm, VertexConsumer vc, Obb obb,
-                                double px, double py, double pz,
-                                double fx, double fz, double rx, double rz,
-                                float red, float green, float blue, float alpha) {
+    /**
+     * While tuning, spotlight the limb being edited: brighten it, fade the rest so the target reads clearly.
+     */
+    private static float limbAlpha(LimbType limb, LimbType highlight, float alpha) {
+        if (highlight == null) {
+            return alpha;
+        }
+        return limb == highlight ? Math.min(1.0F, alpha + 0.4F) : alpha * 0.3F;
+    }
+
+    /**
+     * The OBB's eight world-space corners, indexed by {@link #cornerIndex}.
+     */
+    private static Vec3[] cornersOf(Obb obb, double[] frame) {
+        double px = frame[0];
+        double py = frame[1];
+        double pz = frame[2];
+        double fx = frame[3];
+        double fz = frame[4];
+        double rx = frame[5];
+        double rz = frame[6];
         Vec3 c = obb.center();
         Vec3 ax = obb.axisX();
         Vec3 ay = obb.axisY();
@@ -131,7 +224,6 @@ public final class HitboxDebugRenderer {
         double hx = obb.half().x;
         double hy = obb.half().y;
         double hz = obb.half().z;
-
         Vec3[] corners = new Vec3[8];
         for (int sx = -1; sx <= 1; sx += 2) {
             for (int sy = -1; sy <= 1; sy += 2) {
@@ -140,7 +232,7 @@ public final class HitboxDebugRenderer {
                     double lx = c.x + sx * hx * ax.x + sy * hy * ay.x + sz * hz * az.x;
                     double ly = c.y + sx * hx * ax.y + sy * hy * ay.y + sz * hz * az.y;
                     double lz = c.z + sx * hx * ax.z + sy * hy * ay.z + sz * hz * az.z;
-                    //dd entity-local world: feet + lx*right + ly*up + lz*front.
+                    // entity-local -> world: feet + lx*right + ly*up + lz*front.
                     double wx = px + lx * rx + lz * fx;
                     double wy = py + ly;
                     double wz = pz + lx * rz + lz * fz;
@@ -148,9 +240,14 @@ public final class HitboxDebugRenderer {
                 }
             }
         }
-        for (int[] edge : EDGES) {
-            line(mat, nrm, vc, corners[edge[0]], corners[edge[1]], red, green, blue, alpha);
-        }
+        return corners;
+    }
+
+    private static void fillTri(Matrix4f mat, VertexConsumer vc, Vec3 a, Vec3 b, Vec3 c,
+                                float red, float green, float blue, float alpha) {
+        vc.vertex(mat, (float) a.x, (float) a.y, (float) a.z).color(red, green, blue, alpha).endVertex();
+        vc.vertex(mat, (float) b.x, (float) b.y, (float) b.z).color(red, green, blue, alpha).endVertex();
+        vc.vertex(mat, (float) c.x, (float) c.y, (float) c.z).color(red, green, blue, alpha).endVertex();
     }
 
     private static int cornerIndex(int sx, int sy, int sz) {

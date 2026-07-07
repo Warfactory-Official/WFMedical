@@ -6,7 +6,6 @@ import com.warfactory.medical.core.damage.rig.HumanoidRig;
 import com.warfactory.medical.core.damage.rig.RigTuning;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 
@@ -16,18 +15,18 @@ import net.minecraft.world.phys.AABB;
  * never register. This widens the box the ray is clipped against &mdash; <b>only</b> for the hit-scan, never
  * for collision/physics &mdash; so those hits land. Used by {@code ProjectileUtilMixin}. The PRECISE-mode
  * gap-rejection (throwing out shots that threaded between the limbs) lives in {@link HitGeometry#isGapShot}.
+ *
+ * <p><b>Static per-stance envelope.</b> The box is a fixed inflation of the vanilla collision box, sized per
+ * stance (standing / crouching / prone / downed) via {@link MedicalConfig#hitEnvelopeReachHorizontal} /
+ * {@link MedicalConfig#hitEnvelopeReachVertical}. Because the vanilla box already shrinks/grows with the pose
+ * (tall upright, short-and-low while swimming/crawling), a per-stance reach lets the standing box stay tight
+ * around the arm overhang while the body-horizontal prone/downed stances get the far reach the lying
+ * silhouette needs; the fine-phase per-limb OBB test rejects any surplus, so over-sizing only costs a few
+ * extra fine tests, never a missed hit. No per-hit pose rebuild &mdash; just a stance lookup and one inflate.
+ * While hitbox tuning is {@link RigTuning#ACTIVE} the live-tuned reach is used instead of the config so the
+ * drawn envelope and the real hit box resize together.</p>
  */
 public final class MedicalHitReg {
-
-    /**
-     * Static horizontal arm reach (blocks beyond the collision box, per side) for the UPRIGHT broad-phase
-     * envelope. Sized to contain a player's arm in ANY upright pose &mdash; hanging, mid-walk swing, a melee
-     * swing, or extended forward while aiming (hand ~0.75 from centre, ~0.45 past the 0.3 box edge) &mdash; so
-     * the box never has to be rebuilt from the animated pose for a standing/walking player. Deliberately a
-     * little generous: the broad phase only needs to CONTAIN the model; the fine-phase per-limb OBB test
-     * rejects the surplus, so over-reach costs a few extra fine tests but never a missed hit.
-     */
-    private static final double UPRIGHT_ARM_REACH = 0.25;
 
     private MedicalHitReg() {
     }
@@ -40,47 +39,33 @@ public final class MedicalHitReg {
     }
 
     /**
-     * The box the hit-scan should clip {@code entity} against. For an envelope target (mode != OFF) the
-     * collision box is widened to the model silhouette &mdash; horizontally for an upright body (to reach the
-     * arms), all-round for a prone/crawl body (whose short box sits well inside the lying model). Everything
-     * else (non-targets, mode OFF, zero inflation) gets its normal box back, so non-players and the disabled
-     * path stay exactly vanilla. Kept cheap: it runs once per candidate per hit-scan.
+     * The box the hit-scan should clip {@code entity} against: the vanilla collision box inflated by the
+     * stance's envelope reach (horizontal on X/Z, vertical on Y). Non-targets, mode OFF, and a zero envelope
+     * all get the normal box back, so non-players and the disabled path stay exactly vanilla. Kept cheap
+     * &mdash; a stance resolve, a couple of reads and one {@link AABB#inflate}, no {@code compute()}.
      */
     public static AABB registrationBox(Entity entity) {
         AABB box = entity.getBoundingBox();
         if (MedicalConfig.hitRegistrationMode() == HitRegMode.OFF) {
             return box;
         }
-        if (!(entity instanceof LivingEntity living) || !isEnvelopeTarget(entity)) {
+        if (!isEnvelopeTarget(entity) || !(entity instanceof LivingEntity living)) {
             return box;
         }
-        double inflate = MedicalConfig.hitEnvelopeInflation();
-        if (inflate <= 0.0) {
+        RigTuning.RigPose pose = HumanoidRig.resolvePose(living);
+        double h;
+        double v;
+        if (RigTuning.ACTIVE) {
+            // Debug: live-tuned reach, so the overlay and the real hit box track the command nudges together.
+            h = RigTuning.envReach(pose, RigTuning.EnvAxis.HORIZONTAL);
+            v = RigTuning.envReach(pose, RigTuning.EnvAxis.VERTICAL);
+        } else {
+            h = MedicalConfig.hitEnvelopeReachHorizontal(pose);
+            v = MedicalConfig.hitEnvelopeReachVertical(pose);
+        }
+        if (h <= 0.0 && v <= 0.0) {
             return box;
         }
-
-        if (MedicalConfig.riggedLimbBoxes() && HitGeometry.rigPoseSupported(living)) {
-            // Upright (idle / walk / run / sneak): the arms only ever swing within a FIXED envelope, so skip
-            // the per-frame pose rebuild (worldBounds runs the whole articulated compute()) and use a static
-            // horizontal reach that always contains them. This is the hot path -- once per projectile per tick
-            // per nearby player -- and the precise limb pick still runs the real pose in the fine phase, but
-            // only on an actual near-hit. While hitbox tuning is armed the static reach cannot be trusted to
-            // contain a box that was nudged outward, so fall through to the pose-derived bounds (debug only).
-            if (HitGeometry.isUprightHumanoid(living) && !RigTuning.ACTIVE) {
-                double reach = UPRIGHT_ARM_REACH + inflate;
-                return box.inflate(reach, inflate, reach);
-            }
-            // Non-upright (downed / crawl / swim / elytra): the silhouette is radically different (a lying body
-            // extends far along the ground), so here the pose-derived bounds genuinely matter.
-            AABB rigBounds = HumanoidRig.worldBounds(living);
-            return box.minmax(rigBounds).inflate(inflate);
-        }
-
-        if (!HitGeometry.isUprightHumanoid(living)) {
-            double standing = living.getDimensions(Pose.STANDING).height;
-            double reach = Math.max(standing, 1.0) * 0.5 + inflate;
-            return box.inflate(reach, inflate, reach);
-        }
-        return box.inflate(inflate, 0.0, inflate);
+        return box.inflate(h, v, h);
     }
 }

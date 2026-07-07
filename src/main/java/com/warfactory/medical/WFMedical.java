@@ -63,6 +63,8 @@ public final class WFMedical {
     private void onConfigChanged(ModConfigEvent event) {
         if (event.getConfig().getSpec() == MedicalConfig.SPEC) {
             RigTuning.ACTIVE = MedicalConfig.hitboxDebug();
+            // Seed the live per-stance envelope reach from config so tuning starts from the persisted values.
+            RigTuning.seedEnvelope(MedicalConfig.envelopeReachSnapshot());
         }
     }
 

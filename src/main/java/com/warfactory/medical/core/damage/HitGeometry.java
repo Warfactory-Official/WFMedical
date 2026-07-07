@@ -439,8 +439,8 @@ public final class HitGeometry {
                 return true;
             }
         }
-        // A held TACZ gun raises the arms even without a vanilla use-anim.
-        return TaczCompat.isHeldGun(victim.getMainHandItem()) || TaczCompat.isHeldGun(victim.getOffhandItem());
+        // A TACZ gun raises the arms only from the MAIN hand; an off-hand gun is slung on the back (not aimed).
+        return TaczCompat.isHeldGun(victim.getMainHandItem());
     }
 
 

@@ -71,7 +71,31 @@ public final class MedicalClientEvents {
         }
         while (MedicalKeyMappings.TOGGLE_HITBOX.consumeClick()) {
             HitboxDebugRenderer.toggle();
+            mc.player.displayClientMessage(Component.literal("Hitbox overlay: "
+                    + (HitboxDebugRenderer.enabled ? "on (" + HitboxDebugRenderer.style + ", scroll to change)" : "off")), true);
         }
+    }
+
+    /**
+     * While the hitbox overlay is on, the scroll wheel cycles its draw style (edges &harr; filled) instead of
+     * the hotbar. Off, or in a screen, scrolling behaves normally.
+     */
+    @SubscribeEvent
+    public static void onMouseScroll(net.minecraftforge.client.event.InputEvent.MouseScrollingEvent event) {
+        if (!HitboxDebugRenderer.enabled) {
+            return;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.screen != null) {
+            return;
+        }
+        double delta = event.getScrollDelta();
+        if (delta == 0.0) {
+            return;
+        }
+        HitboxDebugRenderer.Style now = HitboxDebugRenderer.cycleStyle(delta > 0.0 ? 1 : -1);
+        mc.player.displayClientMessage(Component.literal("Hitbox overlay: " + now), true);
+        event.setCanceled(true);
     }
 
     private static void drain(net.minecraft.client.KeyMapping key) {

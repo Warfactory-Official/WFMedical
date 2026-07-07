@@ -3,6 +3,7 @@ package com.warfactory.medical.config;
 import com.warfactory.medical.core.PhysiologyParams;
 import com.warfactory.medical.core.damage.DamageCategory;
 import com.warfactory.medical.core.damage.HitRegMode;
+import com.warfactory.medical.core.damage.rig.RigTuning;
 import com.warfactory.medical.core.limb.LimbType;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.fml.ModLoadingContext;
@@ -76,7 +77,12 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.BooleanValue OPEN_PERSISTENCE_COMPAT;
     private static final ForgeConfigSpec.BooleanValue TACZ_ARM_POSE;
     private static final ForgeConfigSpec.EnumValue<HitRegMode> HITREG_MODE;
-    private static final ForgeConfigSpec.DoubleValue HIT_ENVELOPE_INFLATION;
+    /**
+     * Per-stance broad-phase envelope reach, indexed by {@link RigTuning.RigPose#ordinal()}: horizontal (X/Z)
+     * and vertical (Y).
+     */
+    private static final ForgeConfigSpec.DoubleValue[] ENV_REACH_H;
+    private static final ForgeConfigSpec.DoubleValue[] ENV_REACH_V;
     private static final ForgeConfigSpec.DoubleValue BLOOD_MOVEMENT_PENALTY_LOSS_FRACTION;
     private static final ForgeConfigSpec.DoubleValue BLEEDING_SELF_HEAL_THRESHOLD;
     private static final ForgeConfigSpec.DoubleValue BLEEDING_SELF_HEAL_RATE;
@@ -442,17 +448,36 @@ public final class MedicalConfig {
                 .comment("How incoming attacks are registered against players / persistent bodies:",
                         "  OFF      - vanilla: the ray clips the tight collision box; arms (which render outside",
                         "             it) and prone bodies never register.",
-                        "  ENVELOPE - the hit-scan box is widened to the model silhouette so arm / prone hits",
-                        "             register (forgiving: a shot through the gap between an arm and the torso",
-                        "             still counts). Near-zero cost; collision/physics are unaffected.",
+                        "  ENVELOPE - the hit-scan box is widened by a fixed margin (hitEnvelopeReach*) so arm /",
+                        "             prone hits register (forgiving: a shot through the gap between an arm and the",
+                        "             torso still counts). Near-zero cost; collision/physics are unaffected.",
                         "  PRECISE  - ENVELOPE registration, then a shot that actually threaded a gap between the",
                         "             rigged limb boxes is rejected (whiffs). A centre-mass hit is a cheap tight-box",
                         "             fast-path, so only grazing arm-margin shots ever build the rig.")
                 .defineEnum("hitRegistrationMode", HitRegMode.ENVELOPE);
-        HIT_ENVELOPE_INFLATION = b
-                .comment("Blocks the hit-scan box is widened (X/Z) to reach the arms for ENVELOPE / PRECISE "
-                        + "registration. ~0.15-0.2 covers the vanilla arm overhang.")
-                .defineInRange("hitEnvelopeInflation", 0.15D, 0.0D, 1.0D);
+        b.comment("Per-STANCE broad-phase envelope: blocks the hit-scan box is widened for each pose so arm /",
+                        "prone hits register. Horizontal = X/Z per side, Vertical = Y top+bottom. Size each to just",
+                        "contain the model in that stance -- the vanilla box already shrinks while crouching/swimming,",
+                        "and the fine-phase per-limb test rejects any surplus, so over-sizing only costs a few extra",
+                        "fine tests while under-sizing drops hits. Tune live with '/wfmedical hitbox envelope ...' and",
+                        "bake the dialled-in numbers back here.")
+                .push("envelopeReach");
+        // Defaults per RigPose (ordinal order STANDING, CROUCHING, PRONE, DOWNED): {horizontal, vertical}.
+        // Upright/crouch only need the arm overhang; the body-horizontal prone/downed silhouettes reach far.
+        double[][] envDefaults = {{0.4D, 0.2D}, {0.5D, 0.1D}, {1.0D, 0.3D}, {1.0D, 0.3D}};
+        ForgeConfigSpec.DoubleValue[] envH = new ForgeConfigSpec.DoubleValue[RigTuning.RigPose.VALUES.length];
+        ForgeConfigSpec.DoubleValue[] envV = new ForgeConfigSpec.DoubleValue[RigTuning.RigPose.VALUES.length];
+        for (RigTuning.RigPose pose : RigTuning.RigPose.VALUES) {
+            int i = pose.ordinal();
+            String n = pose.lower();
+            envH[i] = b.comment("Horizontal (X/Z) envelope reach for the " + n + " stance.")
+                    .defineInRange(n + "Horizontal", envDefaults[i][0], 0.0D, 4.0D);
+            envV[i] = b.comment("Vertical (Y) envelope reach for the " + n + " stance.")
+                    .defineInRange(n + "Vertical", envDefaults[i][1], 0.0D, 4.0D);
+        }
+        ENV_REACH_H = envH;
+        ENV_REACH_V = envV;
+        b.pop();
         b.pop();
 
         SPEC = b.build();
@@ -840,8 +865,31 @@ public final class MedicalConfig {
         return HITREG_MODE.get();
     }
 
-    public static double hitEnvelopeInflation() {
-        return HIT_ENVELOPE_INFLATION.get();
+    /**
+     * Horizontal (X/Z) envelope reach the hit-scan box is widened by for the given stance.
+     */
+    public static double hitEnvelopeReachHorizontal(RigTuning.RigPose pose) {
+        return ENV_REACH_H[pose.ordinal()].get();
+    }
+
+    /**
+     * Vertical (Y) envelope reach the hit-scan box is widened by for the given stance.
+     */
+    public static double hitEnvelopeReachVertical(RigTuning.RigPose pose) {
+        return ENV_REACH_V[pose.ordinal()].get();
+    }
+
+    /**
+     * Snapshot of the per-stance envelope reach as a flat {@code [pose*2 + axis]} array (axis 0 = horizontal,
+     * 1 = vertical), for seeding {@link RigTuning#seedEnvelope} at config load/reload.
+     */
+    public static double[] envelopeReachSnapshot() {
+        double[] a = new double[RigTuning.RigPose.VALUES.length * 2];
+        for (RigTuning.RigPose pose : RigTuning.RigPose.VALUES) {
+            a[pose.ordinal() * 2] = ENV_REACH_H[pose.ordinal()].get();
+            a[pose.ordinal() * 2 + 1] = ENV_REACH_V[pose.ordinal()].get();
+        }
+        return a;
     }
 
     /**

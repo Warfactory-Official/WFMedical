@@ -14,7 +14,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.UseAnim;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Random;
@@ -43,12 +42,10 @@ public final class HumanoidRig {
     private static final double LIMB_FREQ = 0.6662;
 
     /**
-     * The fixed, upright base spec for each limb box (model units), the single source of truth for both the
-     * runtime rig and the {@code /wfmedical hitbox export} dump. Indexed by {@link LimbType#ordinal()}; each
-     * row is {@code {ox, oy, oz, sx, sy, sz, px, py, pz}} matching the leading {@code Part} ctor args
-     * (offset, size, pivot). HEAD and the two arms additionally get {@code +yOff} on {@code oy} while
-     * crouching — applied at {@link #part} time, NOT stored here. When {@link RigTuning#ACTIVE} the per-limb
-     * {@link RigTuning} deltas are added on top; otherwise these values are used verbatim.
+     * The fixed, upright (STANDING) base spec for each limb box (model units), the single source of truth for
+     * both the runtime rig and the {@code /wfmedical hitbox export} dump. Indexed by {@link LimbType#ordinal()};
+     * each row is {@code {ox, oy, oz, sx, sy, sz, px, py, pz}} matching the leading {@code Part} ctor args
+     * (offset, size, pivot). Pose-specific shifts live in {@link #POSE_ADJUST}, not here.
      */
     private static final double[][] BASE = base();
 
@@ -64,41 +61,149 @@ public final class HumanoidRig {
     }
 
     /**
-     * The upright base spec for a limb ({@code {ox,oy,oz,sx,sy,sz,px,py,pz}}, model units). Returns a copy;
-     * for the debug {@code hitbox show/export} commands. {@link #usesCrouchOffset} reports which limbs also
-     * take {@code +yOff} on {@code oy} at pose time.
+     * Per-pose additive shifts of the {@link #BASE} spec (model units), indexed
+     * {@code [RigPose.ordinal()][LimbType.ordinal()]}, each a {@code {ox,oy,oz,sx,sy,sz,px,py,pz}} row. Applied
+     * on top of {@link #BASE} for the resolved pose, BEFORE the animation transforms in {@link #setupAnim}.
+     * {@code STANDING} is all-zero (the base already IS the standing spec). {@code CROUCHING} carries the old
+     * hard-coded {@code yOff = 2.75} lift on the head and both arms; the rest is open for tuning. Baked from
+     * {@code /wfmedical hitbox export <pose>}.
+     */
+    private static final double[][][] POSE_ADJUST = poseAdjust();
+
+    private static double[][][] poseAdjust() {
+        double[][][] a = new double[RigTuning.RigPose.VALUES.length][LimbType.VALUES.length][RigTuning.FIELDS];
+        // HEAD: the crouch lift goes on the PIVOT (py, index 7), NOT the offset -- the head cube rotates about
+        // its pivot with the look direction, so a pivot shift lowers the neck joint correctly (an offset would
+        // make the head orbit as you look around). setupAnim adds this onto the base crouch pivot (head.y += ..).
+        a[RigTuning.RigPose.CROUCHING.ordinal()][LimbType.HEAD.ordinal()] = new double[]{0, 0, 0, 0, 0, 0, 0, 1.75, 0};
+        a[RigTuning.RigPose.CROUCHING.ordinal()][LimbType.TORSO.ordinal()] = new double[]{0, 2, -1, 0, 0, 0, 0, 0, 0};
+        a[RigTuning.RigPose.CROUCHING.ordinal()][LimbType.LEFT_ARM.ordinal()] = new double[]{0, 2, -1, 0, 0, 0, 0, 0, 0};
+        a[RigTuning.RigPose.CROUCHING.ordinal()][LimbType.RIGHT_ARM.ordinal()] = new double[]{0, 2, -1, 0, 0, 0, 0, 0, 0};
+        a[RigTuning.RigPose.CROUCHING.ordinal()][LimbType.LEFT_LEG.ordinal()] = new double[]{0, 2, 0, 0, 0, 0, 0, 0, 0};
+        a[RigTuning.RigPose.CROUCHING.ordinal()][LimbType.RIGHT_LEG.ordinal()] = new double[]{0, 2, 0, 0, 0, 0, 0, 0, 0};
+        return a;
+    }
+
+    /**
+     * Per-(stance, hand-action) ARM overlay of the {@link #BASE} spec (model units), indexed
+     * {@code [RigPose][HandAction][LimbType]}. Added on top of {@link #POSE_ADJUST} for the arm limbs when a
+     * hand action is active (aiming a bow, holding a TACZ gun, blocking), so the raised-arm boxes can be tuned
+     * per stance AND per action. Starts all-zero &mdash; the raised-arm rotation is done in {@link #setupAnim};
+     * this only corrects the arm cube position/size. {@code HandAction.NONE} rows and non-arm rows stay zero.
+     * Baked from {@code /wfmedical hitbox export}.
+     */
+    private static final double[][][][] HAND_ADJUST = handAdjust();
+
+    private static double[][][][] handAdjust() {
+        double[][][][] a = new double[RigTuning.RigPose.VALUES.length][RigTuning.HandAction.VALUES.length]
+                [LimbType.VALUES.length][RigTuning.FIELDS];
+        // Per-(stance, hand-action) arm overlays -- all zero until tuned. Baked rows from
+        // '/wfmedical hitbox export' drop in here (their format matches these assignments exactly).
+        return a;
+    }
+
+    /**
+     * The STANDING base spec for a limb ({@code {ox,oy,oz,sx,sy,sz,px,py,pz}}, model units). Returns a copy;
+     * for the debug {@code hitbox show/export} commands.
      */
     public static double[] baseSpec(LimbType limb) {
         return BASE[limb.ordinal()].clone();
     }
 
     /**
-     * True for the limbs whose {@code oy} gains the crouch {@code yOff} at pose time (head + both arms).
+     * The per-pose adjustment row for a limb (model units, added onto {@link #baseSpec}). Returns a copy; for
+     * the debug commands. STANDING is always all-zero.
      */
-    public static boolean usesCrouchOffset(LimbType limb) {
-        return limb == LimbType.HEAD || limb.isArm();
+    public static double[] poseAdjustSpec(RigTuning.RigPose pose, LimbType limb) {
+        return POSE_ADJUST[pose.ordinal()][limb.ordinal()].clone();
     }
 
     /**
-     * Build a {@link Part} from its {@link #BASE} spec, adding the crouch {@code yOff} to {@code oy} and, only
-     * when {@link RigTuning#ACTIVE}, the live {@link RigTuning} deltas. The {@code ACTIVE} branch is skipped
-     * entirely in normal play, so this is a plain base-spec read with no tuning cost.
+     * The per-(stance, hand-action) arm overlay row for a limb (model units). Returns a copy; for the debug
+     * commands. Only arm limbs with a non-NONE action are ever non-zero.
      */
-    private static Part part(LimbType limb, double yOff) {
-        int i = limb.ordinal();
-        double[] s = BASE[i];
-        double ox = s[0];
-        double oy = s[1] + yOff;
-        double oz = s[2];
-        double sx = s[3];
-        double sy = s[4];
-        double sz = s[5];
-        double px = s[6];
-        double py = s[7];
-        double pz = s[8];
+    public static double[] handAdjustSpec(RigTuning.RigPose pose, RigTuning.HandAction hand, LimbType limb) {
+        return HAND_ADJUST[pose.ordinal()][hand.ordinal()][limb.ordinal()].clone();
+    }
+
+    /**
+     * The single dominant hand action the victim currently presents (used to pick the arm overlay). Mirrors the
+     * per-hand {@code getArmPose}, collapsed to one value: a held gun wins, then a bow/crossbow/spear draw, then
+     * a shield block, else NONE. Bow and gun are two-handed, so applying one action to both arms is correct;
+     * per-arm asymmetry (e.g. draw vs bow arm) is handled by tuning each arm within the action.
+     */
+    public static RigTuning.HandAction resolveHandAction(LivingEntity victim) {
+        RigTuning.HandAction main = handAction(getArmPose(victim, InteractionHand.MAIN_HAND));
+        if (main != RigTuning.HandAction.NONE) {
+            return main;
+        }
+        return handAction(getArmPose(victim, InteractionHand.OFF_HAND));
+    }
+
+    private static RigTuning.HandAction handAction(ArmPose pose) {
+        return switch (pose) {
+            case GUN -> RigTuning.HandAction.GUN;
+            case BOW, SPEAR, CROSSBOW_CHARGE, CROSSBOW_HOLD -> RigTuning.HandAction.BOW;
+            case BLOCK -> RigTuning.HandAction.BLOCK;
+            default -> RigTuning.HandAction.NONE;
+        };
+    }
+
+    /**
+     * Which pose profile a victim currently presents, deciding the tuning/adjust layer used to build its boxes
+     * (and, in {@code MedicalHitReg}, the per-stance envelope reach). Priority matches the silhouette that
+     * dominates: supine downed, then any body-horizontal pose (swim / crawl / elytra), then crouch, else upright.
+     */
+    public static RigTuning.RigPose resolvePose(LivingEntity victim) {
+        if (victim instanceof Player p && MedicalState.isDowned(p)) {
+            return RigTuning.RigPose.DOWNED;
+        }
+        if (victim.isFallFlying() || victim.isVisuallySwimming() || victim.getSwimAmount(1.0F) > 0.0F) {
+            return RigTuning.RigPose.PRONE;
+        }
+        if (victim.isCrouching()) {
+            return RigTuning.RigPose.CROUCHING;
+        }
+        return RigTuning.RigPose.STANDING;
+    }
+
+    /**
+     * Build a {@link Part} from its {@link #BASE} spec plus the resolved pose's {@link #POSE_ADJUST} row, and
+     * for the ARMS an additional {@link #HAND_ADJUST} overlay for the active hand action (aiming / gun / block),
+     * and &mdash; only when {@link RigTuning#ACTIVE} &mdash; the matching live {@link RigTuning} deltas (stance
+     * plus, for arms, the hand overlay). The {@code ACTIVE} branch is skipped entirely in normal play, so this
+     * is a plain spec read with no tuning cost.
+     */
+    private static Part part(LimbType limb, RigTuning.RigPose pose, RigTuning.HandAction hand) {
+        int li = limb.ordinal();
+        double[] s = BASE[li];
+        double[] adj = POSE_ADJUST[pose.ordinal()][li];
+        double ox = s[0] + adj[0];
+        double oy = s[1] + adj[1];
+        double oz = s[2] + adj[2];
+        double sx = s[3] + adj[3];
+        double sy = s[4] + adj[4];
+        double sz = s[5] + adj[5];
+        double px = s[6] + adj[6];
+        double py = s[7] + adj[7];
+        double pz = s[8] + adj[8];
+        // Arms in a hand action get the baked per-(stance, action) overlay on top of the stance adjust.
+        boolean armOverlay = limb.isArm() && hand != RigTuning.HandAction.NONE;
+        if (armOverlay) {
+            double[] h = HAND_ADJUST[pose.ordinal()][hand.ordinal()][li];
+            ox += h[0];
+            oy += h[1];
+            oz += h[2];
+            sx += h[3];
+            sy += h[4];
+            sz += h[5];
+            px += h[6];
+            py += h[7];
+            pz += h[8];
+        }
         if (RigTuning.ACTIVE) {
             double[] d = RigTuning.deltas();
-            int b = i * RigTuning.FIELDS;
+            int b = RigTuning.base(pose, limb);
             ox += d[b];
             oy += d[b + 1];
             oz += d[b + 2];
@@ -108,6 +213,19 @@ public final class HumanoidRig {
             px += d[b + 6];
             py += d[b + 7];
             pz += d[b + 8];
+            if (armOverlay) {
+                double[] hd = RigTuning.handDeltas();
+                int hb = RigTuning.handBase(pose, hand, limb);
+                ox += hd[hb];
+                oy += hd[hb + 1];
+                oz += hd[hb + 2];
+                sx += hd[hb + 3];
+                sy += hd[hb + 4];
+                sz += hd[hb + 5];
+                px += hd[hb + 6];
+                py += hd[hb + 7];
+                pz += hd[hb + 8];
+            }
         }
         return new Part(ox, oy, oz, sx, sy, sz, px, py, pz, limb);
     }
@@ -140,16 +258,17 @@ public final class HumanoidRig {
      */
     public static LocalRig compute(LivingEntity victim) {
 
-        Part body = part(LimbType.TORSO, 0.0);
-        Part rightLeg = part(LimbType.RIGHT_LEG, 0.0);
-        Part leftLeg = part(LimbType.LEFT_LEG, 0.0);
+        // The crouch head/arm lift and any per-pose tuning are folded in per part by the resolved pose; the
+        // arms additionally get the active hand action's overlay (aiming a bow, holding a gun, blocking).
+        RigTuning.RigPose pose = resolvePose(victim);
+        RigTuning.HandAction hand = resolveHandAction(victim);
 
-        //Crouching does heavily affect y position of arms and head
-        double yOff = victim.isCrouching() ? 2.75 : 0;
-
-        Part head = part(LimbType.HEAD, yOff);
-        Part rightArm = part(LimbType.RIGHT_ARM, yOff);
-        Part leftArm = part(LimbType.LEFT_ARM, yOff);
+        Part body = part(LimbType.TORSO, pose, hand);
+        Part rightLeg = part(LimbType.RIGHT_LEG, pose, hand);
+        Part leftLeg = part(LimbType.LEFT_LEG, pose, hand);
+        Part head = part(LimbType.HEAD, pose, hand);
+        Part rightArm = part(LimbType.RIGHT_ARM, pose, hand);
+        Part leftArm = part(LimbType.LEFT_ARM, pose, hand);
 
         setupAnim(victim, head, body, rightArm, leftArm, rightLeg, leftLeg);
 
@@ -169,46 +288,6 @@ public final class HumanoidRig {
             applyPoseTilt(victim, rig);
         }
         return rig;
-    }
-
-    public static AABB worldBounds(LivingEntity victim) {
-        LocalRig rig = compute(victim);
-        Vec3 pos = victim.position();
-        double yaw = Math.toRadians(victim.yBodyRot);
-        double fx = -Math.sin(yaw);
-        double fz = Math.cos(yaw);   // front = (-sin, 0, cos)
-        double rx = -fz;
-        double rz = fx;              // right = (-front.z, 0, front.x)
-        double minX = Double.POSITIVE_INFINITY, minY = minX, minZ = minX;
-        double maxX = Double.NEGATIVE_INFINITY, maxY = maxX, maxZ = maxX;
-        for (Obb obb : rig.all()) {
-            Vec3 c = obb.center();
-            Vec3 ax = obb.axisX();
-            Vec3 ay = obb.axisY();
-            Vec3 az = obb.axisZ();
-            double hx = obb.half().x;
-            double hy = obb.half().y;
-            double hz = obb.half().z;
-            for (int sx = -1; sx <= 1; sx += 2) {
-                for (int sy = -1; sy <= 1; sy += 2) {
-                    for (int sz = -1; sz <= 1; sz += 2) {
-                        double lx = c.x + sx * hx * ax.x + sy * hy * ay.x + sz * hz * az.x;
-                        double ly = c.y + sx * hx * ax.y + sy * hy * ay.y + sz * hz * az.y;
-                        double lz = c.z + sx * hx * ax.z + sy * hy * ay.z + sz * hz * az.z;
-                        double wx = pos.x + lx * rx + lz * fx;
-                        double wy = pos.y + ly;
-                        double wz = pos.z + lx * rz + lz * fz;
-                        if (wx < minX) minX = wx;
-                        if (wx > maxX) maxX = wx;
-                        if (wy < minY) minY = wy;
-                        if (wy > maxY) maxY = wy;
-                        if (wz < minZ) minZ = wz;
-                        if (wz > maxZ) maxZ = wz;
-                    }
-                }
-            }
-        }
-        return new AABB(minX, minY, minZ, maxX, maxY, maxZ);
     }
 
     /**
@@ -433,6 +512,9 @@ public final class HumanoidRig {
         HumanoidArm mainArm = e.getMainArm();
         ArmPose rightArmPose = mainArm == HumanoidArm.RIGHT ? mainPose : offPose;
         ArmPose leftArmPose = mainArm == HumanoidArm.RIGHT ? offPose : mainPose;
+        // A TACZ gun keeps its two-handed hold across stances: the crouch arm tilt and the swim/crawl stroke
+        // (both vanilla motions for empty/item arms) must NOT overwrite it, or the held gun tips down / flails.
+        boolean holdingGun = mainPose == ArmPose.GUN;
 
         boolean flag2 = mainArm == HumanoidArm.RIGHT;
         if (e.isUsingItem()) {
@@ -457,15 +539,22 @@ public final class HumanoidRig {
         setupAttackAnimation(e, head, body, rightArm, leftArm);
 
         //crouch / stand pivots
+        // NOTE the head pivot (head.y) is written with += / left untouched, NOT set absolutely: the head cube
+        // rotates about this pivot with the look direction, so the crouch reposition must move the PIVOT, and
+        // head.y arrives already carrying its base (0) + the resolved pose's POSE_ADJUST/tuning py. Setting it
+        // absolutely (as the other, non-look-rotating parts do) would clobber that head-pivot tuning.
         if (crouching) {
             body.xRot = 0.5;
-            rightArm.xRot += 0.4;
-            leftArm.xRot += 0.4;
+            if (!holdingGun) {
+                // Vanilla crouch tilts the arms forward/down; a held gun stays aimed, so skip it for the gun pose.
+                rightArm.xRot += 0.4;
+                leftArm.xRot += 0.4;
+            }
             rightLeg.z = 4.0;
             leftLeg.z = 4.0;
             rightLeg.y = 12.2;
             leftLeg.y = 12.2;
-            head.y = 4.2;
+            head.y += 4.2;
             body.y = 3.2;
             leftArm.y = 5.2;
             rightArm.y = 5.2;
@@ -475,7 +564,7 @@ public final class HumanoidRig {
             leftLeg.z = 0.0;
             rightLeg.y = 12.0;
             leftLeg.y = 12.0;
-            head.y = 0.0;
+            // head.y unchanged: base 0 + tuned py (no reset here, which would clobber head-pivot tuning).
             body.y = 0.0;
             leftArm.y = 2.0;
             rightArm.y = 2.0;
@@ -491,7 +580,7 @@ public final class HumanoidRig {
 
         //swim / crawl
         if (swimAmount > 0.0F) {
-            swimAnim(e, head, rightArm, leftArm, rightLeg, leftLeg, limbSwing, swimAmount);
+            swimAnim(e, head, rightArm, leftArm, rightLeg, leftLeg, limbSwing, swimAmount, holdingGun);
         }
 
         // Downed sprawl: mirror HumanoidModelMixin's TAIL injection (seeded per-limb jitter + head reset) so the
@@ -666,13 +755,14 @@ public final class HumanoidRig {
 
     // Swim/crawl arm & leg blend
     private static void swimAnim(LivingEntity e, Part head, Part rightArm, Part leftArm, Part rightLeg,
-                                 Part leftLeg, double limbSwing, float swimAmount) {
+                                 Part leftLeg, double limbSwing, float swimAmount, boolean holdingGun) {
         double f5 = limbSwing % 26.0;
         HumanoidArm attackArm = getAttackArm(e);
         double attackTime = e.getAttackAnim(1.0F);
         double f1 = attackArm == HumanoidArm.RIGHT && attackTime > 0.0F ? 0.0 : swimAmount;
         double f2 = attackArm == HumanoidArm.LEFT && attackTime > 0.0F ? 0.0 : swimAmount;
-        if (!e.isUsingItem()) {
+        // A held gun keeps its aim while crawling; only the legs get the swim stroke, not the arms.
+        if (!e.isUsingItem() && !holdingGun) {
             if (f5 < 14.0) {
                 leftArm.xRot = rotlerpRad(f2, leftArm.xRot, 0.0);
                 rightArm.xRot = Mth.lerp(f1, rightArm.xRot, 0.0);
@@ -714,9 +804,11 @@ public final class HumanoidRig {
         if (stack.isEmpty()) {
             return ArmPose.EMPTY;
         }
-        // TACZ approximation: a held gun forces the raised-forward two-handed pose (no vanilla use-anim).
+        // TACZ approximation: a gun forces the raised-forward two-handed pose ONLY from the MAIN hand. TACZ
+        // slings a gun held in the OFF hand across the back, so that arm stays relaxed (EMPTY) and the main
+        // hand's own animation drives the pose -- or nothing, if the main hand is empty too.
         if (TaczCompat.isHeldGun(stack)) {
-            return ArmPose.GUN;
+            return hand == InteractionHand.MAIN_HAND ? ArmPose.GUN : ArmPose.EMPTY;
         }
         if (e.getUsedItemHand() == hand && e.getUseItemRemainingTicks() > 0) {
             UseAnim anim = stack.getUseAnimation();

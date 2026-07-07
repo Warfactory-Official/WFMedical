@@ -64,6 +64,21 @@ public final class WFMedicalCommands {
     private static final SuggestionProvider<CommandSourceStack> HITBOX_FIELD_SUGGESTIONS =
             (ctx, b) -> SharedSuggestionProvider.suggest(
                     Arrays.stream(RigTuning.Field.VALUES).map(RigTuning.Field::lower), b);
+    private static final SuggestionProvider<CommandSourceStack> HITBOX_POSE_SUGGESTIONS =
+            (ctx, b) -> SharedSuggestionProvider.suggest(
+                    Arrays.stream(RigTuning.RigPose.VALUES).map(RigTuning.RigPose::lower), b);
+    private static final SuggestionProvider<CommandSourceStack> HITBOX_AXIS_SUGGESTIONS =
+            (ctx, b) -> SharedSuggestionProvider.suggest(
+                    Arrays.stream(RigTuning.EnvAxis.VALUES).map(RigTuning.EnvAxis::lower), b);
+    // Only the real actions are tunable; NONE is the stance base (tuned via the plain 'hitbox set').
+    private static final SuggestionProvider<CommandSourceStack> HITBOX_HAND_SUGGESTIONS =
+            (ctx, b) -> SharedSuggestionProvider.suggest(
+                    Arrays.stream(RigTuning.HandAction.VALUES)
+                            .filter(h -> h != RigTuning.HandAction.NONE)
+                            .map(RigTuning.HandAction::lower), b);
+    private static final SuggestionProvider<CommandSourceStack> HITBOX_ARM_SUGGESTIONS =
+            (ctx, b) -> SharedSuggestionProvider.suggest(
+                    Arrays.stream(LimbType.VALUES).filter(LimbType::isArm).map(Enum::name), b);
 
     // ------------------------------------------------------------------ suggestion providers
     private static final SuggestionProvider<CommandSourceStack> TRAUMA_SUGGESTIONS =
@@ -267,43 +282,139 @@ public final class WFMedicalCommands {
                                 DoubleArgumentType.getDouble(ctx, "maxDist")))));
 
         // --- hitbox debug|status|show|export|set|add|reset
-        //   Live tuning of the rigged limb OBBs (position + size, model units) for extracting exact hitbox
-        //   values in test mode. All op-gated (inherited); mutators apply only while hitboxDebug is active.
+        //   Live per-pose tuning of the rigged limb OBBs (position + size, model units) for extracting exact
+        //   hitbox values in test mode. Standing / crouching / prone / downed each tune independently. All
+        //   op-gated (inherited); mutators apply only while hitboxDebug is active.
         root.then(Commands.literal("hitbox")
                 .executes(ctx -> cmdHitboxStatus(ctx.getSource()))
                 .then(Commands.literal("status").executes(ctx -> cmdHitboxStatus(ctx.getSource())))
-                .then(Commands.literal("show").executes(ctx -> cmdHitboxShow(ctx.getSource())))
-                .then(Commands.literal("export").executes(ctx -> cmdHitboxExport(ctx.getSource())))
+                .then(Commands.literal("show")
+                        .executes(ctx -> cmdHitboxShow(ctx.getSource(), null))
+                        .then(Commands.argument("pose", StringArgumentType.word())
+                                .suggests(HITBOX_POSE_SUGGESTIONS)
+                                .executes(ctx -> cmdHitboxShow(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "pose")))))
+                .then(Commands.literal("export")
+                        .executes(ctx -> cmdHitboxExport(ctx.getSource(), null))
+                        .then(Commands.argument("pose", StringArgumentType.word())
+                                .suggests(HITBOX_POSE_SUGGESTIONS)
+                                .executes(ctx -> cmdHitboxExport(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "pose")))))
                 .then(Commands.literal("debug")
                         .executes(ctx -> cmdHitboxDebug(ctx.getSource(), !RigTuning.ACTIVE))
                         .then(Commands.literal("on").executes(ctx -> cmdHitboxDebug(ctx.getSource(), true)))
                         .then(Commands.literal("off").executes(ctx -> cmdHitboxDebug(ctx.getSource(), false))))
                 .then(Commands.literal("set")
-                        .then(Commands.argument("limb", StringArgumentType.word())
-                                .suggests(LIMB_SUGGESTIONS)
-                                .then(Commands.argument("field", StringArgumentType.word())
-                                        .suggests(HITBOX_FIELD_SUGGESTIONS)
-                                        .then(Commands.argument("value", DoubleArgumentType.doubleArg())
-                                                .executes(ctx -> cmdHitboxSet(ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "limb"),
-                                                        StringArgumentType.getString(ctx, "field"),
-                                                        DoubleArgumentType.getDouble(ctx, "value")))))))
+                        .then(Commands.argument("pose", StringArgumentType.word())
+                                .suggests(HITBOX_POSE_SUGGESTIONS)
+                                .then(Commands.argument("limb", StringArgumentType.word())
+                                        .suggests(LIMB_SUGGESTIONS)
+                                        .then(Commands.argument("field", StringArgumentType.word())
+                                                .suggests(HITBOX_FIELD_SUGGESTIONS)
+                                                .then(Commands.argument("value", DoubleArgumentType.doubleArg())
+                                                        .executes(ctx -> cmdHitboxSet(ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pose"),
+                                                                StringArgumentType.getString(ctx, "limb"),
+                                                                StringArgumentType.getString(ctx, "field"),
+                                                                DoubleArgumentType.getDouble(ctx, "value"))))))))
                 .then(Commands.literal("add")
-                        .then(Commands.argument("limb", StringArgumentType.word())
-                                .suggests(LIMB_SUGGESTIONS)
-                                .then(Commands.argument("field", StringArgumentType.word())
-                                        .suggests(HITBOX_FIELD_SUGGESTIONS)
-                                        .then(Commands.argument("amount", DoubleArgumentType.doubleArg())
-                                                .executes(ctx -> cmdHitboxAdd(ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "limb"),
-                                                        StringArgumentType.getString(ctx, "field"),
-                                                        DoubleArgumentType.getDouble(ctx, "amount")))))))
+                        .then(Commands.argument("pose", StringArgumentType.word())
+                                .suggests(HITBOX_POSE_SUGGESTIONS)
+                                .then(Commands.argument("limb", StringArgumentType.word())
+                                        .suggests(LIMB_SUGGESTIONS)
+                                        .then(Commands.argument("field", StringArgumentType.word())
+                                                .suggests(HITBOX_FIELD_SUGGESTIONS)
+                                                .then(Commands.argument("amount", DoubleArgumentType.doubleArg())
+                                                        .executes(ctx -> cmdHitboxAdd(ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pose"),
+                                                                StringArgumentType.getString(ctx, "limb"),
+                                                                StringArgumentType.getString(ctx, "field"),
+                                                                DoubleArgumentType.getDouble(ctx, "amount"))))))))
                 .then(Commands.literal("reset")
-                        .executes(ctx -> cmdHitboxReset(ctx.getSource(), null))
-                        .then(Commands.argument("limb", StringArgumentType.word())
-                                .suggests(LIMB_SUGGESTIONS)
+                        .executes(ctx -> cmdHitboxReset(ctx.getSource(), null, null))
+                        .then(Commands.argument("pose", StringArgumentType.word())
+                                .suggests(HITBOX_POSE_SUGGESTIONS)
                                 .executes(ctx -> cmdHitboxReset(ctx.getSource(),
-                                        StringArgumentType.getString(ctx, "limb"))))));
+                                        StringArgumentType.getString(ctx, "pose"), null))
+                                .then(Commands.argument("limb", StringArgumentType.word())
+                                        .suggests(LIMB_SUGGESTIONS)
+                                        .executes(ctx -> cmdHitboxReset(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "pose"),
+                                                StringArgumentType.getString(ctx, "limb"))))))
+                // --- envelope: per-stance broad-phase box reach (blocks). set/add/reset the horizontal/vertical
+                //     margin; applies live while 'debug on', bake with 'export'.
+                .then(Commands.literal("envelope")
+                        .then(Commands.literal("set")
+                                .then(Commands.argument("pose", StringArgumentType.word())
+                                        .suggests(HITBOX_POSE_SUGGESTIONS)
+                                        .then(Commands.argument("axis", StringArgumentType.word())
+                                                .suggests(HITBOX_AXIS_SUGGESTIONS)
+                                                .then(Commands.argument("value", DoubleArgumentType.doubleArg(0.0D))
+                                                        .executes(ctx -> cmdHitboxEnvSet(ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pose"),
+                                                                StringArgumentType.getString(ctx, "axis"),
+                                                                DoubleArgumentType.getDouble(ctx, "value")))))))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("pose", StringArgumentType.word())
+                                        .suggests(HITBOX_POSE_SUGGESTIONS)
+                                        .then(Commands.argument("axis", StringArgumentType.word())
+                                                .suggests(HITBOX_AXIS_SUGGESTIONS)
+                                                .then(Commands.argument("amount", DoubleArgumentType.doubleArg())
+                                                        .executes(ctx -> cmdHitboxEnvAdd(ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pose"),
+                                                                StringArgumentType.getString(ctx, "axis"),
+                                                                DoubleArgumentType.getDouble(ctx, "amount")))))))
+                        .then(Commands.literal("reset")
+                                .executes(ctx -> cmdHitboxEnvReset(ctx.getSource()))))
+                // --- hand: per-(stance, hand-action) ARM overlay (aiming bow / holding gun / blocking), added
+                //     on top of the stance deltas when that action is active. Arms only.
+                .then(Commands.literal("hand")
+                        .then(Commands.literal("set")
+                                .then(Commands.argument("pose", StringArgumentType.word())
+                                        .suggests(HITBOX_POSE_SUGGESTIONS)
+                                        .then(Commands.argument("action", StringArgumentType.word())
+                                                .suggests(HITBOX_HAND_SUGGESTIONS)
+                                                .then(Commands.argument("arm", StringArgumentType.word())
+                                                        .suggests(HITBOX_ARM_SUGGESTIONS)
+                                                        .then(Commands.argument("field", StringArgumentType.word())
+                                                                .suggests(HITBOX_FIELD_SUGGESTIONS)
+                                                                .then(Commands.argument("value", DoubleArgumentType.doubleArg())
+                                                                        .executes(ctx -> cmdHitboxHandSet(ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "pose"),
+                                                                                StringArgumentType.getString(ctx, "action"),
+                                                                                StringArgumentType.getString(ctx, "arm"),
+                                                                                StringArgumentType.getString(ctx, "field"),
+                                                                                DoubleArgumentType.getDouble(ctx, "value")))))))))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("pose", StringArgumentType.word())
+                                        .suggests(HITBOX_POSE_SUGGESTIONS)
+                                        .then(Commands.argument("action", StringArgumentType.word())
+                                                .suggests(HITBOX_HAND_SUGGESTIONS)
+                                                .then(Commands.argument("arm", StringArgumentType.word())
+                                                        .suggests(HITBOX_ARM_SUGGESTIONS)
+                                                        .then(Commands.argument("field", StringArgumentType.word())
+                                                                .suggests(HITBOX_FIELD_SUGGESTIONS)
+                                                                .then(Commands.argument("amount", DoubleArgumentType.doubleArg())
+                                                                        .executes(ctx -> cmdHitboxHandAdd(ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "pose"),
+                                                                                StringArgumentType.getString(ctx, "action"),
+                                                                                StringArgumentType.getString(ctx, "arm"),
+                                                                                StringArgumentType.getString(ctx, "field"),
+                                                                                DoubleArgumentType.getDouble(ctx, "amount")))))))))
+                        .then(Commands.literal("reset")
+                                .then(Commands.argument("pose", StringArgumentType.word())
+                                        .suggests(HITBOX_POSE_SUGGESTIONS)
+                                        .then(Commands.argument("action", StringArgumentType.word())
+                                                .suggests(HITBOX_HAND_SUGGESTIONS)
+                                                .executes(ctx -> cmdHitboxHandReset(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pose"),
+                                                        StringArgumentType.getString(ctx, "action"), null))
+                                                .then(Commands.argument("arm", StringArgumentType.word())
+                                                        .suggests(HITBOX_ARM_SUGGESTIONS)
+                                                        .executes(ctx -> cmdHitboxHandReset(ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pose"),
+                                                                StringArgumentType.getString(ctx, "action"),
+                                                                StringArgumentType.getString(ctx, "arm")))))))));
 
         LiteralCommandNode<CommandSourceStack> node = dispatcher.register(root);
         dispatcher.register(Commands.literal("wfmed").requires(src -> src.hasPermission(2)).redirect(node));
@@ -425,25 +536,30 @@ public final class WFMedicalCommands {
     // ------------------------------------------------------------------ hitbox tuning (debug/test)
 
     /**
-     * Report whether hitbox tuning is armed and summarise any active deltas.
+     * Report whether hitbox tuning is armed and summarise active deltas per pose.
      */
     private static int cmdHitboxStatus(CommandSourceStack src) {
         boolean cfg = MedicalConfig.hitboxDebug();
         boolean active = RigTuning.ACTIVE;
-        int tuned = 0;
-        for (LimbType lt : LimbType.VALUES) {
-            for (RigTuning.Field f : RigTuning.Field.VALUES) {
-                if (RigTuning.delta(lt, f) != 0.0) {
-                    tuned++;
+        StringBuilder poses = new StringBuilder();
+        for (RigTuning.RigPose p : RigTuning.RigPose.VALUES) {
+            int n = 0;
+            for (LimbType lt : LimbType.VALUES) {
+                for (RigTuning.Field f : RigTuning.Field.VALUES) {
+                    if (RigTuning.delta(p, lt, f) != 0.0) {
+                        n++;
+                    }
                 }
             }
+            if (n > 0) {
+                poses.append(' ').append(p.lower()).append('=').append(n);
+            }
         }
-        int nonzeroFields = tuned;
+        String tuned = poses.length() > 0 ? "  deltas:" + poses : "  no deltas set";
         src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning: "
-                + (active ? "ARMED" : "inert") + " (config hitboxDebug=" + cfg + ")"
-                + ", " + nonzeroFields + " non-zero delta(s)."
+                + (active ? "ARMED" : "inert") + " (config hitboxDebug=" + cfg + ")." + tuned
                 + (active ? "" : "  Run '/wfmedical hitbox debug on' to apply live.")
-                + "  Use '/wfmedical hitbox show' to list, 'export' to bake."), false);
+                + "  '/wfmedical hitbox show [pose]' lists, 'export [pose]' bakes."), false);
         return 1;
     }
 
@@ -460,84 +576,134 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Set one limb/field delta to an absolute value (model units, 1/16 block).
+     * Set one pose/limb/field delta to an absolute value (model units, 1/16 block).
      */
-    private static int cmdHitboxSet(CommandSourceStack src, String limbName, String fieldName, double value) {
+    private static int cmdHitboxSet(CommandSourceStack src, String poseName, String limbName,
+                                    String fieldName, double value) {
+        RigTuning.RigPose pose = parsePose(src, poseName);
         LimbType limb = parseLimb(src, limbName);
-        if (limb == null) {
-            return 0;
-        }
         RigTuning.Field field = parseField(src, fieldName);
-        if (field == null) {
+        if (pose == null || limb == null || field == null) {
             return 0;
         }
-        RigTuning.set(limb, field, value);
-        src.sendSuccess(() -> Component.literal("[wfmedical] " + limb.name() + "." + field.lower()
-                + " delta = " + num(value) + hitboxApplyNote()), false);
+        RigTuning.set(pose, limb, field, value);
+        src.sendSuccess(() -> Component.literal("[wfmedical] " + pose.lower() + " " + limb.name() + "."
+                + field.lower() + " delta = " + num(value) + hitboxApplyNote()), false);
         return 1;
     }
 
     /**
-     * Nudge one limb/field delta by an amount (model units); prints the resulting delta.
+     * Nudge one pose/limb/field delta by an amount (model units); prints the resulting delta.
      */
-    private static int cmdHitboxAdd(CommandSourceStack src, String limbName, String fieldName, double amount) {
+    private static int cmdHitboxAdd(CommandSourceStack src, String poseName, String limbName,
+                                    String fieldName, double amount) {
+        RigTuning.RigPose pose = parsePose(src, poseName);
         LimbType limb = parseLimb(src, limbName);
-        if (limb == null) {
-            return 0;
-        }
         RigTuning.Field field = parseField(src, fieldName);
-        if (field == null) {
+        if (pose == null || limb == null || field == null) {
             return 0;
         }
-        double now = RigTuning.add(limb, field, amount);
-        src.sendSuccess(() -> Component.literal("[wfmedical] " + limb.name() + "." + field.lower()
-                + " delta " + (amount >= 0 ? "+" : "") + num(amount) + " -> " + num(now) + hitboxApplyNote()), false);
+        double now = RigTuning.add(pose, limb, field, amount);
+        src.sendSuccess(() -> Component.literal("[wfmedical] " + pose.lower() + " " + limb.name() + "."
+                + field.lower() + " delta " + (amount >= 0 ? "+" : "") + num(amount) + " -> " + num(now)
+                + hitboxApplyNote()), false);
         return 1;
     }
 
     /**
-     * Clear every delta, or just one limb's when {@code limbName} is given.
+     * Clear all deltas, one pose's, or one pose/limb's, depending on which args are given.
      */
-    private static int cmdHitboxReset(CommandSourceStack src, String limbName) {
-        if (limbName == null) {
+    private static int cmdHitboxReset(CommandSourceStack src, String poseName, String limbName) {
+        if (poseName == null) {
             RigTuning.reset();
-            src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning cleared (all limbs)."), false);
+            src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning cleared (all poses)."), false);
+            return 1;
+        }
+        RigTuning.RigPose pose = parsePose(src, poseName);
+        if (pose == null) {
+            return 0;
+        }
+        if (limbName == null) {
+            RigTuning.reset(pose);
+            src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning cleared for pose "
+                    + pose.lower() + "."), false);
             return 1;
         }
         LimbType limb = parseLimb(src, limbName);
         if (limb == null) {
             return 0;
         }
-        RigTuning.reset(limb);
-        src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning cleared for " + limb.name() + "."), false);
+        RigTuning.reset(pose, limb);
+        src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning cleared for " + pose.lower()
+                + " " + limb.name() + "."), false);
         return 1;
     }
 
     /**
-     * Dump the current effective (base + delta) box spec per limb, flagging any non-zero deltas.
+     * Dump the effective (base + pose adjust + delta) box spec per limb for one pose, or every pose when
+     * {@code poseName} is null.
      */
-    private static int cmdHitboxShow(CommandSourceStack src) {
+    private static int cmdHitboxShow(CommandSourceStack src, String poseName) {
+        RigTuning.RigPose only = null;
+        if (poseName != null) {
+            only = parsePose(src, poseName);
+            if (only == null) {
+                return 0;
+            }
+        }
         StringBuilder sb = new StringBuilder();
         sb.append("=== wfmedical hitbox tuning (")
                 .append(RigTuning.ACTIVE ? "ARMED" : "inert, /wfmedical hitbox debug on")
-                .append(") ===\n effective spec (model units, standing) o=offset s=size p=pivot:");
-        for (LimbType lt : LimbType.VALUES) {
-            double[] base = HumanoidRig.baseSpec(lt);
-            double[] eff = new double[RigTuning.FIELDS];
-            StringBuilder deltas = new StringBuilder();
-            for (RigTuning.Field f : RigTuning.Field.VALUES) {
-                double d = RigTuning.delta(lt, f);
-                eff[f.ordinal()] = base[f.ordinal()] + d;
-                if (d != 0.0) {
-                    deltas.append(' ').append(f.lower()).append('=').append(d >= 0 ? "+" : "").append(num(d));
+                .append(") ===\n effective spec (model units) o=offset s=size p=pivot; Δ = delta:");
+        for (RigTuning.RigPose pose : RigTuning.RigPose.VALUES) {
+            if (only != null && pose != only) {
+                continue;
+            }
+            sb.append("\n [").append(pose.lower()).append("]  envelope reach h=")
+                    .append(num(RigTuning.envReach(pose, RigTuning.EnvAxis.HORIZONTAL)))
+                    .append(" v=").append(num(RigTuning.envReach(pose, RigTuning.EnvAxis.VERTICAL)));
+            for (LimbType lt : LimbType.VALUES) {
+                double[] base = HumanoidRig.baseSpec(lt);
+                double[] adj = HumanoidRig.poseAdjustSpec(pose, lt);
+                double[] eff = new double[RigTuning.FIELDS];
+                StringBuilder deltas = new StringBuilder();
+                for (RigTuning.Field f : RigTuning.Field.VALUES) {
+                    double d = RigTuning.delta(pose, lt, f);
+                    eff[f.ordinal()] = base[f.ordinal()] + adj[f.ordinal()] + d;
+                    if (d != 0.0) {
+                        deltas.append(' ').append(f.lower()).append('=').append(d >= 0 ? "+" : "").append(num(d));
+                    }
+                }
+                sb.append("\n   ").append(String.format(java.util.Locale.ROOT, "%-10s", lt.name()))
+                        .append(" o=(").append(num(eff[0])).append(", ").append(num(eff[1])).append(", ").append(num(eff[2])).append(")")
+                        .append(" s=(").append(num(eff[3])).append(", ").append(num(eff[4])).append(", ").append(num(eff[5])).append(")")
+                        .append(" p=(").append(num(eff[6])).append(", ").append(num(eff[7])).append(", ").append(num(eff[8])).append(")")
+                        .append(deltas.length() > 0 ? "  Δ" + deltas : "");
+            }
+            // Hand-action ARM overlays for this stance (only the arms + actions that carry any adjustment).
+            for (RigTuning.HandAction action : RigTuning.HandAction.VALUES) {
+                if (action == RigTuning.HandAction.NONE) {
+                    continue;
+                }
+                for (LimbType arm : LimbType.VALUES) {
+                    if (!arm.isArm()) {
+                        continue;
+                    }
+                    double[] hAdj = HumanoidRig.handAdjustSpec(pose, action, arm);
+                    StringBuilder row = new StringBuilder();
+                    boolean any = false;
+                    for (RigTuning.Field f : RigTuning.Field.VALUES) {
+                        double v = hAdj[f.ordinal()] + RigTuning.handDelta(pose, action, arm, f);
+                        if (v != 0.0) {
+                            any = true;
+                            row.append(' ').append(f.lower()).append('=').append(v >= 0 ? "+" : "").append(num(v));
+                        }
+                    }
+                    if (any) {
+                        sb.append("\n   +").append(action.lower()).append(' ').append(arm.name()).append(':').append(row);
+                    }
                 }
             }
-            sb.append("\n ").append(String.format(java.util.Locale.ROOT, "%-10s", "[" + lt.name() + "]"))
-                    .append(" o=(").append(num(eff[0])).append(", ").append(num(eff[1])).append(", ").append(num(eff[2])).append(")")
-                    .append(" s=(").append(num(eff[3])).append(", ").append(num(eff[4])).append(", ").append(num(eff[5])).append(")")
-                    .append(" p=(").append(num(eff[6])).append(", ").append(num(eff[7])).append(", ").append(num(eff[8])).append(")")
-                    .append(HumanoidRig.usesCrouchOffset(lt) ? " +yOff" : "")
-                    .append(deltas.length() > 0 ? "  Δ" + deltas : "");
         }
         String dump = sb.toString();
         src.sendSuccess(() -> Component.literal(dump), false);
@@ -545,28 +711,120 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Print the effective spec as paste-ready {@code HumanoidRig.base()} rows so tuned values can be baked in.
+     * Print paste-ready source for the tuned values: STANDING bakes into {@code HumanoidRig.base()}; the other
+     * poses bake into {@code HumanoidRig.poseAdjust()}. Dumps one pose, or every pose when {@code poseName} is
+     * null.
      */
-    private static int cmdHitboxExport(CommandSourceStack src) {
+    private static int cmdHitboxExport(CommandSourceStack src, String poseName) {
+        RigTuning.RigPose only = null;
+        if (poseName != null) {
+            only = parsePose(src, poseName);
+            if (only == null) {
+                return 0;
+            }
+        }
         StringBuilder sb = new StringBuilder();
-        sb.append("// Baked hitbox spec -> paste into HumanoidRig.base() (model units: ox,oy,oz, sx,sy,sz, px,py,pz)");
-        for (LimbType lt : LimbType.VALUES) {
-            double[] base = HumanoidRig.baseSpec(lt);
-            sb.append("\n b[LimbType.").append(lt.name()).append(".ordinal()] = new double[]{");
-            for (RigTuning.Field f : RigTuning.Field.VALUES) {
-                if (f.ordinal() > 0) {
-                    sb.append(", ");
+        sb.append("// Baked hitbox spec (model units: ox,oy,oz, sx,sy,sz, px,py,pz)");
+        for (RigTuning.RigPose pose : RigTuning.RigPose.VALUES) {
+            if (only != null && pose != only) {
+                continue;
+            }
+            if (pose == RigTuning.RigPose.STANDING) {
+                sb.append("\n// STANDING -> paste into HumanoidRig.base():");
+                for (LimbType lt : LimbType.VALUES) {
+                    double[] base = HumanoidRig.baseSpec(lt);
+                    sb.append("\nb[LimbType.").append(lt.name()).append(".ordinal()] = new double[]{");
+                    appendRow(sb, i -> base[i] + RigTuning.delta(pose, lt, RigTuning.Field.VALUES[i]));
+                    sb.append("};");
                 }
-                sb.append(num(base[f.ordinal()] + RigTuning.delta(lt, f)));
+            } else {
+                sb.append("\n// ").append(pose.name()).append(" -> paste into HumanoidRig.poseAdjust():");
+                boolean any = false;
+                for (LimbType lt : LimbType.VALUES) {
+                    double[] adj = HumanoidRig.poseAdjustSpec(pose, lt);
+                    boolean nonzero = false;
+                    for (RigTuning.Field f : RigTuning.Field.VALUES) {
+                        if (adj[f.ordinal()] + RigTuning.delta(pose, lt, f) != 0.0) {
+                            nonzero = true;
+                            break;
+                        }
+                    }
+                    if (!nonzero) {
+                        continue;
+                    }
+                    any = true;
+                    sb.append("\na[RigTuning.RigPose.").append(pose.name()).append(".ordinal()][LimbType.")
+                            .append(lt.name()).append(".ordinal()] = new double[]{");
+                    appendRow(sb, i -> adj[i] + RigTuning.delta(pose, lt, RigTuning.Field.VALUES[i]));
+                    sb.append("};");
+                }
+                if (!any) {
+                    sb.append("\n// (no adjustments)");
+                }
             }
-            sb.append("};");
-            if (HumanoidRig.usesCrouchOffset(lt)) {
-                sb.append("  // oy also gets +yOff while crouching");
+        }
+        // Per-(stance, hand-action) arm overlays -> paste into HumanoidRig.handAdjust().
+        StringBuilder hand = new StringBuilder();
+        for (RigTuning.RigPose pose : RigTuning.RigPose.VALUES) {
+            if (only != null && pose != only) {
+                continue;
             }
+            for (RigTuning.HandAction action : RigTuning.HandAction.VALUES) {
+                if (action == RigTuning.HandAction.NONE) {
+                    continue;
+                }
+                for (LimbType arm : LimbType.VALUES) {
+                    if (!arm.isArm()) {
+                        continue;
+                    }
+                    double[] hAdj = HumanoidRig.handAdjustSpec(pose, action, arm);
+                    boolean nonzero = false;
+                    for (RigTuning.Field f : RigTuning.Field.VALUES) {
+                        if (hAdj[f.ordinal()] + RigTuning.handDelta(pose, action, arm, f) != 0.0) {
+                            nonzero = true;
+                            break;
+                        }
+                    }
+                    if (!nonzero) {
+                        continue;
+                    }
+                    hand.append("\na[RigTuning.RigPose.").append(pose.name()).append(".ordinal()][RigTuning.HandAction.")
+                            .append(action.name()).append(".ordinal()][LimbType.").append(arm.name())
+                            .append(".ordinal()] = new double[]{");
+                    appendRow(hand, i -> hAdj[i] + RigTuning.handDelta(pose, action, arm, RigTuning.Field.VALUES[i]));
+                    hand.append("};");
+                }
+            }
+        }
+        if (hand.length() > 0) {
+            sb.append("\n// hand-action arm overlays -> paste into HumanoidRig.handAdjust():").append(hand);
+        }
+        // Per-stance envelope reach -> config [hitregistration.envelopeReach] (TOML keys).
+        sb.append("\n// envelope reach -> config [hitregistration.envelopeReach]:");
+        for (RigTuning.RigPose pose : RigTuning.RigPose.VALUES) {
+            if (only != null && pose != only) {
+                continue;
+            }
+            sb.append("\n").append(pose.lower()).append("Horizontal = ")
+                    .append(num(RigTuning.envReach(pose, RigTuning.EnvAxis.HORIZONTAL)));
+            sb.append("\n").append(pose.lower()).append("Vertical = ")
+                    .append(num(RigTuning.envReach(pose, RigTuning.EnvAxis.VERTICAL)));
         }
         String dump = sb.toString();
         src.sendSuccess(() -> Component.literal(dump), false);
         return 1;
+    }
+
+    /**
+     * Append the nine field values (index 0..8) produced by {@code cell} as a comma-separated {@code num} row.
+     */
+    private static void appendRow(StringBuilder sb, java.util.function.IntToDoubleFunction cell) {
+        for (int i = 0; i < RigTuning.FIELDS; i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(num(cell.applyAsDouble(i)));
+        }
     }
 
     private static String hitboxApplyNote() {
@@ -580,6 +838,148 @@ public final class WFMedicalCommands {
                     + " (expected one of ox oy oz sx sy sz px py pz)"));
         }
         return f;
+    }
+
+    private static RigTuning.RigPose parsePose(CommandSourceStack src, String name) {
+        RigTuning.RigPose p = RigTuning.RigPose.fromString(name);
+        if (p == null) {
+            src.sendFailure(Component.literal("[wfmedical] Unknown pose: " + name
+                    + " (expected one of standing crouching prone downed)"));
+        }
+        return p;
+    }
+
+    private static RigTuning.EnvAxis parseAxis(CommandSourceStack src, String name) {
+        RigTuning.EnvAxis a = RigTuning.EnvAxis.fromString(name);
+        if (a == null) {
+            src.sendFailure(Component.literal("[wfmedical] Unknown axis: " + name
+                    + " (expected horizontal|h or vertical|v)"));
+        }
+        return a;
+    }
+
+    private static RigTuning.HandAction parseHandAction(CommandSourceStack src, String name) {
+        RigTuning.HandAction h = RigTuning.HandAction.fromString(name);
+        if (h == null || h == RigTuning.HandAction.NONE) {
+            src.sendFailure(Component.literal("[wfmedical] Unknown hand action: " + name
+                    + " (expected bow, gun or block; the relaxed base is tuned with 'hitbox set')"));
+            return null;
+        }
+        return h;
+    }
+
+    /**
+     * Parse an ARM limb (the hand overlay only applies to arms).
+     */
+    private static LimbType parseArm(CommandSourceStack src, String name) {
+        LimbType limb = parseLimb(src, name);
+        if (limb != null && !limb.isArm()) {
+            src.sendFailure(Component.literal("[wfmedical] " + limb.name() + " is not an arm; the hand overlay "
+                    + "only applies to LEFT_ARM / RIGHT_ARM."));
+            return null;
+        }
+        return limb;
+    }
+
+    /**
+     * Set one (stance, hand-action, arm)/field overlay delta to an absolute value (model units).
+     */
+    private static int cmdHitboxHandSet(CommandSourceStack src, String poseName, String actionName,
+                                        String armName, String fieldName, double value) {
+        RigTuning.RigPose pose = parsePose(src, poseName);
+        RigTuning.HandAction action = parseHandAction(src, actionName);
+        LimbType arm = parseArm(src, armName);
+        RigTuning.Field field = parseField(src, fieldName);
+        if (pose == null || action == null || arm == null || field == null) {
+            return 0;
+        }
+        RigTuning.setHand(pose, action, arm, field, value);
+        src.sendSuccess(() -> Component.literal("[wfmedical] " + pose.lower() + " " + action.lower() + " "
+                + arm.name() + "." + field.lower() + " overlay = " + num(value) + hitboxApplyNote()), false);
+        return 1;
+    }
+
+    /**
+     * Nudge one (stance, hand-action, arm)/field overlay delta by an amount (model units).
+     */
+    private static int cmdHitboxHandAdd(CommandSourceStack src, String poseName, String actionName,
+                                        String armName, String fieldName, double amount) {
+        RigTuning.RigPose pose = parsePose(src, poseName);
+        RigTuning.HandAction action = parseHandAction(src, actionName);
+        LimbType arm = parseArm(src, armName);
+        RigTuning.Field field = parseField(src, fieldName);
+        if (pose == null || action == null || arm == null || field == null) {
+            return 0;
+        }
+        double now = RigTuning.addHand(pose, action, arm, field, amount);
+        src.sendSuccess(() -> Component.literal("[wfmedical] " + pose.lower() + " " + action.lower() + " "
+                + arm.name() + "." + field.lower() + " overlay " + (amount >= 0 ? "+" : "") + num(amount)
+                + " -> " + num(now) + hitboxApplyNote()), false);
+        return 1;
+    }
+
+    /**
+     * Clear the hand overlay for a (stance, action), or a single arm within it.
+     */
+    private static int cmdHitboxHandReset(CommandSourceStack src, String poseName, String actionName, String armName) {
+        RigTuning.RigPose pose = parsePose(src, poseName);
+        RigTuning.HandAction action = parseHandAction(src, actionName);
+        if (pose == null || action == null) {
+            return 0;
+        }
+        if (armName == null) {
+            RigTuning.resetHand(pose, action);
+            src.sendSuccess(() -> Component.literal("[wfmedical] hand overlay cleared for " + pose.lower()
+                    + " " + action.lower() + "."), false);
+            return 1;
+        }
+        LimbType arm = parseArm(src, armName);
+        if (arm == null) {
+            return 0;
+        }
+        RigTuning.resetHand(pose, action, arm);
+        src.sendSuccess(() -> Component.literal("[wfmedical] hand overlay cleared for " + pose.lower()
+                + " " + action.lower() + " " + arm.name() + "."), false);
+        return 1;
+    }
+
+    /**
+     * Set one stance's envelope reach (blocks) on an axis.
+     */
+    private static int cmdHitboxEnvSet(CommandSourceStack src, String poseName, String axisName, double value) {
+        RigTuning.RigPose pose = parsePose(src, poseName);
+        RigTuning.EnvAxis axis = parseAxis(src, axisName);
+        if (pose == null || axis == null) {
+            return 0;
+        }
+        RigTuning.setEnv(pose, axis, value);
+        src.sendSuccess(() -> Component.literal("[wfmedical] envelope " + pose.lower() + " " + axis.lower()
+                + " reach = " + num(RigTuning.envReach(pose, axis)) + hitboxApplyNote()), false);
+        return 1;
+    }
+
+    /**
+     * Nudge one stance's envelope reach (blocks) on an axis; clamped at 0.
+     */
+    private static int cmdHitboxEnvAdd(CommandSourceStack src, String poseName, String axisName, double amount) {
+        RigTuning.RigPose pose = parsePose(src, poseName);
+        RigTuning.EnvAxis axis = parseAxis(src, axisName);
+        if (pose == null || axis == null) {
+            return 0;
+        }
+        double now = RigTuning.addEnv(pose, axis, amount);
+        src.sendSuccess(() -> Component.literal("[wfmedical] envelope " + pose.lower() + " " + axis.lower()
+                + " reach " + (amount >= 0 ? "+" : "") + num(amount) + " -> " + num(now) + hitboxApplyNote()), false);
+        return 1;
+    }
+
+    /**
+     * Reset every stance's envelope reach back to the config values.
+     */
+    private static int cmdHitboxEnvReset(CommandSourceStack src) {
+        RigTuning.seedEnvelope(MedicalConfig.envelopeReachSnapshot());
+        src.sendSuccess(() -> Component.literal("[wfmedical] envelope reach reset to the config values."), false);
+        return 1;
     }
 
     /**
