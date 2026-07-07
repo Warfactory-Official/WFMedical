@@ -1,23 +1,30 @@
 package com.warfactory.medical.core.treatment;
 
 /**
- * The distinct effects a medical item can apply to trauma / physiology.
- * Trauma types declare which of these they respond to via {@code treatmentActions}.
- *
- * <p>Each action has a {@link #isGlobal() scope}: a GLOBAL action affects the whole body and ignores any
- * limb target (restoring blood, or a systemic painkiller / analgesia), whereas a LOCALIZED action is applied
- * to a single limb or the trauma on it (wound care, splinting, or a local anesthetic). This is the clean line
- * between "generally applied" medicine (painkiller) and "locally applied" medicine (anesthetic).</p>
+ * Effects a medical item can apply to trauma / physiology. GLOBAL actions affect the whole body (blood
+ * restore, systemic painkiller); LOCALIZED actions target a single limb (wound care, anesthetic).
  */
 public enum TreatmentAction {
     REDUCE_BLEEDING(false),
     SUTURE_WOUND(false),
     STABILIZE_FRACTURE(false),
     RESTORE_BLOOD(true),
-    /** Systemic painkiller / analgesia — masks pain across the WHOLE body (no limb target). */
+    /**
+     * Systemic painkiller / analgesia — masks pain across the WHOLE body (no limb target).
+     */
     REDUCE_PAIN(true),
-    /** Local anesthetic — numbs a SINGLE selected limb (must be aimed at a limb). */
+    /**
+     * Local anesthetic — numbs a SINGLE selected limb (must be aimed at a limb).
+     */
     NUMB_LIMB(false),
+    /**
+     * Hemostatic — boosts whole-body natural blood clotting for a while (no limb target).
+     */
+    BOOST_CLOTTING(true),
+    /**
+     * Tourniquet — a removable per-limb constrictor (arm/leg only); slows the limb's bleeding without treating the wound.
+     */
+    APPLY_TOURNIQUET(false),
     HEAL_TRAUMA(false),
     TREAT_BURN(false),
     TREAT_RADIATION(false);
@@ -29,15 +36,14 @@ public enum TreatmentAction {
     }
 
     /**
-     * Whether this action affects the WHOLE body and ignores any limb target (e.g. a systemic painkiller or
-     * a blood restore), as opposed to a {@link #isLocalized() localized} action applied to one limb.
+     * True if this action affects the whole body and ignores limb target.
      */
     public boolean isGlobal() {
         return global;
     }
 
     /**
-     * Whether this action is applied to a SINGLE limb / its trauma (wound care, splinting, local anesthetic).
+     * True if this action is applied to a single limb (wound care, splinting, local anesthetic).
      */
     public boolean isLocalized() {
         return !global;

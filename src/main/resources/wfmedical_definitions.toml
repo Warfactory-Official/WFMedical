@@ -290,6 +290,17 @@ bloodRestoreMl = 0.0
 useDurationTicks = 50
 removesTrauma = false
 
+# Hemostatic agent: boosts natural blood clotting for a while (clottingAgentDurationTicks). Raises BOTH the
+# wound severity that can self-clot WITHOUT a bandage and the speed it clots. magnitude = clotting strength (0..1).
+[[treatment]]
+item = "wfmedical:hemostatic"
+action = "BOOST_CLOTTING"
+categories = []
+magnitude = 0.6
+bloodRestoreMl = 0.0
+useDurationTicks = 50
+removesTrauma = false
+
 # Tourniquet: strong bleeding stop on limbs.
 [[treatment]]
 item = "wfmedical:tourniquet"
@@ -364,3 +375,24 @@ antidote = true
 reversalAmount = 3.0
 useDurationTicks = 30
 bloodRestoreMl = 0.0
+
+# Combat Stimulant I: heavily risky, high-dose stimulant. For effectTicks (3 min) it grants near-total
+# anesthesia (stimulantStrength), a big speed boost + cleared jump penalty, and UNNATURAL clotting
+# (clottingBoost = 1.0). The high doseLoad leaves a drug load whose come-down OUTLASTS the effect window,
+# and a second dose stacks past the overdose/lethal line — the risk. Not an opioid, but drug load is still
+# reversible with naloxone.
+[[substance]]
+id = "combat_stimulant_i"
+item = "wfmedical:combat_stimulant_i"
+painSuppression = 0.0
+doseLoad = 1.4
+overdoseThreshold = 1.6
+unconsciousTicks = 200
+lethalThreshold = 2.6
+antidote = false
+reversalAmount = 0.0
+useDurationTicks = 40
+bloodRestoreMl = 0.0
+clottingBoost = 1.0
+stimulantStrength = 0.97
+effectTicks = 3600

@@ -2,23 +2,18 @@ package com.warfactory.medical.server;
 
 import com.warfactory.medical.capability.IMedicalData;
 import com.warfactory.medical.capability.MedicalCapabilities;
+import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
 import com.warfactory.medical.core.treatment.Treatment;
 import com.warfactory.medical.core.treatment.TreatmentAction;
-import com.warfactory.medical.network.MedicalNetworking;
-import com.warfactory.medical.network.TraumaDeltaPacket;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * Server-authoritative application of a {@link Treatment} to a player's medical state.
- *
- * <p>The server picks the target trauma (clients never do); the item only consumes when {@link #apply}
- * returns {@code true}. Selection favours the most relevant untreated wound for the action (bleeding for
- * REDUCE_BLEEDING/SUTURE_WOUND, fractures for STABILIZE_FRACTURE, matching category otherwise), breaking
- * ties by severity.</p>
+ * Server-authoritative application of a {@link Treatment} to a player's medical state. The server picks
+ * the target trauma (clients never do); item consumes only when {@link #apply} returns {@code true}.
  */
 public final class TreatmentService {
 
@@ -68,8 +63,6 @@ public final class TreatmentService {
             boolean changed = profile.getBloodMl() != before;
             if (changed) {
                 data.bumpRevision();
-                MedicalNetworking.sendDelta(player,
-                        new TraumaDeltaPacket(TraumaDeltaPacket.Op.CHANGED, LimbType.TORSO, "", 0.0F));
             }
             return changed;
         }
@@ -83,8 +76,6 @@ public final class TreatmentService {
             boolean changed = profile.getPainSuppression() != before;
             if (changed) {
                 data.bumpRevision();
-                MedicalNetworking.sendDelta(player,
-                        new TraumaDeltaPacket(TraumaDeltaPacket.Op.CHANGED, LimbType.TORSO, "", 0.0F));
             }
             return changed;
         }
@@ -105,8 +96,25 @@ public final class TreatmentService {
             }
             profile.markDirty();
             data.bumpRevision();
-            MedicalNetworking.sendDelta(player,
-                    new TraumaDeltaPacket(TraumaDeltaPacket.Op.CHANGED, limbHint, "", 0.0F));
+            return true;
+        }
+
+        // Hemostatic (BOOST_CLOTTING) boosts whole-body natural clotting for a while — no limb target. It
+        // raises both the severity a bleed can self-clot at and the speed it clots (handled in the engine).
+        if (action == TreatmentAction.BOOST_CLOTTING) {
+            float mag = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;
+            long end = player.level().getGameTime() + MedicalConfig.clottingAgentDurationTicks();
+            float beforeBoost = profile.getClottingBoost();
+            long beforeEnd = profile.getClottingBoostEndTick();
+            float newBoost = Math.max(beforeBoost, mag);
+            long newEnd = Math.max(beforeEnd, end);
+            if (newBoost == beforeBoost && newEnd == beforeEnd) {
+                return false;
+            }
+            profile.setClottingBoost(newBoost);
+            profile.setClottingBoostEndTick(newEnd);
+            profile.markDirty();
+            data.bumpRevision();
             return true;
         }
 
@@ -127,7 +135,6 @@ public final class TreatmentService {
         float magnitude = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;
         boolean removed = false;
         boolean changed = false;
-        TraumaDeltaPacket.Op op = TraumaDeltaPacket.Op.TREATED;
 
         switch (action) {
             case REDUCE_BLEEDING -> {
@@ -170,7 +177,6 @@ public final class TreatmentService {
         Limb limb = profile.limb(target.getLimb());
         if (removed) {
             limb.removeTrauma(target);
-            op = TraumaDeltaPacket.Op.REMOVED;
             changed = true;
         }
 
@@ -187,8 +193,6 @@ public final class TreatmentService {
         limb.markDirty();
         profile.markDirty();
         data.bumpRevision();
-        MedicalNetworking.sendDelta(player,
-                new TraumaDeltaPacket(op, target.getLimb(), target.getType().getId(), target.getSeverity()));
         return true;
     }
 

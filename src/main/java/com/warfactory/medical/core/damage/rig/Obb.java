@@ -10,22 +10,11 @@ import net.minecraft.world.phys.Vec3;
  *
  * <p>Axes are orthonormal; {@link #half} holds the positive half-extent along each corresponding axis.</p>
  */
-public final class Obb {
+public record Obb(Vec3 center, Vec3 axisX, Vec3 axisY, Vec3 axisZ, Vec3 half, LimbType limb) {
 
-    public final Vec3 center;
-    public final Vec3 axisX;
-    public final Vec3 axisY;
-    public final Vec3 axisZ;
-    public final Vec3 half;
-    public final LimbType limb;
-
-    public Obb(Vec3 center, Vec3 axisX, Vec3 axisY, Vec3 axisZ, Vec3 half, LimbType limb) {
-        this.center = center;
-        this.axisX = axisX;
-        this.axisY = axisY;
-        this.axisZ = axisZ;
-        this.half = half;
-        this.limb = limb;
+    private static double excess(double d, double h) {
+        double a = Math.abs(d) - h;
+        return Math.max(a, 0.0);
     }
 
     /**
@@ -123,7 +112,9 @@ public final class Obb {
         return tMin < 0.0 ? 0.0 : tMin;
     }
 
-    /** True when {@code p} lies within the box (inclusive of the surface). */
+    /**
+     * True when {@code p} lies within the box (inclusive of the surface).
+     */
     public boolean contains(Vec3 p) {
         double qx = p.x - center.x;
         double qy = p.y - center.y;
@@ -145,10 +136,5 @@ public final class Obb {
         double ey = excess(qx * axisY.x + qy * axisY.y + qz * axisY.z, half.y);
         double ez = excess(qx * axisZ.x + qy * axisZ.y + qz * axisZ.z, half.z);
         return ex * ex + ey * ey + ez * ez;
-    }
-
-    private static double excess(double d, double h) {
-        double a = Math.abs(d) - h;
-        return Math.max(a, 0.0);
     }
 }

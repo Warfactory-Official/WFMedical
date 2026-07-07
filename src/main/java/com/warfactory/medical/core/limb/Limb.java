@@ -26,6 +26,12 @@ public final class Limb {
      * systemic ANALGESIA (painkillers) which masks every limb at once.
      */
     private float localNumbing;
+    /**
+     * A TOURNIQUET on this limb (arms/legs only). While on, it REDUCES the limb's bleeding output (blood
+     * loss) but does NOT treat the underlying wounds — remove it and full bleeding resumes. One per limb.
+     * Distinct from a bandage, which addresses the wound itself. Persisted.
+     */
+    private boolean tourniquet;
     // Cached aggregates (valid while !dirty).
     private double cachedBleeding;
     private float cachedPain;
@@ -55,9 +61,6 @@ public final class Limb {
         this.maxHealth = maxHealth;
     }
 
-    /**
-     * Regenerating minor-damage pool (vanilla-like scratches that heal over time).
-     */
     public float getMinorDamage() {
         return minorDamage;
     }
@@ -66,9 +69,6 @@ public final class Limb {
         this.minorDamage = minorDamage < 0.0F ? 0.0F : minorDamage;
     }
 
-    /**
-     * Localized numbing (0..1) currently on this limb
-     */
     public float getLocalNumbing() {
         return localNumbing;
     }
@@ -77,6 +77,20 @@ public final class Limb {
         float clamped = value < 0.0F ? 0.0F : (Math.min(value, 1.0F));
         if (clamped != this.localNumbing) {
             this.localNumbing = clamped;
+            this.dirty = true;
+        }
+    }
+
+    /**
+     * Whether a tourniquet is currently applied to this limb (reduces its bleeding without treating it).
+     */
+    public boolean hasTourniquet() {
+        return tourniquet;
+    }
+
+    public void setTourniquet(boolean value) {
+        if (value != this.tourniquet) {
+            this.tourniquet = value;
             this.dirty = true;
         }
     }
@@ -247,6 +261,7 @@ public final class Limb {
         tag.putFloat("MaxHealth", maxHealth);
         tag.putFloat("MinorDamage", minorDamage);
         tag.putFloat("LocalNumb", localNumbing);
+        tag.putBoolean("Tourniquet", tourniquet);
         ListTag list = new ListTag();
         for (Trauma t : traumas) {
             list.add(t.save());
@@ -259,6 +274,7 @@ public final class Limb {
         this.maxHealth = tag.getFloat("MaxHealth");
         this.minorDamage = tag.getFloat("MinorDamage");
         this.localNumbing = Math.max(0.0F, Math.min(tag.getFloat("LocalNumb"), 1.0F));
+        this.tourniquet = tag.getBoolean("Tourniquet");
         traumas.clear();
         ListTag list = tag.getList("Traumas", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {

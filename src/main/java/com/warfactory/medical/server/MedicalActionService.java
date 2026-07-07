@@ -4,6 +4,7 @@ import com.warfactory.medical.capability.IMedicalData;
 import com.warfactory.medical.capability.MedicalCapabilities;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.MedicalProfile;
+import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.treatment.Treatment;
 import com.warfactory.medical.core.treatment.TreatmentAction;
@@ -19,14 +20,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 
 /**
- * Server-authoritative tracking of timed "active" treatments: applying a chosen medical item to a chosen
- * {@link LimbType} over N ticks, driving the radial / character-sheet apply flow and the action-progress
- * overlay.
- *
- * <p>The active treatment is stored transiently on the {@link MedicalProfile} (never persisted to NBT).
- * The physiology is only mutated on COMPLETION, through {@link TreatmentService#applyTargeted}; the item
- * is consumed only when that reports a change. This subsystem is entirely independent of the vanilla
- * right-click (startUsingItem / finishUsingItem) channel so the two never double-apply.</p>
+ * Server-authoritative tracking of timed active treatments. State is transient (never NBT); physiology is
+ * only mutated on completion via {@link TreatmentService#applyTargeted}; independent of the vanilla
+ * right-click channel so the two never double-apply.
  */
 public final class MedicalActionService {
 
@@ -71,6 +67,11 @@ public final class MedicalActionService {
             return false; // player is not carrying the item they asked to use
         }
 
+        // Tourniquet is applied INSTANTLY (not a timed treatment): toggle it onto the selected appendage.
+        if (treatment != null && treatment.action() == TreatmentAction.APPLY_TOURNIQUET) {
+            return applyTourniquet(player, data, profile, limb, item);
+        }
+
         // Resolve the channel duration and the (presentation-only) action for the client overlay.
         int totalTicks;
         TreatmentAction action;
@@ -95,10 +96,8 @@ public final class MedicalActionService {
     }
 
     /**
-     * Advance the active treatment one engine pass. When the elapsed game time reaches the recorded
-     * duration the treatment COMPLETES: it resolves the recorded item, applies its {@link Treatment}
-     * (biased to the recorded limb), consumes one item on success, then clears and notifies the client.
-     * If the item has vanished from the inventory the treatment is cancelled instead.
+     * Advance one engine pass; completes when elapsed >= totalTicks (applies treatment, consumes item, notifies
+     * client) or cancels if the item has vanished from the inventory.
      */
     public static void tick(ServerPlayer player, MedicalProfile profile, long nowTick) {
         if (player == null || profile == null || !profile.hasActiveTreatment()) {
@@ -138,10 +137,7 @@ public final class MedicalActionService {
     }
 
     /**
-     * Cancel any running treatment for {@code player} (interrupted by damage, death, item loss, ...),
-     * clearing the transient state and telling the client to hide the progress overlay.
-     *
-     * @param reason a short human-readable reason (currently informational only)
+     * Cancel any running treatment and tell the client to hide the progress overlay.
      */
     public static void cancel(ServerPlayer player, String reason) {
         if (player == null) {
@@ -157,6 +153,54 @@ public final class MedicalActionService {
         }
         profile.clearActiveTreatment();
         MedicalNetworking.sendActiveTreatment(player, ActiveTreatmentPacket.inactive());
+    }
+
+    /**
+     * Instantly apply a tourniquet (arm/leg only, one per limb): slows bleeding without treating wounds.
+     */
+    private static boolean applyTourniquet(ServerPlayer player, IMedicalData data, MedicalProfile profile,
+                                           LimbType limb, Item item) {
+        if (limb == null || !(limb.isArm() || limb.isLeg())) {
+            return false;
+        }
+        Limb target = profile.limb(limb);
+        if (target.hasTourniquet()) {
+            return false; // one tourniquet per appendage
+        }
+        target.setTourniquet(true);
+        profile.markDirty();
+        data.bumpRevision();
+        if (!player.getAbilities().instabuild) {
+            int slot = findItemSlot(player, item);
+            if (slot >= 0) {
+                player.getInventory().getItem(slot).shrink(1);
+            }
+        }
+        MedicalEngine.resync(player);
+        return true;
+    }
+
+    /**
+     * Remove the tourniquet from {@code limb} (UI-driven, no item consumed); no-op if none present.
+     */
+    public static boolean removeTourniquet(ServerPlayer player, LimbType limb) {
+        if (player == null || limb == null) {
+            return false;
+        }
+        IMedicalData data = MedicalCapabilities.get(player);
+        if (data == null) {
+            return false;
+        }
+        MedicalProfile profile = data.getProfile();
+        Limb target = profile.limb(limb);
+        if (!target.hasTourniquet()) {
+            return false;
+        }
+        target.setTourniquet(false);
+        profile.markDirty();
+        data.bumpRevision();
+        MedicalEngine.resync(player);
+        return true;
     }
 
     /**

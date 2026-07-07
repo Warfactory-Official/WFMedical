@@ -21,11 +21,27 @@ public final class Physiology {
         boolean legFracture = false;
         boolean armFracture = false;
         int fracturedLegs = 0;
+        int disabledArms = 0;
+        int disabledLegs = 0;
+        int armTourniquets = 0;
+        int legTourniquets = 0;
 
+        float maxHp = cfg.maxHealthPoints();
         for (LimbType lt : LimbType.VALUES) {
             Limb limb = p.limb(lt);
-            bleeding += limb.getCachedBleeding();
-            limbHealthReduction += limb.getCachedHealthReduction();
+            // A TOURNIQUET reduces this limb's bleeding OUTPUT (blood loss drains from totalBleeding) without
+            // treating the wounds -- remove it and the raw bleeding returns.
+            bleeding += limb.hasTourniquet()
+                    ? limb.getCachedBleeding() * cfg.tourniquetBleedMultiplier()
+                    : limb.getCachedBleeding();
+            // Each limb's contribution to the LIFE POOL is CAPPED at its share of the full bar, so a single
+            // arm/leg can never drain the whole pool (mirrors the systemic-pain share cap). A limb whose
+            // reduction reaches its cap is "drained" -> disabled here (and fractured at damage time); the
+            // excess is redirected to bleeding/pain by the damage pipeline rather than sunk into the pool.
+            float cap = cfg.healthShare(lt) * maxHp;
+            float reduction = limb.getCachedHealthReduction();
+            limbHealthReduction += cap > 0.0F ? Math.min(reduction, cap) : reduction;
+            boolean drained = cap > 0.0F && reduction >= cap;
             movementFromLimbs *= limb.getCachedMovementMultiplier();
             if (limb.hasCachedFracture()) {
                 if (lt.isLeg()) {
@@ -35,7 +51,25 @@ public final class Physiology {
                     armFracture = true;
                 }
             }
+            if (lt.isArm() && drained) {
+                disabledArms++;
+            } else if (lt.isLeg() && drained) {
+                disabledLegs++;
+            }
+            if (limb.hasTourniquet()) {
+                if (lt.isArm()) {
+                    armTourniquets++;
+                } else if (lt.isLeg()) {
+                    legTourniquets++;
+                }
+            }
         }
+        // Both arms drained -> hands unusable (no swing/interact, hidden render); both legs -> forced crawl.
+        boolean bothArmsDisabled = disabledArms >= 2;
+        boolean bothLegsDisabled = disabledLegs >= 2;
+        // A tourniquet on any arm induces weapon sway (synced for the client sway handler); legs/arms also
+        // take a per-limb speed penalty below so wearing one permanently is discouraged.
+        boolean anyArmTourniquet = armTourniquets > 0;
 
         // --- PAIN (per body part, capped by a configurable SHARE) --------------------------------------
         // Each limb's raw pain saturates locally (diminishing returns), is reduced by any LOCAL ANESTHETIC
@@ -50,6 +84,12 @@ public final class Physiology {
             analgesia = 0.0F;
         } else if (analgesia > 1.0F) {
             analgesia = 1.0F;
+        }
+        // A combat stimulant makes the player very insusceptible to pain: its strength acts as a strong
+        // whole-body analgesia floor (like a painkiller) for as long as the stimulant is active.
+        float stimulant = p.getStimulant();
+        if (stimulant > analgesia) {
+            analgesia = stimulant;
         }
         float saturationK = cfg.painSaturationK();
         if (saturationK <= 0.0F) {
@@ -188,6 +228,12 @@ public final class Physiology {
             state = HealthState.UNCONSCIOUS;
         }
 
+        // Asphyxia unconsciousness (drowning / drug respiratory depression) likewise raises the state to
+        // UNCONSCIOUS; the engine runs a DEATH timer for it (fatal unless the cause is cleared in time).
+        if (p.isAsphyxiaUnconscious() && state.ordinal() < HealthState.UNCONSCIOUS.ordinal()) {
+            state = HealthState.UNCONSCIOUS;
+        }
+
         // Admin-forced override: honour an operator-pinned state (e.g. /wfmedical unconscious on an uninjured
         // player) that the pure physiology would not itself derive, but never DOWNGRADE a genuinely worse
         // derived condition. This keeps the forced state, its mobility lock and the downed pose stable across
@@ -219,17 +265,43 @@ public final class Physiology {
         for (int i = 0; i < fracturedLegs; i++) {
             movement *= cfg.legFractureSpeedMultiplier();
         }
+        // Tourniquets restrict circulation -> a per-limb speed penalty (legs heavier than arms).
+        for (int i = 0; i < legTourniquets; i++) {
+            movement *= cfg.tourniquetLegSpeedMultiplier();
+        }
+        for (int i = 0; i < armTourniquets; i++) {
+            movement *= cfg.tourniquetArmSpeedMultiplier();
+        }
         movement *= bloodMove;
         if (incapacitated) {
             movement = 0.0F;
-        } else if (movement < cfg.painSpeedFloor()) {
-            movement = cfg.painSpeedFloor();
+        } else {
+            if (movement < cfg.painSpeedFloor()) {
+                movement = cfg.painSpeedFloor();
+            }
+            // Combat stimulant overrides the injury slowdown and boosts speed above normal (pushes through it).
+            if (stimulant > 0.0F) {
+                float boosted = 1.0F + cfg.stimulantSpeedBonus() * stimulant;
+                if (boosted > movement) {
+                    movement = boosted;
+                }
+            }
+            // Heavy movement constraint while consciously asphyxiating (below the pain floor) — you can barely
+            // move while suffocating. Applied after the boost so suffocation still slows a stimulated player.
+            if (asphyxiating) {
+                movement *= cfg.asphyxiaMoveMultiplier();
+            }
+            // Both legs drained: forced crawl -- clamp to a slow crawl (holds even through a stimulant, since
+            // two destroyed legs cannot be run on regardless of injury masking).
+            if (bothLegsDisabled && movement > cfg.painSpeedFloor()) {
+                movement = cfg.painSpeedFloor();
+            }
         }
 
-        boolean sprintBlocked = legFracture || severeBloodLoss || incapacitated || asphyxiating;
+        boolean sprintBlocked = legFracture || severeBloodLoss || incapacitated || asphyxiating || bothLegsDisabled;
 
         float jumpMultiplier;
-        if (legFracture || incapacitated) {
+        if (legFracture || incapacitated || asphyxiating || bothLegsDisabled) {
             jumpMultiplier = 0.0F;
         } else {
             // Leg trauma + severe blood loss reduce jump; general pain and non-leg wounds do not.
@@ -239,6 +311,11 @@ public final class Physiology {
             } else if (jumpMultiplier > 1.0F) {
                 jumpMultiplier = 1.0F;
             }
+        }
+        // Combat stimulant clears any jump penalty (masks the injury — even a broken leg), except while out
+        // cold or suffocating.
+        if (stimulant > 0.0F && !incapacitated && !asphyxiating && !bothLegsDisabled) {
+            jumpMultiplier = 1.0F;
         }
 
         return new DerivedStats(
@@ -255,14 +332,16 @@ public final class Physiology {
                 legFracture,
                 armFracture,
                 asphyxiating,
-                painKoPending
+                painKoPending,
+                bothArmsDisabled,
+                bothLegsDisabled,
+                anyArmTourniquet
         );
     }
 
     /**
-     * Movement/jump multiplier from blood loss: {@code 1.0} until {@code bloodMovementPenaltyLossFraction} is
-     * lost, then ramping linearly down to {@code painSpeedFloor} at the death loss. This is the ONLY way blood
-     * loss slows the player, and it is independent of pain / non-leg trauma.
+     * 1.0 until bloodMovementPenaltyLossFraction is lost, then ramps to painSpeedFloor at death loss.
+     * Blood loss is the ONLY path that slows the player independent of pain / non-leg trauma.
      */
     private static float bloodMovementMultiplier(double lossFraction, PhysiologyParams cfg) {
         double onset = cfg.bloodMovementPenaltyLossFraction();

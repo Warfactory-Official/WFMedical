@@ -21,57 +21,26 @@ import net.minecraftforge.fml.common.Mod;
 import java.util.List;
 
 /**
- * CLIENT-ONLY blood-loss desaturation. Drives a real full-screen {@link PostChain} post-processing effect
- * that fades the 3D scene towards grayscale as the player's blood pool drops below the low threshold, giving
- * the classic "greying out from blood loss" feel. Purely presentational: it reads the synced
- * {@link ClientMedicalCache} snapshot and never mutates any medical state.
- *
- * <p>Self-registers on the FORGE bus, {@link Dist#CLIENT} only, so a dedicated server never class-loads any
- * of the client render types referenced here.</p>
- *
- * <h2>Robustness</h2>
- * <p>This is the highest-risk client feature, so every failure mode is contained:</p>
- * <ul>
- *   <li>The {@link PostChain} is created lazily inside a {@code try/catch}; if the shader assets fail to load
- *       the effect sets {@link #disabled} and logs once, so it never retry-spams and never crashes.</li>
- *   <li>The whole render handler body is wrapped in {@code try/catch}: any GL/shader error disables the
- *       effect for the rest of the session instead of taking the game down.</li>
- *   <li>A healthy player never touches the chain at all: the {@code amount <= EPSILON} early return runs
- *       before any lazy creation, so a full-blood player pays effectively zero cost.</li>
- * </ul>
- *
- * <h2>Intensity model</h2>
- * <p>Anchored to the bleed-out DEATH threshold, not an empty pool. Blood LOSS fraction
- * {@code loss = 1 - bloodMl/maxBloodMl} is mapped as {@code t = loss / bloodDeathLossFraction} (clamped
- * 0..1), so {@code t = 0} at full blood and {@code t = 1} exactly at the loss that kills you
- * ({@link MedicalConfig#bloodDeathLossFraction()}, default 0.40 = 60% remaining). Because death fires at that
- * point, blood never drops further, so anchoring here is what actually makes the greyout visible as you bleed
- * toward death (the old {@code < 0.60 remaining} start sat right on the death line, leaving zero range).
- * {@code amount = MAX_DESATURATION * t}; the shader receives {@code Saturation = 1 - amount} (1 = full color,
- * 0 = grayscale).</p>
+ * CLIENT-ONLY blood-loss desaturation. Fades the 3D scene toward grayscale as blood drops, anchored to the
+ * bleed-out DEATH threshold (not an empty pool) so the full desaturation range is visible before death.
+ * PostChain created lazily; all failures disable the effect for the session rather than crashing.
  */
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class BloodDesaturationEffect {
 
     /**
-     * Maximum desaturation amount at the bleed-out death threshold (0 = untouched, 1 = full grayscale).
+     * 0 = untouched, 1 = full grayscale; reached exactly at the bleed-out death threshold.
      */
     private static final float MAX_DESATURATION = 0.85F;
     /**
-     * Below this desaturation amount the effect is a no-op (keeps healthy players off the hot path).
+     * Below this the effect is a no-op; keeps healthy players off the hot path.
      */
     private static final float EPSILON = 0.001F;
 
     private static final ResourceLocation SHADER =
             new ResourceLocation(WFMedical.MOD_ID, "shaders/post/blood_desaturate.json");
 
-    /**
-     * Cached post-processing chain; {@code null} until first needed or after teardown.
-     */
     private static PostChain chain;
-    /**
-     * Window dimensions the cached {@link #chain} was last sized for.
-     */
     private static int chainWidth = -1;
     private static int chainHeight = -1;
     /**
@@ -83,9 +52,7 @@ public final class BloodDesaturationEffect {
     }
 
     /**
-     * Fires after the 3D world and held item have been drawn to the main render target but before the HUD.
-     * Processing the chain here desaturates the whole scene while leaving the HUD (drawn afterwards) in full
-     * color, which is exactly what we want for a readable overlay.
+     * Fires before HUD: desaturates the scene while leaving HUD overlays in full colour.
      */
     @SubscribeEvent
     public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
@@ -123,9 +90,6 @@ public final class BloodDesaturationEffect {
         }
     }
 
-    /**
-     * Tear down the chain when leaving a world so we do not leak GL resources or reuse a stale target.
-     */
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         closeChain();
@@ -133,10 +97,6 @@ public final class BloodDesaturationEffect {
 
     // ------------------------------------------------------------------ internals
 
-    /**
-     * Lazily create the chain (and (re)size it to the current window). Returns {@code null} if creation
-     * failed, having permanently {@link #disable() disabled} the effect.
-     */
     private static PostChain ensureChain(Minecraft mc) {
         int width = mc.getWindow().getWidth();
         int height = mc.getWindow().getHeight();
@@ -166,9 +126,7 @@ public final class BloodDesaturationEffect {
     }
 
     /**
-     * Push {@code saturation} onto every pass's {@code Saturation} uniform. Passes that do not declare it
-     * (e.g. the trailing blit) receive a harmless dummy uniform from {@code safeGetUniform}, so this is safe
-     * to apply uniformly.
+     * {@code safeGetUniform} returns a dummy for undeclared names so this is safe on every pass including the blit.
      */
     private static void setSaturationUniform(PostChain postChain, float saturation) {
         List<PostPass> passes = ((PostChainAccessor) postChain).wfmedical$getPasses();
@@ -182,8 +140,7 @@ public final class BloodDesaturationEffect {
     }
 
     /**
-     * @return the current desaturation amount (0..MAX_DESATURATION) from the synced blood fraction, ramped so
-     * it reaches maximum exactly at the bleed-out death loss ({@link MedicalConfig#bloodDeathLossFraction()}).
+     * Returns desaturation (0..MAX_DESATURATION) ramped so it peaks exactly at the bleed-out death threshold.
      */
     private static float desaturationAmount() {
         MedicalSyncPacket snap = ClientMedicalCache.get();
@@ -209,9 +166,6 @@ public final class BloodDesaturationEffect {
         return MAX_DESATURATION * t;
     }
 
-    /**
-     * Close the chain and forget its cached size; safe to call when already torn down.
-     */
     private static void closeChain() {
         if (chain != null) {
             try {
@@ -225,9 +179,6 @@ public final class BloodDesaturationEffect {
         chainHeight = -1;
     }
 
-    /**
-     * Permanently disable the effect for this session and release any GL resources.
-     */
     private static void disable() {
         disabled = true;
         closeChain();

@@ -26,11 +26,17 @@ import java.util.Random;
 public final class HumanoidRig {
 
     // --- model<->world transform constants (Recon: LivingEntityRenderer + PlayerRenderer) -----------
-    /** Model-unit -> block. */
+    /**
+     * Model-unit -> block.
+     */
     private static final double UNIT = 1.0 / 16.0;
-    /** Player render scale ({@code PlayerRenderer#scale}). */
+    /**
+     * Player render scale ({@code PlayerRenderer#scale}).
+     */
     private static final double MODEL_SCALE = 0.9375;
-    /** Vertical re-center (feet-drop + z-fight epsilon) from {@code LivingEntityRenderer#render}. */
+    /**
+     * Vertical re-center (feet-drop + z-fight epsilon) from {@code LivingEntityRenderer#render}.
+     */
     private static final double Y_SHIFT = 1.501;
 
     private static final double DEG2RAD = Math.PI / 180.0;
@@ -38,73 +44,24 @@ public final class HumanoidRig {
 
     // --- DOWNED (unconscious) pose replica: mirror the CLIENT lay-down so the rig matches the rendered body ---
     // Kept in lock-step with DownedPlayerRenderer (the PoseStack transform) and HumanoidModelMixin (the sprawl).
-    /** Backward tip about world X to lay the model supine (DownedPlayerRenderer.LAY_DEGREES). */
+    /**
+     * Backward tip about world X to lay the model supine (DownedPlayerRenderer.LAY_DEGREES).
+     */
     private static final double DOWNED_LAY_RAD = Math.toRadians(-90.0);
-    /** Small fixed yaw so the sprawl is not grid-aligned (DownedPlayerRenderer.STABLE_YAW). */
+    /**
+     * Small fixed yaw so the sprawl is not grid-aligned (DownedPlayerRenderer.STABLE_YAW).
+     */
     private static final double DOWNED_STABLE_YAW_RAD = Math.toRadians(8.0);
-    /** Upward nudge (blocks) so the supine body rests on the surface (DownedPlayerRenderer.GROUND_LIFT). */
+    /**
+     * Upward nudge (blocks) so the supine body rests on the surface (DownedPlayerRenderer.GROUND_LIFT).
+     */
     private static final double DOWNED_GROUND_LIFT = 0.1;
-    /** Half-range (radians) of the per-limb seeded sprawl (HumanoidModelMixin.TILT_RANGE). */
+    /**
+     * Half-range (radians) of the per-limb seeded sprawl (HumanoidModelMixin.TILT_RANGE).
+     */
     private static final float DOWNED_TILT_RANGE = 0.28F;
 
     private HumanoidRig() {
-    }
-
-    /** The six posed OBBs in entity-local space. */
-    public static final class LocalRig {
-        public Obb head;
-        public Obb torso;
-        public Obb leftArm;
-        public Obb rightArm;
-        public Obb leftLeg;
-        public Obb rightLeg;
-
-        private Obb[] all;
-
-        /** The six OBBs as an array, built once and cached (callers read only; fields are set in compute). */
-        public Obb[] all() {
-            Obb[] a = all;
-            if (a == null) {
-                a = new Obb[] {head, torso, leftArm, rightArm, leftLeg, rightLeg};
-                all = a;
-            }
-            return a;
-        }
-    }
-
-    /** Two-handed flags mirror the vanilla {@code HumanoidModel.ArmPose}; GUN is our TACZ approximation. */
-    private enum ArmPose {
-        EMPTY(false), ITEM(false), BLOCK(false), BOW(true), SPEAR(false),
-        CROSSBOW_CHARGE(true), CROSSBOW_HOLD(true), SPYGLASS(false), TOOT_HORN(false),
-        BRUSH(false), GUN(true);
-
-        final boolean twoHanded;
-
-        ArmPose(boolean twoHanded) {
-            this.twoHanded = twoHanded;
-        }
-    }
-
-    /** A single posed humanoid part: cube extent (fixed) + pivot + Euler rotation (posed each call). */
-    private static final class Part {
-        final double ox, oy, oz, sx, sy, sz;
-        final LimbType limb;
-        double x, y, z;          // pivot, model units
-        double xRot, yRot, zRot; // radians
-
-        Part(double ox, double oy, double oz, double sx, double sy, double sz,
-             double px, double py, double pz, LimbType limb) {
-            this.ox = ox;
-            this.oy = oy;
-            this.oz = oz;
-            this.sx = sx;
-            this.sy = sy;
-            this.sz = sz;
-            this.x = px;
-            this.y = py;
-            this.z = pz;
-            this.limb = limb;
-        }
     }
 
     /**
@@ -140,7 +97,6 @@ public final class HumanoidRig {
         return rig;
     }
 
-
     public static AABB worldBounds(LivingEntity victim) {
         LocalRig rig = compute(victim);
         Vec3 pos = victim.position();
@@ -152,13 +108,13 @@ public final class HumanoidRig {
         double minX = Double.POSITIVE_INFINITY, minY = minX, minZ = minX;
         double maxX = Double.NEGATIVE_INFINITY, maxY = maxX, maxZ = maxX;
         for (Obb obb : rig.all()) {
-            Vec3 c = obb.center;
-            Vec3 ax = obb.axisX;
-            Vec3 ay = obb.axisY;
-            Vec3 az = obb.axisZ;
-            double hx = obb.half.x;
-            double hy = obb.half.y;
-            double hz = obb.half.z;
+            Vec3 c = obb.center();
+            Vec3 ax = obb.axisX();
+            Vec3 ay = obb.axisY();
+            Vec3 az = obb.axisZ();
+            double hx = obb.half().x;
+            double hy = obb.half().y;
+            double hz = obb.half().z;
             for (int sx = -1; sx <= 1; sx += 2) {
                 for (int sy = -1; sy <= 1; sy += 2) {
                     for (int sz = -1; sz <= 1; sz += 2) {
@@ -236,19 +192,22 @@ public final class HumanoidRig {
         rig.rightLeg = tilt(rig.rightLeg, cos, sin, shiftY, shiftZ);
     }
 
-    /** Rotate an OBB about the local +X (right) axis through the feet origin, then shift its centre in Y/Z. */
+    /**
+     * Rotate an OBB about the local +X (right) axis through the feet origin, then shift its centre in Y/Z.
+     */
     private static Obb tilt(Obb o, double cos, double sin, double shiftY, double shiftZ) {
-        Vec3 c = rotX(o.center, cos, sin);
+        Vec3 c = rotX(o.center(), cos, sin);
         Vec3 centre = new Vec3(c.x, c.y + shiftY, c.z + shiftZ);
-        return new Obb(centre, rotX(o.axisX, cos, sin), rotX(o.axisY, cos, sin), rotX(o.axisZ, cos, sin),
-                o.half, o.limb);
+        return new Obb(centre, rotX(o.axisX(), cos, sin), rotX(o.axisY(), cos, sin), rotX(o.axisZ(), cos, sin),
+                o.half(), o.limb());
     }
 
-    /** {@code (x, y, z)} rotated about +X by the given cos/sin: {@code (x, y·c - z·s, y·s + z·c)}. */
+    /**
+     * {@code (x, y, z)} rotated about +X by the given cos/sin: {@code (x, y·c - z·s, y·s + z·c)}.
+     */
     private static Vec3 rotX(Vec3 v, double cos, double sin) {
         return new Vec3(v.x, v.y * cos - v.z * sin, v.y * sin + v.z * cos);
     }
-
 
     private static void downedSprawl(Player p, Part head, Part rightArm, Part leftArm,
                                      Part rightLeg, Part leftLeg) {
@@ -272,7 +231,6 @@ public final class HumanoidRig {
         return (rng.nextFloat() * 2.0F - 1.0F) * DOWNED_TILT_RANGE;
     }
 
-
     private static void applyDownedLay(LivingEntity e, LocalRig rig) {
         double yaw = Math.toRadians(e.yBodyRot);
         double fX = -Math.sin(yaw);
@@ -293,17 +251,16 @@ public final class HumanoidRig {
 
     private static Obb layObb(Obb o, double fX, double fZ, double rX, double rZ,
                               double cosA, double sinA, double cosL, double sinL) {
-        Vec3 c = lay(o.center, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, true);
-        Vec3 ax = lay(o.axisX, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, false);
-        Vec3 ay = lay(o.axisY, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, false);
-        Vec3 az = lay(o.axisZ, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, false);
-        return new Obb(c, ax, ay, az, o.half, o.limb);
+        Vec3 c = lay(o.center(), fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, true);
+        Vec3 ax = lay(o.axisX(), fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, false);
+        Vec3 ay = lay(o.axisY(), fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, false);
+        Vec3 az = lay(o.axisZ(), fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, false);
+        return new Obb(c, ax, ay, az, o.half(), o.limb());
     }
-
 
     private static Vec3 lay(Vec3 v, double fX, double fZ, double rX, double rZ,
                             double cosA, double sinA, double cosL, double sinL, boolean lift) {
-       // local -> world offset: right=(rX,0,rZ), up=(0,1,0), front=(fX,0,fZ)
+        // local -> world offset: right=(rX,0,rZ), up=(0,1,0), front=(fX,0,fZ)
         double ox = v.x * rX + v.z * fX;
         double oy = v.y;
         double oz = v.x * rZ + v.z * fZ;
@@ -633,7 +590,7 @@ public final class HumanoidRig {
         modelpart.zRot += Math.sin(attackTime * Math.PI) * -0.4;
     }
 
-     // Swim/crawl arm & leg blend
+    // Swim/crawl arm & leg blend
     private static void swimAnim(LivingEntity e, Part head, Part rightArm, Part leftArm, Part rightLeg,
                                  Part leftLeg, double limbSwing, float swimAmount) {
         double f5 = limbSwing % 26.0;
@@ -678,10 +635,6 @@ public final class HumanoidRig {
         part.xRot += sign * Math.sin(ageInTicks * 0.067) * 0.05;
     }
 
-    // ================================================================================================
-    // Arm-pose selection (PlayerRenderer#getArmPose replica; Forge client hook omitted)
-    // ================================================================================================
-
     private static ArmPose getArmPose(LivingEntity e, InteractionHand hand) {
         ItemStack stack = e.getItemInHand(hand);
         if (stack.isEmpty()) {
@@ -725,11 +678,9 @@ public final class HumanoidRig {
         return e.swingingArm == InteractionHand.MAIN_HAND ? main : main.getOpposite();
     }
 
-    // ================================================================================================
-    // Math helpers
-    // ================================================================================================
-
-    /** {@code from + pct * wrap(to - from into [-PI,PI))} &mdash; vanilla {@code rotlerpRad}. */
+    /**
+     * {@code from + pct * wrap(to - from into [-PI,PI))} &mdash; vanilla {@code rotlerpRad}.
+     */
     private static double rotlerpRad(double pct, double from, double to) {
         double delta = to - from;
         while (delta >= Math.PI) {
@@ -741,13 +692,13 @@ public final class HumanoidRig {
         return from + pct * delta;
     }
 
+    // ================================================================================================
+    // Arm-pose selection (PlayerRenderer#getArmPose replica; Forge client hook omitted)
+    // ================================================================================================
+
     private static double quadraticArmUpdate(double x) {
         return -65.0 * x + x * x;
     }
-
-    // ================================================================================================
-    // Part -> entity-local OBB
-    // ================================================================================================
 
     /**
      * Convert a posed part to an entity-local {@link Obb}. The cube centre and three half-axis endpoints
@@ -781,6 +732,10 @@ public final class HumanoidRig {
         return new Obb(centre, vx.normalize(), vy.normalize(), vz.normalize(), half, p.limb);
     }
 
+    // ================================================================================================
+    // Math helpers
+    // ================================================================================================
+
     /**
      * A part-local point (model units) rotated by the part's Euler angles (precomputed {@code cos/sin}) and
      * offset by its pivot &mdash; {@code rotationZYX(zRot,yRot,xRot)}: X first, then Y, then Z, matching
@@ -810,5 +765,74 @@ public final class HumanoidRig {
         double y = MODEL_SCALE * (Y_SHIFT - model.y * UNIT);
         double z = -MODEL_SCALE * model.z * UNIT;
         return new Vec3(x, y, z);
+    }
+
+    // ================================================================================================
+    // Part -> entity-local OBB
+    // ================================================================================================
+
+    /**
+     * Two-handed flags mirror the vanilla {@code HumanoidModel.ArmPose}; GUN is our TACZ approximation.
+     */
+    private enum ArmPose {
+        EMPTY(false), ITEM(false), BLOCK(false), BOW(true), SPEAR(false),
+        CROSSBOW_CHARGE(true), CROSSBOW_HOLD(true), SPYGLASS(false), TOOT_HORN(false),
+        BRUSH(false), GUN(true);
+
+        final boolean twoHanded;
+
+        ArmPose(boolean twoHanded) {
+            this.twoHanded = twoHanded;
+        }
+    }
+
+    /**
+     * The six posed OBBs in entity-local space.
+     */
+    public static final class LocalRig {
+        public Obb head;
+        public Obb torso;
+        public Obb leftArm;
+        public Obb rightArm;
+        public Obb leftLeg;
+        public Obb rightLeg;
+
+        private Obb[] all;
+
+        /**
+         * The six OBBs as an array, built once and cached (callers read only; fields are set in compute).
+         */
+        public Obb[] all() {
+            Obb[] a = all;
+            if (a == null) {
+                a = new Obb[]{head, torso, leftArm, rightArm, leftLeg, rightLeg};
+                all = a;
+            }
+            return a;
+        }
+    }
+
+    /**
+     * A single posed humanoid part: cube extent (fixed) + pivot + Euler rotation (posed each call).
+     */
+    private static final class Part {
+        final double ox, oy, oz, sx, sy, sz;
+        final LimbType limb;
+        double x, y, z;          // pivot, model units
+        double xRot, yRot, zRot; // radians
+
+        Part(double ox, double oy, double oz, double sx, double sy, double sz,
+             double px, double py, double pz, LimbType limb) {
+            this.ox = ox;
+            this.oy = oy;
+            this.oz = oz;
+            this.sx = sx;
+            this.sy = sy;
+            this.sz = sz;
+            this.x = px;
+            this.y = py;
+            this.z = pz;
+            this.limb = limb;
+        }
     }
 }

@@ -35,6 +35,20 @@ public final class MedicalProfile {
      * Accumulating injectable-drug load; decays slowly, persisted, drives overdose -> unconsciousness.
      */
     private float drugLoad;
+    /**
+     * Timed CLOTTING BOOST strength (0..1) from a hemostatic / combat stimulant: raises both the severity a
+     * bleeding wound can self-clot at AND the rate it clots. Full strength until {@link #clottingBoostEndTick},
+     * then off. Persisted (the absolute end tick survives a reload since world game-time does).
+     */
+    private float clottingBoost;
+    private long clottingBoostEndTick;
+    /**
+     * Timed STIMULANT strength (0..1) from a combat stimulant: drives strong anesthesia, a movement-speed boost
+     * and a cleared jump penalty. Full strength until {@link #stimulantEndTick}, then off. Persisted. Note the
+     * beneficial effect ends here, but the injected {@link #drugLoad} (overdose risk) lingers LONGER — the crash.
+     */
+    private float stimulant;
+    private long stimulantEndTick;
     private boolean dirty = true;
     private DerivedStats cached = DerivedStats.healthy();
 
@@ -75,6 +89,21 @@ public final class MedicalProfile {
      * the player tips into {@link #overdoseUnconscious}. Transient (a live timed state; never persisted).
      */
     private transient boolean asphyxiating;
+    /**
+     * Whether the player has PASSED OUT from asphyxia (drowning or drug respiratory depression). Unlike an
+     * overdose unconsciousness (a wake timer), this is FATAL unless the cause is cleared (surfaced / drug
+     * reversed) before {@link #asphyxiaDeadlineTick}. Transient; engine-driven each tick; never persisted.
+     */
+    private transient boolean asphyxiaUnconscious;
+    /**
+     * Game time the current (conscious) asphyxia episode began ({@code 0} = not asphyxiating); drives the
+     * struggle-before-passout window. Transient, never persisted.
+     */
+    private transient long asphyxiaSince;
+    /**
+     * Game time at which asphyxia unconsciousness turns fatal unless the cause is cleared first. Transient.
+     */
+    private transient long asphyxiaDeadlineTick;
 
     // --- Transient ADRENALINE bookkeeping for the delayed pain knockout. A pain-driven collapse (one blood
     //     loss alone would not cause) is held off for a grace period, mimicking adrenaline keeping the player
@@ -167,10 +196,9 @@ public final class MedicalProfile {
     }
 
     /**
-     * The admin-forced health-state override (nullable). When set, {@link Physiology} pins the derived
-     * state to at least this severity, so an operator-pinned {@link HealthState#UNCONSCIOUS}/
-     * {@link HealthState#CRITICAL} on a player whose blood/trauma would not independently produce it is not
-     * clobbered back to {@link HealthState#HEALTHY} on the next recompute. Transient, never persisted.
+     * Admin-forced health-state override (nullable). Physiology pins the derived state to at least this
+     * severity so an operator-forced UNCONSCIOUS is not clobbered back to HEALTHY on the next recompute.
+     * Transient, never persisted.
      */
     public HealthState getForcedState() {
         return forcedState;
@@ -181,17 +209,26 @@ public final class MedicalProfile {
     }
 
     /**
-     * Whether the player is "downed" — passed out and unable to act. After the merge this is simply the
-     * single {@link HealthState#UNCONSCIOUS} state, which is entered from either internal cause (a bleed-out
-     * unconsciousness OR an opioid overdose unconsciousness). The overdose cause raises the state to
-     * UNCONSCIOUS via {@link Physiology}, so checking {@link #isOverdoseUnconscious()} as well is
-     * belt-and-braces for the tick in which the overdose marker is set but the state has not yet been
-     * recomputed. The downed visual experience triggers uniformly for either cause off this one predicate.
-     *
-     * @return {@code true} while the player is unconscious (bleed-out or overdose)
+     * Sets DEAD state and clears the full union of transient downed markers (overdose, asphyxia, bleed-out)
+     * in one place so no death-enactment site can miss any. {@code pinForced} pins the forced override to
+     * DEAD until the vanilla death event fires; pass {@code false} at final finalization to release it.
+     */
+    public void enterDeadState(boolean pinForced) {
+        setState(HealthState.DEAD);
+        setForcedState(pinForced ? HealthState.DEAD : null);
+        setOverdoseUnconscious(false);
+        setOverdoseUntilTick(0L);
+        setBleedoutSinceTick(-1L);
+        clearAsphyxia();
+        markDirty();
+    }
+
+    /**
+     * Whether the player is downed (unconscious). Checks both the state and the overdose/asphyxia markers
+     * as belt-and-braces for the tick in which a cause marker is set but the state has not yet been recomputed.
      */
     public boolean isDowned() {
-        return overdoseUnconscious || state == HealthState.UNCONSCIOUS;
+        return overdoseUnconscious || asphyxiaUnconscious || state == HealthState.UNCONSCIOUS;
     }
 
     public long getBleedoutSinceTick() {
@@ -202,9 +239,6 @@ public final class MedicalProfile {
         this.bleedoutSinceTick = tick;
     }
 
-    /**
-     * Current perceived-pain suppression fraction (0..1).
-     */
     public float getPainSuppression() {
         return painSuppression;
     }
@@ -217,9 +251,6 @@ public final class MedicalProfile {
         }
     }
 
-    /**
-     * Accumulating injectable-drug load (>= 0); persisted, decays slowly, drives overdose -> unconsciousness.
-     */
     public float getDrugLoad() {
         return drugLoad;
     }
@@ -233,7 +264,53 @@ public final class MedicalProfile {
     }
 
     /**
-     * Game time at which the current overdose unconsciousness ends ({@code 0} = conscious). Transient, never NBT.
+     * Current clotting-boost strength (0..1); active until {@link #getClottingBoostEndTick()}.
+     */
+    public float getClottingBoost() {
+        return clottingBoost;
+    }
+
+    public void setClottingBoost(float value) {
+        float clamped = value < 0.0F ? 0.0F : (value > 1.0F ? 1.0F : value);
+        if (clamped != this.clottingBoost) {
+            this.clottingBoost = clamped;
+            this.dirty = true;
+        }
+    }
+
+    public long getClottingBoostEndTick() {
+        return clottingBoostEndTick;
+    }
+
+    public void setClottingBoostEndTick(long tick) {
+        this.clottingBoostEndTick = tick;
+    }
+
+    /**
+     * Current stimulant strength (0..1); active until {@link #getStimulantEndTick()}.
+     */
+    public float getStimulant() {
+        return stimulant;
+    }
+
+    public void setStimulant(float value) {
+        float clamped = value < 0.0F ? 0.0F : (value > 1.0F ? 1.0F : value);
+        if (clamped != this.stimulant) {
+            this.stimulant = clamped;
+            this.dirty = true;
+        }
+    }
+
+    public long getStimulantEndTick() {
+        return stimulantEndTick;
+    }
+
+    public void setStimulantEndTick(long tick) {
+        this.stimulantEndTick = tick;
+    }
+
+    /**
+     * Game time the overdose unconsciousness ends (0 = conscious). Transient, never NBT.
      */
     public long getOverdoseUntilTick() {
         return overdoseUntilTick;
@@ -244,7 +321,7 @@ public final class MedicalProfile {
     }
 
     /**
-     * Whether the player is currently overdose-unconscious (engine-driven each tick). Transient, never NBT.
+     * Whether the player is currently overdose-unconscious (engine-driven). Transient, never NBT.
      */
     public boolean isOverdoseUnconscious() {
         return overdoseUnconscious;
@@ -255,7 +332,7 @@ public final class MedicalProfile {
     }
 
     /**
-     * Whether the player is in the overdose asphyxia phase (engine-driven each tick). Transient, never NBT.
+     * Whether the player is in the overdose asphyxia phase (engine-driven). Transient, never NBT.
      */
     public boolean isAsphyxiating() {
         return asphyxiating;
@@ -266,7 +343,57 @@ public final class MedicalProfile {
     }
 
     /**
-     * Game time at which pain first reached knockout level ({@code 0} = not pain-KO-pending). Transient, never NBT.
+     * Whether the player has passed out from asphyxia (fatal unless cause clears). Transient, never NBT.
+     */
+    public boolean isAsphyxiaUnconscious() {
+        return asphyxiaUnconscious;
+    }
+
+    public void setAsphyxiaUnconscious(boolean value) {
+        this.asphyxiaUnconscious = value;
+    }
+
+    /**
+     * Game time the current (conscious) asphyxia episode began (0 = none). Transient, never NBT.
+     */
+    public long getAsphyxiaSince() {
+        return asphyxiaSince;
+    }
+
+    public void setAsphyxiaSince(long tick) {
+        this.asphyxiaSince = tick;
+    }
+
+    /**
+     * Game time asphyxia unconsciousness turns fatal unless the cause is cleared. Transient, never NBT.
+     */
+    public long getAsphyxiaDeadlineTick() {
+        return asphyxiaDeadlineTick;
+    }
+
+    public void setAsphyxiaDeadlineTick(long tick) {
+        this.asphyxiaDeadlineTick = tick;
+    }
+
+    /**
+     * Begin a conscious asphyxia episode at {@code now} (idempotent: does not restart an ongoing one).
+     */
+    public void startAsphyxia(long now) {
+        if (!asphyxiating && !asphyxiaUnconscious) {
+            this.asphyxiating = true;
+            this.asphyxiaSince = now;
+        }
+    }
+
+    public void clearAsphyxia() {
+        this.asphyxiating = false;
+        this.asphyxiaUnconscious = false;
+        this.asphyxiaSince = 0L;
+        this.asphyxiaDeadlineTick = 0L;
+    }
+
+    /**
+     * Game time pain first reached knockout level (0 = not pending). Transient, never NBT.
      */
     public long getPainKoSince() {
         return painKoSince;
@@ -301,7 +428,7 @@ public final class MedicalProfile {
     }
 
     /**
-     * Last {@link #isDowned()} value the server broadcast to trackers (engine edge-detection). Transient.
+     * Last isDowned() value broadcast to trackers; engine edge-detects against this. Transient.
      */
     public boolean isLastBroadcastDowned() {
         return lastBroadcastDowned;
@@ -334,9 +461,6 @@ public final class MedicalProfile {
         this.dirty = true;
     }
 
-    /**
-     * Attach a new trauma to a limb, marking both the limb and this profile dirty.
-     */
     public void addTrauma(LimbType limbType, Trauma trauma) {
         limbs.get(limbType).addTrauma(trauma);
         this.dirty = true;
@@ -385,14 +509,7 @@ public final class MedicalProfile {
     }
 
     /**
-     * Begin tracking an active timed treatment. Purely transient bookkeeping; the actual physiology
-     * mutation happens when the engine completes the treatment.
-     *
-     * @param action        the treatment action being applied
-     * @param limb          the targeted limb (may be null for "auto pick")
-     * @param itemId        registry-name string of the medical item being consumed
-     * @param totalTicks    how many game ticks the application takes
-     * @param startGameTime the level game time at which application started
+     * Begin tracking a timed treatment. Transient bookkeeping only; physiology mutates on completion.
      */
     public void setActiveTreatment(TreatmentAction action, LimbType limb, String itemId,
                                    int totalTicks, long startGameTime) {
@@ -404,9 +521,6 @@ public final class MedicalProfile {
         this.activeTreatment = true;
     }
 
-    /**
-     * Clear any active treatment (completion, cancellation, death). Safe to call when none is active.
-     */
     public void clearActiveTreatment() {
         this.activeTreatment = false;
         this.activeAction = null;
@@ -436,9 +550,6 @@ public final class MedicalProfile {
         return activeStartGameTime;
     }
 
-    /**
-     * Client-selected targeting hint (nullable).
-     */
     public LimbType getPreferredLimb() {
         return preferredLimb;
     }
@@ -455,6 +566,10 @@ public final class MedicalProfile {
         tag.putLong("BleedoutSince", bleedoutSinceTick);
         tag.putFloat("PainSuppression", painSuppression);
         tag.putFloat("DrugLoad", drugLoad);
+        tag.putFloat("ClottingBoost", clottingBoost);
+        tag.putLong("ClottingBoostEnd", clottingBoostEndTick);
+        tag.putFloat("Stimulant", stimulant);
+        tag.putLong("StimulantEnd", stimulantEndTick);
         CompoundTag limbTag = new CompoundTag();
         for (LimbType lt : LimbType.VALUES) {
             limbTag.put(lt.name(), limbs.get(lt).save());
@@ -477,6 +592,10 @@ public final class MedicalProfile {
         this.painSuppression = Math.max(0.0F, Math.min(tag.getFloat("PainSuppression"), 1.0F));
         // Clamp on load: a hand-edited/corrupt save must not leave drug load negative.
         this.drugLoad = Math.max(0.0F, tag.getFloat("DrugLoad"));
+        this.clottingBoost = Math.max(0.0F, Math.min(tag.getFloat("ClottingBoost"), 1.0F));
+        this.clottingBoostEndTick = tag.getLong("ClottingBoostEnd");
+        this.stimulant = Math.max(0.0F, Math.min(tag.getFloat("Stimulant"), 1.0F));
+        this.stimulantEndTick = tag.getLong("StimulantEnd");
         CompoundTag limbTag = tag.getCompound("Limbs");
         for (LimbType lt : LimbType.VALUES) {
             if (limbTag.contains(lt.name())) {

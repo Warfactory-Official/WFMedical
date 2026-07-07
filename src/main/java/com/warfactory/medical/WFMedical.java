@@ -22,12 +22,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Warfactory Medical mod entry point.
- *
- * <p>This constructor is the single integration point: it registers items, the creative tab, the
- * networking channel, the COMMON config spec, the entity capability, and defers the data-driven TOML
- * definitions load to {@link FMLCommonSetupEvent}. The FORGE-bus gameplay handlers live in
- * {@code MedicalEventHandler} and auto-register via {@code @Mod.EventBusSubscriber}.</p>
+ * Warfactory Medical mod entry point. Registers items, networking, config, and defers TOML load.
  */
 @Mod(WFMedical.MOD_ID)
 public final class WFMedical {
@@ -58,9 +53,7 @@ public final class WFMedical {
     }
 
     /**
-     * Load the data-driven trauma/treatment definitions from the config directory (copying the bundled
-     * defaults on first run, falling back to hardcoded defaults on failure), then activate the resulting
-     * registry. Also push any configured TACZ bullet-damage ids into the soft compat layer.
+     * Load TOML definitions (or hardcoded fallback), then activate registries.
      */
     private void onCommonSetup(FMLCommonSetupEvent event) {
         event.enqueueWork(() -> {

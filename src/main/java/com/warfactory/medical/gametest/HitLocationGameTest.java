@@ -17,29 +17,20 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.gametest.GameTestHolder;
 
 /**
- * Deterministic GameTests for the Tier 1 geometric hit-location classifier ({@link HitGeometry}).
- *
- * <p>Each test spawns a stationary {@link ArmorStand} at a fixed {@code yBodyRot} of 0 (facing +Z /
- * south, so the victim's <em>front</em> is +Z and the victim's <em>right</em> is -X), then fires a
- * synthetic ray through {@link HitGeometry#classifyRay} and asserts the resulting {@link LimbType}.
- * Ray endpoints are derived from the victim's live bounding box so the asserts are independent of the
- * absolute spawn coordinates, and no {@code RandomSource} is ever consulted on the geometric path.</p>
- *
- * <p>Discovery: {@code @GameTestHolder(wfmedical)} + {@code forge.enabledGameTestNamespaces=wfmedical}
- * (already set on the {@code gameTestServer} run in build.gradle) auto-registers every method below.
- * Each test loads the bundled empty stone platform at
- * {@code src/main/resources/data/wfmedical/structures/empty.nbt}. Run with
- * {@code ./gradlew runGameTestServer} or, in a running server, {@code /test run wfmedical:<name>}.</p>
+ * Deterministic GameTests for the Tier 1 geometric hit-location classifier. Each test spawns a stationary
+ * ArmorStand at {@code yBodyRot=0} (facing +Z south; victim front=+Z, victim right=-X) and fires a synthetic
+ * ray. Ray endpoints derive from the live bounding box; no RandomSource is consulted on the geometric path.
  */
 @GameTestHolder(WFMedical.MOD_ID)
 public class HitLocationGameTest {
 
-    /** Structure template shared by every test (a 3x3 stone floor); resolves {@code wfmedical:empty}. */
+    /**
+     * Structure template shared by every test (a 3x3 stone floor); resolves {@code wfmedical:empty}.
+     */
     private static final String TEMPLATE = "empty";
 
     /**
-     * Spawn a gravity-free victim facing +Z (south) with {@code yBodyRot = 0}. Determinism relies on the
-     * body yaw being fixed, so it is pinned on every rotation field the classifier could read.
+     * yBodyRot=0 is pinned on all rotation fields the classifier reads to guarantee determinism.
      */
     private static ArmorStand victim(GameTestHelper helper) {
         ArmorStand stand = helper.spawn(EntityType.ARMOR_STAND, new BlockPos(1, 1, 1));
@@ -51,7 +42,9 @@ public class HitLocationGameTest {
         return stand;
     }
 
-    /** World-space Y for a given fraction of body height (0 = feet, 1 = crown). */
+    /**
+     * World-space Y for a given fraction of body height (0 = feet, 1 = crown).
+     */
     private static double yAt(AABB box, double relY) {
         return box.minY + relY * box.getYsize();
     }
@@ -63,7 +56,9 @@ public class HitLocationGameTest {
 
     // --- frontal shots (ray travels -Z into the front face; nx = 0) -----------------------------
 
-    /** A centred frontal hit high on the box reads as HEAD. */
+    /**
+     * A centred frontal hit high on the box reads as HEAD.
+     */
     @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public void frontalHeadIsHead(GameTestHelper helper) {
         ArmorStand v = victim(helper);
@@ -77,7 +72,9 @@ public class HitLocationGameTest {
         helper.succeed();
     }
 
-    /** A centred frontal hit at mid height reads as TORSO. */
+    /**
+     * A centred frontal hit at mid height reads as TORSO.
+     */
     @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public void frontalTorsoIsTorso(GameTestHelper helper) {
         ArmorStand v = victim(helper);
@@ -91,7 +88,9 @@ public class HitLocationGameTest {
         helper.succeed();
     }
 
-    /** A centred frontal hit low on the box reads as a LEG (nx = 0 -> the right leg). */
+    /**
+     * A centred frontal hit low on the box reads as a LEG (nx = 0 -> the right leg).
+     */
     @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public void lowFrontalIsLeg(GameTestHelper helper) {
         ArmorStand v = victim(helper);

@@ -19,60 +19,25 @@ import net.minecraftforge.fml.common.Mod;
 import java.util.List;
 
 /**
- * CLIENT-ONLY "passed-out" blur. Drives a real full-screen {@link PostChain} post-processing effect that
- * blurs the 3D scene while the LOCAL player is passed out — gated on the SINGLE merged
- * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state
- * ({@link ClientMedicalCache#stats()}.{@code unconscious()}), which covers both internal causes (an opioid
- * overdose unconsciousness and a bleed-out unconsciousness). It composes with the separate blood-loss
- * desaturation pass and the reworked {@link com.warfactory.medical.client.overlay.UnconsciousOverlay closing
- * vignette}: together they read as "losing consciousness" (blurry, dimmed, edges closing in) rather than a
- * hard cut to black. Purely presentational: it reads synced client state and never mutates medical state.
- *
- * <p>Self-registers on the FORGE bus, {@link Dist#CLIENT} only, so a dedicated server never class-loads any
- * of the client render types referenced here.</p>
- *
- * <h2>Robustness (mirrors {@link BloodDesaturationEffect})</h2>
- * <ul>
- *   <li>The {@link PostChain} is created lazily inside a {@code try/catch}; a failed shader load sets
- *       {@link #disabled} and logs once, so it never retry-spams and never crashes.</li>
- *   <li>The whole render handler body is wrapped in {@code try/catch}: any GL/shader error disables the
- *       effect for the rest of the session instead of taking the game down.</li>
- *   <li>A conscious player whose fade has settled never touches the chain: the {@code fade <= EPSILON}
- *       early return runs before any lazy creation, so the effect pays effectively zero cost.</li>
- * </ul>
- *
- * <h2>Intensity model</h2>
- * <p>A static, client-side {@link #fade} is eased toward {@code passedOut ? 1 : 0} at {@link #FADE_STEP}
- * per frame, so the blur ramps in as the player passes out and ramps back out on waking. The blur radius is
- * {@code Radius = fade * }{@link #MAX_RADIUS}; the horizontal pass (index 0) uses {@code BlurDir = (1,0)} and
- * the vertical pass (index 1) uses {@code BlurDir = (0,1)}, forming a separable 2D blur.</p>
+ * CLIENT-ONLY passed-out blur. Full-screen PostChain that blurs the 3D scene while the local player is
+ * UNCONSCIOUS (covers both overdose and bleed-out) OR in the conscious {@code asphyxiating()} phase.
+ * Composes with blood-loss desaturation and the UnconsciousOverlay vignette. PostChain created lazily;
+ * all failures disable the effect for the session rather than crashing.
  */
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class PassoutBlurEffect {
 
-    /**
-     * Per-frame easing factor toward the fade target; small so the blur eases in/out smoothly.
-     */
     private static final float FADE_STEP = 0.06F;
-    /**
-     * Below this fade the effect is a no-op; the early return keeps a conscious player off the hot path.
-     */
     private static final float EPSILON = 0.001F;
     /**
-     * Blur radius (in texels along each axis) at full fade; keeps the tap count bounded and cheap.
+     * Blur radius at full fade in texels; keeps tap count bounded and cheap.
      */
     private static final float MAX_RADIUS = 6.0F;
 
     private static final ResourceLocation SHADER =
             new ResourceLocation(WFMedical.MOD_ID, "shaders/post/passout_blur.json");
 
-    /**
-     * Cached post-processing chain; {@code null} until first needed or after teardown.
-     */
     private static PostChain chain;
-    /**
-     * Window dimensions the cached {@link #chain} was last sized for.
-     */
     private static int chainWidth = -1;
     private static int chainHeight = -1;
     /**
@@ -81,7 +46,7 @@ public final class PassoutBlurEffect {
     private static boolean disabled;
 
     /**
-     * Smoothed client-side fade toward the current passed-out target; persists across frames.
+     * Smoothed client-side fade; persists across frames.
      */
     private static float fade;
 
@@ -89,8 +54,7 @@ public final class PassoutBlurEffect {
     }
 
     /**
-     * Fires after the 3D world and held item have been drawn to the main render target but before the HUD,
-     * so the blur softens the scene while the HUD (drawn afterwards) stays crisp and readable.
+     * Fires before HUD: blurs the scene while HUD overlays stay crisp.
      */
     @SubscribeEvent
     public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
@@ -137,9 +101,6 @@ public final class PassoutBlurEffect {
         }
     }
 
-    /**
-     * Tear down the chain and reset the fade when leaving a world so we never leak or reuse stale GL state.
-     */
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         fade = 0.0F;
@@ -147,8 +108,7 @@ public final class PassoutBlurEffect {
     }
 
     /**
-     * Snap the blur fade to zero immediately on respawn so a passed-out blur does not linger and blur the
-     * fresh life while it eases back down.
+     * Snap fade to zero on respawn so the passed-out blur does not linger onto the fresh life.
      */
     public static void reset() {
         fade = 0.0F;
@@ -157,19 +117,13 @@ public final class PassoutBlurEffect {
     // ------------------------------------------------------------------ internals
 
     /**
-     * @return {@code true} while the LOCAL player's vision should blur — either fully passed out (the single
-     * merged {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state, from an overdose or bleed-out
-     * cause) OR in the conscious overdose {@code asphyxiating()} phase (blurred vision as they suffocate).
+     * True while unconscious (overdose or bleed-out) OR in the conscious asphyxiating phase.
      */
     private static boolean shouldBlurVision() {
         var stats = ClientMedicalCache.stats();
         return stats.unconscious() || stats.asphyxiating();
     }
 
-    /**
-     * Lazily create the chain (and (re)size it to the current window). Returns {@code null} if creation
-     * failed, having permanently {@link #disable() disabled} the effect.
-     */
     private static PostChain ensureChain(Minecraft mc) {
         int width = mc.getWindow().getWidth();
         int height = mc.getWindow().getHeight();
@@ -199,9 +153,7 @@ public final class PassoutBlurEffect {
     }
 
     /**
-     * Push the per-frame {@code Radius} onto every pass and enforce the separable {@code BlurDir}: even
-     * indices blur horizontally {@code (1,0)}, odd indices vertically {@code (0,1)}. {@code safeGetUniform}
-     * never returns null (it yields a harmless dummy for undeclared names), so this is safe on any pass.
+     * Even-indexed passes blur horizontally (1,0); odd vertically (0,1) — separable 2D blur.
      */
     private static void setBlurUniforms(PostChain postChain, float radius) {
         List<PostPass> passes = ((PostChainAccessor) postChain).wfmedical$getPasses();
@@ -217,9 +169,6 @@ public final class PassoutBlurEffect {
         }
     }
 
-    /**
-     * Close the chain and forget its cached size; safe to call when already torn down.
-     */
     private static void closeChain() {
         if (chain != null) {
             try {
@@ -233,9 +182,6 @@ public final class PassoutBlurEffect {
         chainHeight = -1;
     }
 
-    /**
-     * Permanently disable the effect for this session and release any GL resources.
-     */
     private static void disable() {
         disabled = true;
         closeChain();

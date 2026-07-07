@@ -3,6 +3,8 @@ package com.warfactory.medical.server;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -32,10 +34,7 @@ public final class MedicalEffects {
     }
 
     /**
-     * Push the derived snapshot onto the vanilla body: transient MAX_HEALTH / MOVEMENT_SPEED modifiers and
-     * a health clamp. Keeps an unconscious player alive (death interception lives in the event handler).
-     *
-     * <p>Convenience overload that never raises current health (normal ticking behaviour).</p>
+     * Convenience overload that never raises current health (normal ticking behaviour).
      */
     public static void apply(ServerPlayer player, DerivedStats stats) {
         apply(player, stats, false);
@@ -43,16 +42,8 @@ public final class MedicalEffects {
 
     /**
      * Push the derived snapshot onto the vanilla body: transient MAX_HEALTH / MOVEMENT_SPEED modifiers and
-     * a health reconciliation. Keeps an unconscious player alive (death interception lives in the event
-     * handler).
-     *
-     * <p>When {@code allowRaise} is {@code false} current health is only clamped DOWNWARD toward the
-     * derived target (normal ticking never heals the player). When {@code allowRaise} is {@code true} the
-     * health is set EXACTLY to the derived {@code effectiveCurrentHealth} (clamped to {@code [0,
-     * effectiveMaxHealth]}); this is used on join / respawn / dimension change so a pristine player spawns
-     * at full derived health instead of being stuck at the old vanilla 20 while max is lifted to 30.</p>
-     *
-     * @param allowRaise when true, current health may be raised to the derived target (join/respawn only)
+     * a health reconciliation. {@code allowRaise=true} sets health exactly to the derived target (used on
+     * join/respawn so a pristine player spawns at full derived health, not stuck at vanilla 20).
      */
     public static void apply(ServerPlayer player, DerivedStats stats, boolean allowRaise) {
         if (player == null || stats == null) {
@@ -91,6 +82,16 @@ public final class MedicalEffects {
             }
         }
 
+        // --- Both legs drained: force the crawl (swimming) pose while conscious, and clear OUR pose once the
+        // condition lifts (only touch a SWIMMING forced pose so we never clobber another mod's forced pose).
+        boolean forceCrawl = state != HealthState.UNCONSCIOUS && state != HealthState.DEAD
+                && stats.bothLegsDisabled();
+        if (forceCrawl) {
+            player.setForcedPose(Pose.SWIMMING);
+        } else if (player.getForcedPose() == Pose.SWIMMING) {
+            player.setForcedPose(null);
+        }
+
         // --- Health clamp: never exceed the derived current health; keep the UNCONSCIOUS player alive.
         // The >= 1 pin below applies to BOTH unconscious causes (bleed-out AND non-lethal overdose) so they
         // stay alive at ~1 HP. A LETHAL cause (bleed-out timer expiry OR lethal overdose drain) must NOT be
@@ -126,6 +127,38 @@ public final class MedicalEffects {
     }
 
     /**
+     * Stamp an Open-Persistence logout body with the player's derived max-health pool and current health.
+     * Uses a PERMANENT modifier (body does not tick physiology, so this is set once at logout and must
+     * survive a restart).
+     */
+    public static void applyToBody(LivingEntity body, DerivedStats stats) {
+        if (body == null || stats == null) {
+            return;
+        }
+        float attrTarget = Math.max(stats.effectiveMaxHealth(), 1.0F);
+        AttributeInstance maxHealth = body.getAttribute(Attributes.MAX_HEALTH);
+        if (maxHealth != null) {
+            maxHealth.removeModifier(MAX_HEALTH_MODIFIER_ID);
+            double without = maxHealth.getValue();
+            double amount = attrTarget - without;
+            if (Math.abs(amount) > EPSILON) {
+                maxHealth.addPermanentModifier(new AttributeModifier(
+                        MAX_HEALTH_MODIFIER_ID,
+                        MAX_HEALTH_MODIFIER_NAME,
+                        amount,
+                        AttributeModifier.Operation.ADDITION));
+            }
+        }
+        // Set current health to the derived value the player had (a wounded logout leaves a wounded body),
+        // never above the new pool and never below 1 so the freshly-created body isn't instantly dead.
+        float target = Math.min(stats.effectiveCurrentHealth(), attrTarget);
+        if (target < 1.0F) {
+            target = 1.0F;
+        }
+        body.setHealth(target);
+    }
+
+    /**
      * Remove our transient modifiers (on logout, respawn reset, or creative immunity).
      */
     public static void clear(ServerPlayer player) {
@@ -139,6 +172,9 @@ public final class MedicalEffects {
         AttributeInstance speed = player.getAttribute(Attributes.MOVEMENT_SPEED);
         if (speed != null) {
             speed.removeModifier(MOVEMENT_MODIFIER_ID);
+        }
+        if (player.getForcedPose() == Pose.SWIMMING) {
+            player.setForcedPose(null);
         }
     }
 }

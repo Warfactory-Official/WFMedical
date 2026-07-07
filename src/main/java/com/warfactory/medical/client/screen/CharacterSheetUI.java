@@ -27,33 +27,11 @@ import java.util.Locale;
 import java.util.function.Supplier;
 
 /**
- * CLIENT-ONLY character sheet, styled after the ARMA 3 ACE3 medical menu. Presents the player's derived
- * medical state as a live, read-only panel and lets the player request treatments on a selected limb.
- *
- * <p>The server is authoritative: this screen only READS the synced {@link ClientMedicalCache} snapshot
- * (via {@link MedicalUIParts}) and SENDS request packets (limb selection / treatment) through
- * {@link MedicalUIParts}. It never mutates medical state.</p>
- *
- * <p><b>Layout (fixed 280x200):</b></p>
- * <ul>
- *   <li>LEFT: the shared {@link MedicalUIParts#bodyDiagram(int, int, int, int)} body chart (6 clickable,
- *       health-colored limb tiles) with a selected-limb detail panel beneath it.</li>
- *   <li>RIGHT (upper): a live vitals panel (health, blood, pain, state, movement, bleeding, fractures).</li>
- *   <li>RIGHT (lower): a "Treatment" grid with one {@link ButtonWidget} per distinct medical item in the
- *       local inventory; clicking treats {@link MedicalUIParts#selectedLimb()} with that item.</li>
- *   <li>An overlaid, scrollable DEBUG panel dumping every synced value; shown only while
- *       {@link ClientMedicalCache#isDebug()} is true.</li>
- * </ul>
- *
- * <p><b>Debug toggling is LIVE</b> (no reopen required): the debug panel is a {@link DebugGroup} whose
- * {@code updateScreen()} runs every client tick (its parent invokes it regardless of the group's own
- * visibility, as long as the group is active) and syncs its visibility to {@code isDebug()}. This works
- * because LDLib's {@code WidgetGroup.updateScreen} recurses into all <em>active</em> children, not only
- * visible ones.</p>
- *
- * <p>Every live widget is client-side: the whole {@code mainGroup} is marked
- * {@link WidgetGroup#setClientSideWidget()} after all widgets are added, so all supplier-driven labels /
- * tiles re-read the cache each tick (required for client-only UIs — see the LDLib cheatsheet Q4).</p>
+ * CLIENT-ONLY character sheet. Reads the synced {@link ClientMedicalCache} snapshot and sends request
+ * packets; never mutates medical state. Debug panel toggle is LIVE: its updateScreen() fires while the
+ * sheet is open even when the panel is invisible (LDLib recurses into active children, not only visible
+ * ones). The entire mainGroup is marked {@code setClientSideWidget()} so supplier-driven labels re-read
+ * the cache each tick (required for client-only UIs per LDLib contract).
  */
 public final class CharacterSheetUI {
 
@@ -82,7 +60,7 @@ public final class CharacterSheetUI {
     private static final int ACTION_COLS = 2;
 
     /**
-     * Opaque dark backdrop for the debug overlay so it fully hides the vitals/actions beneath it.
+     * Nearly opaque so the debug overlay fully hides the vitals/actions beneath it.
      */
     private static final int DEBUG_BG = 0xF00A0A0A;
     private static final int DEBUG_LINE_H = 11;
@@ -90,9 +68,6 @@ public final class CharacterSheetUI {
     private CharacterSheetUI() {
     }
 
-    /**
-     * Build and open the character sheet on the client. No-op when there is no local player.
-     */
     public static void open() {
         Minecraft mc = Minecraft.getInstance();
         Player player = mc.player;
@@ -235,9 +210,7 @@ public final class CharacterSheetUI {
     // ------------------------------------------------------------------ treatment actions
 
     /**
-     * Right lower grid: one button per distinct medical item currently held. Clicking sends a treatment
-     * request for the live {@link MedicalUIParts#selectedLimb()} (null = server auto-pick). The item set is
-     * snapshotted at open time; reopen the sheet to pick up inventory changes.
+     * Item set snapshotted at open time; reopen the sheet to pick up inventory changes.
      */
     private static void addTreatmentActions(WidgetGroup root) {
         root.addWidget(new LabelWidget(ACTIONS_X, ACTIONS_Y - 12, "Treatment"));
@@ -269,9 +242,6 @@ public final class CharacterSheetUI {
 
     // ------------------------------------------------------------------ debug overlay
 
-    /**
-     * Build the scrollable debug overlay group; visibility is driven live by {@link ClientMedicalCache#isDebug()}.
-     */
     private static DraggableScrollableWidgetGroup buildDebugGroup(Player player) {
         DebugGroup group = new DebugGroup(96, 18, 180, 176);
         group.setBackground(new ColorRectTexture(DEBUG_BG));
@@ -349,16 +319,10 @@ public final class CharacterSheetUI {
         return group;
     }
 
-    /**
-     * Add one live debug label at the given y inside the scrollable debug group.
-     */
     private static void addDebugLine(DraggableScrollableWidgetGroup group, int y, Supplier<String> text) {
         group.addWidget(new LabelWidget(4, y, text));
     }
 
-    /**
-     * Compact 2-decimal formatting for the numeric readouts.
-     */
     private static String fmt(float value) {
         return String.format(Locale.ROOT, "%.2f", value);
     }
@@ -366,9 +330,7 @@ public final class CharacterSheetUI {
     // ------------------------------------------------------------------ helpers
 
     /**
-     * Scrollable debug overlay whose visibility follows {@link ClientMedicalCache#isDebug()} every tick.
-     * Its {@code updateScreen()} runs while the sheet is open regardless of its own current visibility (the
-     * parent recurses into all active children), giving a live toggle without reopening the sheet.
+     * LDLib recurses updateScreen into all active children (not only visible), enabling live toggle.
      */
     private static final class DebugGroup extends DraggableScrollableWidgetGroup {
         private DebugGroup(int x, int y, int width, int height) {

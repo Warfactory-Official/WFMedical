@@ -35,22 +35,16 @@ public final class TaczCompat {
     private TaczCompat() {
     }
 
-    /**
-     * @return true when the TACZ mod is present in the running instance.
-     */
     public static boolean isLoaded() {
         return ModList.get() != null && ModList.get().isLoaded(MOD_ID);
     }
 
-    /**
-     * Live view of the recognised gun/bullet damage id substrings.
-     */
     public static Set<String> getBulletDamageIds() {
         return BULLET_DAMAGE_IDS;
     }
 
     /**
-     * Replace the recognised id set (values are lower-cased and blanks dropped).
+     * Replaces the id set; values are lower-cased and blank entries dropped.
      */
     public static void setBulletDamageIds(Collection<String> ids) {
         BULLET_DAMAGE_IDS.clear();

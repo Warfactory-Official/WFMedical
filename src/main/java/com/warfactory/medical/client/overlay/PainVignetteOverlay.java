@@ -19,54 +19,35 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * CLIENT-ONLY screen effect: a pulsating BLACK vignette closing in from the screen edges whose intensity
- * scales with perceived pain ({@link ClientMedicalCache#stats()}.{@code totalPain()}, already a saturated
- * 0..1 value with painkiller masking applied), reaching full at the pain that knocks you unconscious
- * ({@link MedicalConfig#painUnconsciousThreshold()}). Mirrors the vanilla low-health / portal vignette drawn
- * by {@code net.minecraft.client.gui.Gui#renderVignette} using {@code textures/misc/vignette.png}, animated
- * with a sine pulse (a throb that quickens as pain rises).
- *
- * <p>Like vanilla, this DARKENS the edges rather than glowing: a {@code ZERO / ONE_MINUS_SRC_ALPHA} colour
- * blend multiplies the framebuffer toward black at the edges by the texture's alpha gradient scaled by our
- * alpha, so the screen edges close in dark as pain rises (tunnel vision) while the centre stays clear.</p>
- *
- * <p>Cost is ~zero for a healthy player: {@link #render} early-returns before touching any GL state while
- * {@code pain <= 0.02}. It reads synced client state only, never mutates medical state, guards every
- * nullable, restores all {@link RenderSystem} state it changes, and never throws inside the render hook.</p>
- *
- * <p>SELF-REGISTERING: the nested {@link Registrar} subscribes to the MOD event bus on {@link Dist#CLIENT}
- * and registers {@link #INSTANCE} above all other overlays, so no shared scaffolding file has to be
- * edited.</p>
+ * CLIENT-ONLY pulsating black vignette that scales with perceived pain, reaching full at
+ * {@link MedicalConfig#painUnconsciousThreshold()}. Uses ZERO/ONE_MINUS_SRC_ALPHA blend (darkens edges,
+ * not glow). Early-returns at low pain, restores all GL state, never throws. Self-registering via
+ * the nested {@link Registrar}.
  */
 @OnlyIn(Dist.CLIENT)
 public final class PainVignetteOverlay implements IGuiOverlay {
 
-    /**
-     * The singleton overlay instance; registered by {@link Registrar}.
-     */
     public static final IGuiOverlay INSTANCE = new PainVignetteOverlay();
-
-    /**
-     * Overlay id used when registering with Forge.
-     */
     public static final String OVERLAY_ID = "wfmedical_pain_vignette";
 
     /**
-     * Vanilla vignette sprite reused for the edge falloff (fully opaque centre-out gradient).
+     * Vanilla vignette sprite reused for the edge falloff.
      */
     private static final ResourceLocation VIGNETTE_TEXTURE =
             new ResourceLocation("minecraft", "textures/misc/vignette.png");
 
     /**
-     * Below this perceived-pain fraction the effect is invisible; early-return keeps healthy cost ~0.
+     * Below this perceived-pain fraction the effect is invisible; keeps healthy-player cost ~0.
      */
     private static final float PAIN_THRESHOLD = 0.02F;
     /**
-     * Maps pain (0..1) onto the base opacity ceiling before pulse modulation.
+     * Heavy vignette floor while asphyxiating (suffocating). Asphyxia carries no pain but should read as an
+     * oppressive tunnel-vision closing in, combined with the passout blur.
      */
+    private static final float ASPHYXIA_INTENSITY = 0.90F;
     private static final float BASE_STRENGTH = 0.85F;
     /**
-     * Hard clamp so the screen never fully saturates red.
+     * Hard clamp so the screen never fully blacks out.
      */
     private static final float MAX_ALPHA = 0.85F;
     /**
@@ -74,7 +55,7 @@ public final class PainVignetteOverlay implements IGuiOverlay {
      */
     private static final float PULSE_SPEED_MIN = 0.15F;
     /**
-     * Fastest pulse (radians/tick) at maximum pain — a faster throb reads as more intense.
+     * Fastest pulse (radians/tick) at maximum pain — quickening throb reads as more intense.
      */
     private static final float PULSE_SPEED_MAX = 0.40F;
     /**
@@ -82,7 +63,7 @@ public final class PainVignetteOverlay implements IGuiOverlay {
      */
     private static final float PULSE_DEPTH = 0.40F;
     /**
-     * Draw z; matches vanilla's far-back vignette depth so world/HUD sit in front.
+     * Matches vanilla's far-back vignette depth so world/HUD sit in front.
      */
     private static final int Z_OFFSET = -90;
 
@@ -101,8 +82,10 @@ public final class PainVignetteOverlay implements IGuiOverlay {
             return;
         }
 
-        float pain = ClientMedicalCache.stats().totalPain();
-        if (pain <= PAIN_THRESHOLD) {
+        var stats = ClientMedicalCache.stats();
+        float pain = stats.totalPain();
+        boolean asphyxiating = stats.asphyxiating();
+        if (pain <= PAIN_THRESHOLD && !asphyxiating) {
             return;
         }
         // Ramp so the vignette reaches full intensity at the pain that KNOCKS YOU OUT
@@ -113,6 +96,11 @@ public final class PainVignetteOverlay implements IGuiOverlay {
         float intensity = span <= 0.0F ? 1.0F : (pain - PAIN_THRESHOLD) / span;
         if (intensity > 1.0F) {
             intensity = 1.0F;
+        }
+        // Asphyxia (suffocating) drives the vignette to a heavy floor even with no pain, so the screen closes in
+        // hard while you gasp for air — reads with the passout blur as "can't breathe".
+        if (asphyxiating && intensity < ASPHYXIA_INTENSITY) {
+            intensity = ASPHYXIA_INTENSITY;
         }
 
         // Time base in ticks + partial for a smooth (frame-rate independent) pulse.
@@ -156,16 +144,14 @@ public final class PainVignetteOverlay implements IGuiOverlay {
     }
 
     /**
-     * MOD-bus registrar so the overlay self-registers without touching {@code WFMedicalClient}. Runs only
-     * on {@link Dist#CLIENT}; the vignette is drawn above all other overlays (on top of the vanilla and
-     * medical HUD).
+     * Self-registers via MOD bus on CLIENT; drawn above all other overlays.
      */
     @OnlyIn(Dist.CLIENT)
     @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class Registrar {
 
         /**
-         * Guards against the mod-bus overlay event reaching this registrar more than once per launch.
+         * Guards against double-registration on the mod bus.
          */
         private static boolean registered;
 

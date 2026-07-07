@@ -46,62 +46,28 @@ import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 /**
- * Server-side admin / debug command suite for the medical system, rooted at {@code /wfmedical} (alias
- * {@code /wfmed}) and gated behind permission level 2.
- *
- * <p>Registered purely on the FORGE bus via {@link RegisterCommandsEvent}, which only ever fires on a
- * server, so nothing here can leak onto a logical client. Every subcommand is server-authoritative: it
- * mutates the target's {@link MedicalProfile}, then funnels through {@link MedicalEngine#resync(ServerPlayer)}
- * so the derived stats, the vanilla body (max-health / movement / current-health) and the client snapshot
- * (plus the downed broadcast) all reflect the change immediately, exactly like the live physiology engine.</p>
- *
- * <p>Design contract of every mutating subcommand:</p>
- * <ul>
- *     <li>{@code targets} is an {@link EntityArgument#players()} selector; when omitted it defaults to the
- *     executing player ({@link CommandSourceStack#getPlayerOrException()}).</li>
- *     <li>A target with no medical capability is skipped with a warning rather than aborting the batch.</li>
- *     <li>Bad / out-of-range input reports a failure and returns {@code 0}; nothing is thrown to the
- *     dispatcher.</li>
- *     <li>The return value is the number of players actually affected.</li>
- * </ul>
+ * Admin/debug command suite rooted at {@code /wfmedical} (alias {@code /wfmed}), permission level 2.
+ * FORGE-bus only (server-authoritative). Each mutating subcommand calls {@link MedicalEngine#resync}
+ * so derived stats, vanilla body, and the client snapshot all update immediately. Targets without a
+ * medical capability are skipped with a warning; bad input reports failure and returns 0.
  */
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class WFMedicalCommands {
 
-    /**
-     * Command-injected overdose unconsciousness duration (ticks), applied when a {@code /wfmedical drug} set/add
-     * crosses the lethal overdose threshold.
-     */
     private static final int DEFAULT_OVERDOSE_TICKS = 200;
-    /**
-     * Suggest the six {@link LimbType} enum names.
-     */
     private static final SuggestionProvider<CommandSourceStack> LIMB_SUGGESTIONS =
             (ctx, b) -> SharedSuggestionProvider.suggest(Arrays.stream(LimbType.VALUES).map(Enum::name), b);
 
     // ------------------------------------------------------------------ suggestion providers
-    /**
-     * Suggest every registered {@link TraumaType} id.
-     */
     private static final SuggestionProvider<CommandSourceStack> TRAUMA_SUGGESTIONS =
             (ctx, b) -> SharedSuggestionProvider.suggest(
                     TraumaRegistry.active().all().stream().map(TraumaType::getId), b);
-    /**
-     * Suggest every registered {@link Substance} id (e.g. morphine, naloxone).
-     */
     private static final SuggestionProvider<CommandSourceStack> SUBSTANCE_SUGGESTIONS =
             (ctx, b) -> SharedSuggestionProvider.suggest(
                     SubstanceRegistry.active().all().stream().map(Substance::id), b);
-    /**
-     * Suggest the {@link HealthState} enum names.
-     */
     private static final SuggestionProvider<CommandSourceStack> STATE_SUGGESTIONS =
             (ctx, b) -> SharedSuggestionProvider.suggest(Arrays.stream(HealthState.values()).map(Enum::name), b);
 
@@ -110,18 +76,11 @@ public final class WFMedicalCommands {
 
     // ------------------------------------------------------------------ registration
 
-    /**
-     * FORGE-bus hook (server-only) that wires the whole tree into the dispatcher.
-     */
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         register(event.getDispatcher());
     }
 
-    /**
-     * Build and register the {@code /wfmedical} tree plus its {@code /wfmed} alias. Package-visible so a
-     * test harness could invoke it directly.
-     */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("wfmedical")
                 .requires(src -> src.hasPermission(2));
@@ -309,17 +268,11 @@ public final class WFMedicalCommands {
 
     // ------------------------------------------------------------------ target resolution helpers
 
-    /**
-     * The executing player as a singleton list (throws a friendly error if run from console).
-     */
     private static Collection<ServerPlayer> self(CommandContext<CommandSourceStack> ctx)
             throws CommandSyntaxException {
         return Collections.singletonList(ctx.getSource().getPlayerOrException());
     }
 
-    /**
-     * The parsed {@code targets} selector.
-     */
     private static Collection<ServerPlayer> players(CommandContext<CommandSourceStack> ctx)
             throws CommandSyntaxException {
         return EntityArgument.getPlayers(ctx, "targets");
@@ -328,8 +281,7 @@ public final class WFMedicalCommands {
     // ------------------------------------------------------------------ subcommand implementations
 
     /**
-     * Dump the full medical state for each target to chat (the debug dump). Read-only: it recomputes the
-     * derived snapshot for an accurate view but performs no lasting mutation, so it does NOT resync.
+     * Dump the full medical state for each target (read-only; recomputes but does NOT resync).
      */
     private static int cmdQuery(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int count = 0;
@@ -349,11 +301,8 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Debug look-test for the geometric hit-location classifier. Ray-casts from the executing player's eye
-     * along their view vector (capped at {@code maxDist}, default {@code 5.0}) to find the nearest aimed-at
-     * {@link LivingEntity}, then runs {@link HitGeometry#classifyRay(LivingEntity, Vec3, Vec3)} on that
-     * entity's box and reports the classified {@link LimbType} plus the reconstructed world entry point.
-     * Read-only: no mutation, no resync. When nothing is aimed at, reports a friendly "no target".
+     * Debug look-test for the geometric hit-location classifier. Ray-casts from the executor's eye, finds
+     * the nearest aimed-at {@link LivingEntity}, and reports the classified {@link LimbType}. Read-only.
      */
     private static int cmdHitTest(CommandSourceStack src, double maxDist) throws CommandSyntaxException {
         ServerPlayer self = src.getPlayerOrException();
@@ -387,8 +336,7 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Debug dump of the Tier-2 humanoid rig for the aimed-at entity. Ray-casts from the executing player's
-     * eye along their view vector.
+     * Debug dump of the Tier-2 humanoid rig OBBs for the aimed-at entity. Read-only.
      */
     private static int cmdRig(CommandSourceStack src, double maxDist) throws CommandSyntaxException {
         ServerPlayer self = src.getPlayerOrException();
@@ -418,13 +366,13 @@ public final class WFMedicalCommands {
         sb.append("\n classifyRay(aim) -> ").append(limbText);
         sb.append("\n local OBBs (feet origin, Y-up, X=right, Z=front):");
         for (Obb obb : rig.all()) {
-            sb.append("\n [").append(obb.limb.name()).append("]")
-                    .append(" c=(").append(fmt(obb.center.x)).append(", ")
-                    .append(fmt(obb.center.y)).append(", ")
-                    .append(fmt(obb.center.z)).append(")")
-                    .append(" half=(").append(fmt(obb.half.x)).append(", ")
-                    .append(fmt(obb.half.y)).append(", ")
-                    .append(fmt(obb.half.z)).append(")");
+            sb.append("\n [").append(obb.limb().name()).append("]")
+                    .append(" c=(").append(fmt(obb.center().x)).append(", ")
+                    .append(fmt(obb.center().y)).append(", ")
+                    .append(fmt(obb.center().z)).append(")")
+                    .append(" half=(").append(fmt(obb.half().x)).append(", ")
+                    .append(fmt(obb.half().y)).append(", ")
+                    .append(fmt(obb.half().z)).append(")");
         }
         String dump = sb.toString();
         src.sendSuccess(() -> Component.literal(dump), false);
@@ -442,9 +390,11 @@ public final class WFMedicalCommands {
             profile.setPainKoSince(0L);
             profile.setAdrenalineExhausted(false);
             profile.setDrugLoad(0.0F);
+            profile.setStimulant(0.0F);
+            profile.setClottingBoost(0.0F);
             profile.setOverdoseUnconscious(false);
             profile.setOverdoseUntilTick(0L);
-            profile.setAsphyxiating(false);
+            profile.clearAsphyxia();
             profile.setBleedoutSinceTick(-1L);
             profile.setForcedState(null);
             profile.setState(HealthState.HEALTHY);
@@ -477,18 +427,14 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Properly kill each target regardless of the bleed-out feature. Clears the transient downed/overdose
-     * state so trackers stop rendering a downed pose, marks the profile {@link HealthState#DEAD} (so the
-     * bleed-out interception in the death handler stands down), then routes a {@code genericKill} through
-     * the vanilla {@code hurt() -> die()} pipeline. {@code genericKill} bypasses invulnerability, so the
-     * death handler lets it through and the real death (LivingDeathEvent, death screen, respawn) resolves —
-     * unlike a bare {@code setHealth(0)}, which never invokes {@code die()}.
+     * Kill each target regardless of bleed-out. Marks the profile DEAD so the bleed-out interception stands
+     * down, then routes through {@code p.kill()} (genericKill, bypasses invulnerability, invokes die()).
      */
     private static int cmdKill(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
             profile.setOverdoseUnconscious(false);
             profile.setOverdoseUntilTick(0L);
-            profile.setAsphyxiating(false);
+            profile.clearAsphyxia();
             profile.setBleedoutSinceTick(-1L);
             profile.setForcedState(null);
             profile.setState(HealthState.DEAD);
@@ -506,16 +452,10 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Bring a bleeding-out / overdose-unconscious player back UP and keep them up. A real bleed-out
-     * unconsciousness is driven by the underlying lethal physiology (blood at/below the death volume, or major
-     * trauma zeroing the effective max health, or a severe overdose unconsciousness); simply flipping the
-     * transient downed flags would be re-derived straight back to {@link HealthState#UNCONSCIOUS} by the
-     * resync's recompute. So this reverses the lethal CAUSE before resyncing: it clears any admin-forced
-     * override, ends the overdose unconsciousness, evacuates the major (max-health-reducing, heavily bleeding)
-     * trauma while leaving
-     * minor wounds, and tops blood back above the low-penalty threshold. After the resync the player reads a
-     * healthy derived state, and health is raised to at least half the (now restored) derived max. Never
-     * resurrects a truly dead/removed entity.
+     * Bring a downed player back up by reversing the lethal CAUSE before resyncing (just flipping transient
+     * downed flags would be re-derived back to UNCONSCIOUS immediately). Clears forced overrides, overdose
+     * markers, major trauma (leaves minor wounds), and tops blood above the low threshold. Never resurrects
+     * a dead/removed entity.
      */
     private static int cmdRevive(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
@@ -529,7 +469,7 @@ public final class WFMedicalCommands {
             profile.setBleedoutSinceTick(-1L);
             profile.setOverdoseUnconscious(false);
             profile.setOverdoseUntilTick(0L);
-            profile.setAsphyxiating(false);
+            profile.clearAsphyxia();
             profile.setDrugLoad(0.0F); // otherwise a severe overdose would immediately re-knock-out on the next pass
             // Evacuate the life-threatening trauma that drives effectiveMaxHealth to 0 (major wounds only;
             // minor scratches are left in place so this stays a revive, not a full heal).
@@ -638,9 +578,6 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /**
-     * Set or add blood volume (clamped to {@code [0, maxBloodMl]} by the profile setter).
-     */
     private static int cmdBlood(CommandSourceStack src, Collection<ServerPlayer> targets, double ml, boolean add) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
             profile.setBloodMl(add ? profile.getBloodMl() + ml : ml);
@@ -653,9 +590,6 @@ public final class WFMedicalCommands {
         return n;
     }
 
-    /**
-     * Set the perceived-pain suppression mask (0..1).
-     */
     private static int cmdSuppression(CommandSourceStack src, Collection<ServerPlayer> targets, float value) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
             profile.setPainSuppression(value);
@@ -669,10 +603,8 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Set / add / clear the accumulating drug load. To keep the command immediately testable, when the
-     * resulting load reaches the configured lethal overdose threshold an unconsciousness is forced right away
-     * (otherwise the engine would only trigger it on the next physiology pass); the engine's own
-     * overdose-drain / decay logic then takes over from there.
+     * Set/add/clear drug load. When load crosses the lethal threshold an unconsciousness is forced immediately
+     * (otherwise the engine would only trigger it on the next physiology pass).
      */
     private static int cmdDrug(CommandSourceStack src, Collection<ServerPlayer> targets, float load, DrugMode mode) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
@@ -722,21 +654,9 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Force the single unified {@link HealthState#UNCONSCIOUS} state. Replaces the removed {@code bleedout}
-     * and {@code overdose} subcommands by exposing both of the state's internal causes through one command:
-     *
-     * <ul>
-     *     <li>{@code ticks < 1} (no argument): a bleed-out unconsciousness — the old bleed-out cause. Pinned
-     *     through the admin-forced-state override so the pure physiology pass (which only derives UNCONSCIOUS
-     *     from real blood/trauma/overdose) does not clobber it back to HEALTHY on the resync's recompute; the
-     *     override also drives the mobility lock and the downed pose, and — because {@code bleedoutSinceTick}
-     *     is set as the bleed-out marker — the engine's bleed-out death timer advances exactly as for a combat
-     *     bleed-out, so the player dies if untreated.</li>
-     *     <li>{@code ticks >= 1}: a timed overdose unconsciousness — the old overdose cause. Sets the transient
-     *     overdose markers so {@link com.warfactory.medical.core.Physiology} raises the state to UNCONSCIOUS,
-     *     and the engine's wake timer brings the player back up after {@code ticks} (no bleed-out marker, so it
-     *     recovers rather than dying).</li>
-     * </ul>
+     * Force the unified {@link HealthState#UNCONSCIOUS} state via one of its two internal causes:
+     * no-arg = bleed-out cause (admin-forced override + death timer runs); ticks arg = overdose cause
+     * (wake timer runs, player recovers after {@code ticks}).
      */
     private static int cmdUnconscious(CommandSourceStack src, Collection<ServerPlayer> targets, int ticks) {
         boolean timed = ticks >= 1;
@@ -759,10 +679,8 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Force the overdose ASPHYXIA phase for testing (otherwise it only triggers probabilistically on a heavy
-     * overdose). Raises the drug load to at least the asphyxia threshold so the state is consistent, then flips
-     * the asphyxiating marker: the per-tick engine hook then drains the player's air (weakness / no sprint /
-     * blurred vision) and tips them into overdose unconsciousness when it runs out.
+     * Force the ASPHYXIA phase for testing. Raises drug load to at least the asphyxia threshold so the
+     * cause stays active; drains air each tick, passes the player out, and kills if untreated.
      */
     private static int cmdAsphyxia(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int n = forEach(src, targets, (s, p, data, profile) -> {
@@ -776,7 +694,7 @@ public final class WFMedicalCommands {
             }
             profile.setOverdoseUnconscious(false);
             profile.setOverdoseUntilTick(0L);
-            profile.setAsphyxiating(true);
+            profile.startAsphyxia(p.level().getGameTime());
             profile.markDirty();
             MedicalEngine.resync(p);
             return true;
@@ -812,7 +730,7 @@ public final class WFMedicalCommands {
                 if (target == HealthState.HEALTHY) {
                     profile.setOverdoseUnconscious(false);
                     profile.setOverdoseUntilTick(0L);
-                    profile.setAsphyxiating(false);
+                    profile.clearAsphyxia();
                 }
             }
             profile.markDirty();
@@ -868,11 +786,7 @@ public final class WFMedicalCommands {
     }
 
     /**
-     * Iterate targets, resolving the capability once per player, skipping (with a warning) any that lack it
-     * and swallowing per-player runtime errors so one bad target never aborts the batch or throws to the
-     * dispatcher.
-     *
-     * @return the number of players the action reported as affected.
+     * Resolves capability once per player, skips those without it, swallows per-player errors.
      */
     private static int forEach(CommandSourceStack src, Collection<ServerPlayer> targets, ProfileAction action) {
         int count = 0;
@@ -952,9 +866,6 @@ public final class WFMedicalCommands {
         limb.markDirty();
     }
 
-    /**
-     * Resolve a limb name against {@link LimbType} (case-insensitive), reporting failure on no match.
-     */
     private static LimbType parseLimb(CommandSourceStack src, String name) {
         for (LimbType lt : LimbType.VALUES) {
             if (lt.name().equalsIgnoreCase(name)) {
@@ -966,9 +877,6 @@ public final class WFMedicalCommands {
         return null;
     }
 
-    /**
-     * Resolve a health-state name (case-insensitive), reporting failure on no match.
-     */
     private static HealthState parseState(CommandSourceStack src, String name) {
         for (HealthState st : HealthState.values()) {
             if (st.name().equalsIgnoreCase(name)) {
@@ -979,9 +887,6 @@ public final class WFMedicalCommands {
         return null;
     }
 
-    /**
-     * Resolve a substance by its id first, then by its item id (case-insensitive).
-     */
     private static Substance resolveSubstance(String key) {
         SubstanceRegistry reg = SubstanceRegistry.active();
         Substance byItem = reg.get(key);
@@ -996,9 +901,6 @@ public final class WFMedicalCommands {
         return null;
     }
 
-    /**
-     * Resolve a trauma type by preferred id, falling back to the first of a category.
-     */
     private static TraumaType resolveTrauma(String preferredId, TraumaCategory fallbackCategory) {
         TraumaType byId = TraumaRegistry.active().get(preferredId);
         if (byId != null) {
@@ -1035,6 +937,8 @@ public final class WFMedicalCommands {
                 .append("  systemic=").append(fmt(stats.systemicPain()))
                 .append("  analgesia=").append(fmt(profile.getPainSuppression()))
                 .append("  drugLoad=").append(fmt(profile.getDrugLoad()));
+        sb.append("\n drugs: stimulant=").append(fmt(profile.getStimulant()))
+                .append("  clotting=").append(fmt(profile.getClottingBoost()));
         sb.append("\n adrenaline: painKoPending=").append(stats.painKoPending())
                 .append("  exhausted=").append(profile.isAdrenalineExhausted())
                 .append("  since=").append(profile.getPainKoSince() > 0L ? (now - profile.getPainKoSince()) + "t" : "-");
@@ -1043,7 +947,10 @@ public final class WFMedicalCommands {
         // Unified unconsciousness line: one externally-visible UNCONSCIOUS state, with an internal cause hint
         // (overdose => wake timer; bleed-out => death timer) so the debug dump still distinguishes them.
         if (profile.getState() == HealthState.UNCONSCIOUS) {
-            if (profile.isOverdoseUnconscious()) {
+            if (profile.isAsphyxiaUnconscious()) {
+                long dieIn = Math.max(0L, profile.getAsphyxiaDeadlineTick() - now);
+                sb.append("\n unconscious: cause=asphyxia  death in ").append(dieIn).append("t (unless cause cleared)");
+            } else if (profile.isOverdoseUnconscious()) {
                 sb.append("\n unconscious: cause=overdose  wake in ").append(remaining).append("t");
             } else {
                 long since = profile.getBleedoutSinceTick();
@@ -1054,9 +961,10 @@ public final class WFMedicalCommands {
                         .append(deathIn >= 0L ? (deathIn + "t") : "(timer not started)");
             }
         } else if (profile.isAsphyxiating()) {
-            // Conscious overdose asphyxia precursor: air-driven, resolves to overdose unconsciousness at 0 air.
-            sb.append("\n asphyxia: overdose respiratory depression  air ")
-                    .append(p.getAirSupply()).append(" / ").append(p.getMaxAirSupply());
+            // Conscious asphyxia struggle (drowning or drug respiratory depression); passes out then kills.
+            long outIn = Math.max(0L, (profile.getAsphyxiaSince() + MedicalConfig.asphyxiaStruggleTicks()) - now);
+            sb.append("\n asphyxia: struggling  air ").append(p.getAirSupply()).append(" / ")
+                    .append(p.getMaxAirSupply()).append("  passout in ").append(outIn).append("t");
         }
         sb.append("\n movement x").append(fmt(stats.movementMultiplier()))
                 .append("  sprintBlocked=").append(stats.sprintBlocked())
@@ -1091,9 +999,6 @@ public final class WFMedicalCommands {
 
     private enum DrugMode {SET, ADD, CLEAR}
 
-    /**
-     * Per-player mutation callback used by {@link #forEach}.
-     */
     @FunctionalInterface
     private interface ProfileAction {
         boolean apply(CommandSourceStack src, ServerPlayer player, IMedicalData data, MedicalProfile profile);

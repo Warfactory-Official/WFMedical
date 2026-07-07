@@ -11,8 +11,11 @@ import net.minecraft.network.FriendlyByteBuf;
  * FULL medical snapshot, server -> client. Carries the player's {@link DerivedStats}, the blood pool,
  * the current {@link HealthState} and a compact per-limb summary (health%, bleeding, pain, fracture).
  *
- * <p>Sent on login / respawn / dimension change and whenever a delta would be insufficient. Cheaper
- * incremental updates go through {@link TraumaDeltaPacket}.</p>
+ * <p>Sent as a fresh baseline on login / respawn (and whenever the client has no prior snapshot); once a
+ * baseline exists the engine sends the smaller {@link MedicalDeltaPacket} carrying only the changed
+ * components. The per-component (de)serialization is SHARED with that delta via the
+ * {@link #writeStats}/{@link #readStats}/{@link #writeLimb}/{@link #readLimb} helpers — keep write and read
+ * in lockstep, as the field order is the wire contract.</p>
  */
 public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double bloodMl, double maxBloodMl,
                                 float painSuppression, float drugLoad, HealthState state, float deathProgress) {
@@ -52,21 +55,7 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
     }
 
     public static MedicalSyncPacket decode(FriendlyByteBuf buf) {
-        DerivedStats stats = new DerivedStats(
-                buf.readFloat(),   // effectiveMaxHealth
-                buf.readFloat(),   // healthModifier
-                buf.readFloat(),   // effectiveCurrentHealth
-                buf.readDouble(),  // totalBleeding
-                buf.readFloat(),   // totalPain (perceived)
-                buf.readFloat(),   // systemicPain
-                buf.readFloat(),   // movementMultiplier
-                buf.readBoolean(), // sprintBlocked
-                buf.readFloat(),   // jumpMultiplier
-                buf.readEnum(HealthState.class),
-                buf.readBoolean(), // anyLegFracture
-                buf.readBoolean(), // anyArmFracture
-                buf.readBoolean(), // asphyxiating
-                buf.readBoolean()); // painKoPending
+        DerivedStats stats = readStats(buf);
         double bloodMl = buf.readDouble();
         double maxBloodMl = buf.readDouble();
         float painSuppression = buf.readFloat();
@@ -75,16 +64,56 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
         int count = buf.readVarInt();
         LimbSummary[] limbs = new LimbSummary[count];
         for (int i = 0; i < count; i++) {
-            limbs[i] = new LimbSummary(
-                    buf.readEnum(LimbType.class),
-                    buf.readFloat(),
-                    buf.readFloat(),
-                    buf.readFloat(),
-                    buf.readBoolean());
+            limbs[i] = readLimb(buf);
         }
         float deathProgress = buf.readFloat();
         return new MedicalSyncPacket(stats, limbs, bloodMl, maxBloodMl, painSuppression, drugLoad, state,
                 deathProgress);
+    }
+
+    static void writeStats(FriendlyByteBuf buf, DerivedStats s) {
+        buf.writeFloat(s.effectiveMaxHealth());
+        buf.writeFloat(s.healthModifier());
+        buf.writeFloat(s.effectiveCurrentHealth());
+        buf.writeDouble(s.totalBleeding());
+        buf.writeFloat(s.totalPain());
+        buf.writeFloat(s.systemicPain());
+        buf.writeFloat(s.movementMultiplier());
+        buf.writeBoolean(s.sprintBlocked());
+        buf.writeFloat(s.jumpMultiplier());
+        buf.writeEnum(s.state());
+        buf.writeBoolean(s.anyLegFracture());
+        buf.writeBoolean(s.anyArmFracture());
+        buf.writeBoolean(s.asphyxiating());
+        buf.writeBoolean(s.painKoPending());
+        buf.writeBoolean(s.bothArmsDisabled());
+        buf.writeBoolean(s.bothLegsDisabled());
+        buf.writeBoolean(s.anyArmTourniquet());
+    }
+
+    static DerivedStats readStats(FriendlyByteBuf buf) {
+        return new DerivedStats(
+                buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readDouble(),
+                buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readBoolean(), buf.readFloat(),
+                buf.readEnum(HealthState.class),
+                buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
+                buf.readBoolean(), buf.readBoolean(), buf.readBoolean());
+    }
+
+    static void writeLimb(FriendlyByteBuf buf, LimbSummary s) {
+        buf.writeEnum(s.limb());
+        buf.writeFloat(s.healthPercent());
+        buf.writeFloat(s.bleeding());
+        buf.writeFloat(s.pain());
+        buf.writeBoolean(s.fracture());
+    }
+
+    // ---- Reusable component (de)serialization, SHARED with MedicalDeltaPacket. The field order below is the
+    // wire contract; keep each write/read pair in lockstep or the stream silently corrupts. ----
+
+    static LimbSummary readLimb(FriendlyByteBuf buf) {
+        return new LimbSummary(buf.readEnum(LimbType.class), buf.readFloat(), buf.readFloat(),
+                buf.readFloat(), buf.readBoolean());
     }
 
     /**
@@ -104,37 +133,16 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
     }
 
     public void encode(FriendlyByteBuf buf) {
-        // DerivedStats
-        buf.writeFloat(stats.effectiveMaxHealth());
-        buf.writeFloat(stats.healthModifier());
-        buf.writeFloat(stats.effectiveCurrentHealth());
-        buf.writeDouble(stats.totalBleeding());
-        buf.writeFloat(stats.totalPain());
-        buf.writeFloat(stats.systemicPain());
-        buf.writeFloat(stats.movementMultiplier());
-        buf.writeBoolean(stats.sprintBlocked());
-        buf.writeFloat(stats.jumpMultiplier());
-        buf.writeEnum(stats.state());
-        buf.writeBoolean(stats.anyLegFracture());
-        buf.writeBoolean(stats.anyArmFracture());
-        buf.writeBoolean(stats.asphyxiating());
-        buf.writeBoolean(stats.painKoPending());
-        // Blood + high-level state
+        writeStats(buf, stats);
         buf.writeDouble(bloodMl);
         buf.writeDouble(maxBloodMl);
         buf.writeFloat(painSuppression);
         buf.writeFloat(drugLoad);
         buf.writeEnum(state);
-        // Per-limb summary
         buf.writeVarInt(limbs.length);
         for (LimbSummary s : limbs) {
-            buf.writeEnum(s.limb());
-            buf.writeFloat(s.healthPercent());
-            buf.writeFloat(s.bleeding());
-            buf.writeFloat(s.pain());
-            buf.writeBoolean(s.fracture());
+            writeLimb(buf, s);
         }
-        // 0..1 bleed-out death-timer progress (drives the pre-death blackout ramp on the client overlay).
         buf.writeFloat(deathProgress);
     }
 

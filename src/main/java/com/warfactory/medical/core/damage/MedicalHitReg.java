@@ -21,7 +21,9 @@ public final class MedicalHitReg {
     private MedicalHitReg() {
     }
 
-    /** Entities whose model is wider than their collision box: players and Open Persistence bodies. */
+    /**
+     * Entities whose model is wider than their collision box: players and Open Persistence bodies.
+     */
     public static boolean isEnvelopeTarget(Entity entity) {
         return entity instanceof Player || OpenPersistenceCompat.isPersistentBody(entity);
     }

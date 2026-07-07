@@ -24,36 +24,18 @@ import net.minecraftforge.gametest.GameTestHolder;
 import java.util.UUID;
 
 /**
- * Deterministic GameTests for the Tier 2 rigged-limb-box hit-location classifier
- * ({@link HumanoidRig} + {@link HitGeometry#classifyRay}). No {@code RandomSource} is ever consulted:
- * every result is a pure function of the (pinned) pose and the synthetic attack ray.
- *
- * <p><b>Why a {@link FakePlayer}.</b> The Tier-2 rig only engages when the victim is a {@link
- * net.minecraft.world.entity.player.Player} (see the {@code victim instanceof Player} gate in
- * {@link HitGeometry#classifyRay}); an {@link ArmorStand} would silently exercise only the Tier-1
- * banded fallback. So the rig tests spawn a server-side Forge {@link FakePlayer}, pin every rotation
- * field the pose pipeline reads ({@code yBodyRot}/{@code yHeadRot}/{@code xRot}) to 0 &mdash; facing +Z
- * (south) so the victim's <em>front</em> is world +Z and the victim's <em>right</em> is world -X &mdash;
- * and zero {@code tickCount} so the idle arm-bob is fixed. The player is never added to the world, so it
- * never ticks or moves; its pose stays exactly as configured.</p>
- *
- * <p><b>Frame.</b> The rig lives in entity-local space (feet origin, Y-up, X = right, Z = front). With
- * {@code yBodyRot = 0} the world&harr;local map is {@code worldX = feetX - localX}, {@code worldY =
- * feetY + localY}, {@code worldZ = feetZ + localZ} &mdash; see {@link #localToWorld}. Rays are therefore
- * authored in the clean local frame and round-tripped to world so {@link HitGeometry#classifyRay}
- * (which re-derives the local frame from {@code position()} + {@code yBodyRot}) reproduces them exactly.
- * All local coordinates below were verified against a standalone replica of the rig math.</p>
- *
- * <p><b>Discovery.</b> {@code @GameTestHolder(wfmedical)} + {@code forge.enabledGameTestNamespaces=
- * wfmedical} (already set on the {@code gameTestServer} run in build.gradle) auto-registers every method.
- * Each test loads the bundled empty stone platform at
- * {@code src/main/resources/data/wfmedical/structures/empty.nbt} ({@code wfmedical:empty}). Run with
- * {@code ./gradlew runGameTestServer} or, in a running server, {@code /test run wfmedical:<name>}.</p>
+ * Deterministic GameTests for the Tier 2 rigged-limb-box classifier. Uses {@link FakePlayer} (not
+ * ArmorStand) because the {@code victim instanceof Player} gate in classifyRay must be satisfied for Tier 2
+ * to engage; an ArmorStand silently falls back to Tier 1 banding. All rotation fields pinned to 0
+ * (yBodyRot=0 → victim front=+Z, right=-X). Rig lives in entity-local space (feet origin, X=right, Z=front);
+ * with yBodyRot=0 the world↔local map is worldX=feetX-localX, worldY=feetY+localY, worldZ=feetZ+localZ.
  */
 @GameTestHolder(WFMedical.MOD_ID)
 public class LimbRigGameTest {
 
-    /** Structure template shared by every test (the bundled 3x3 stone floor); resolves {@code wfmedical:empty}. */
+    /**
+     * Structure template shared by every test (the bundled 3x3 stone floor); resolves {@code wfmedical:empty}.
+     */
     private static final String TEMPLATE = "empty";
 
     // ============================================================================================
@@ -61,9 +43,7 @@ public class LimbRigGameTest {
     // ============================================================================================
 
     /**
-     * Create a server-side {@link FakePlayer} standing neutrally (empty hands, upright), positioned at a
-     * fixed structure-relative block and with every rotation field the rig reads pinned to 0. Never added
-     * to the world, so it neither ticks nor falls.
+     * All rotation fields pinned to 0; never added to the world so it never ticks or moves.
      */
     private static FakePlayer newPlayer(GameTestHelper helper) {
         GameProfile profile = new GameProfile(UUID.randomUUID(), "wfmed_rig");
@@ -84,7 +64,9 @@ public class LimbRigGameTest {
         return p;
     }
 
-    /** A gravity-free {@link ArmorStand} facing +Z with {@code yBodyRot = 0}; a non-player banding victim. */
+    /**
+     * A gravity-free {@link ArmorStand} facing +Z with {@code yBodyRot = 0}; a non-player banding victim.
+     */
     private static ArmorStand newStand(GameTestHelper helper) {
         ArmorStand stand = helper.spawn(EntityType.ARMOR_STAND, new BlockPos(1, 1, 1));
         stand.setNoGravity(true);
@@ -98,13 +80,17 @@ public class LimbRigGameTest {
     // Ray helpers (author in entity-local space, round-trip to world)
     // ============================================================================================
 
-    /** Entity-local (feet origin, X = right, Z = front) -> world, valid because {@code yBodyRot = 0}. */
+    /**
+     * Entity-local (feet origin, X = right, Z = front) -> world, valid because {@code yBodyRot = 0}.
+     */
     private static Vec3 localToWorld(LivingEntity v, double lx, double ly, double lz) {
         Vec3 feet = v.position();
         return new Vec3(feet.x - lx, feet.y + ly, feet.z + lz);
     }
 
-    /** A ray that pierces the victim from the front ({@code +Z}) through the local point {@code (lx, ly)}. */
+    /**
+     * A ray that pierces the victim from the front ({@code +Z}) through the local point {@code (lx, ly)}.
+     */
     private static void expectFrontal(GameTestHelper h, LivingEntity v, double lx, double ly, LimbType want) {
         expectRay(h, v, localToWorld(v, lx, ly, 2.0), localToWorld(v, lx, ly, -2.0), want);
     }
@@ -118,7 +104,9 @@ public class LimbRigGameTest {
     // (a) Neutral standing: frontal head / torso / leg
     // ============================================================================================
 
-    /** Centred frontal ray high on the rig enters the head OBB. */
+    /**
+     * Centred frontal ray high on the rig enters the head OBB.
+     */
     @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public void neutralFrontalHead(GameTestHelper helper) {
         FakePlayer v = newPlayer(helper);
@@ -126,7 +114,9 @@ public class LimbRigGameTest {
         helper.succeed();
     }
 
-    /** Centred frontal ray at chest height enters the torso OBB (arms hang outside, at |x| ~ 0.375). */
+    /**
+     * Centred frontal ray at chest height enters the torso OBB (arms hang outside, at |x| ~ 0.375).
+     */
     @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public void neutralFrontalTorso(GameTestHelper helper) {
         FakePlayer v = newPlayer(helper);
@@ -189,9 +179,9 @@ public class LimbRigGameTest {
         HumanoidRig.LocalRig rig = HumanoidRig.compute(aiming);
         HumanoidArm main = aiming.getMainArm();
         Obb mainArm = (main == HumanoidArm.RIGHT) ? rig.rightArm : rig.leftArm;
-        helper.assertTrue(mainArm.center.z > 0.0,
-                "aiming main-hand arm OBB must be in front of the body (local z>0); got z=" + mainArm.center.z);
-        helper.assertTrue(mainArm.center.z > rig.torso.center.z,
+        helper.assertTrue(mainArm.center().z > 0.0,
+                "aiming main-hand arm OBB must be in front of the body (local z>0); got z=" + mainArm.center().z);
+        helper.assertTrue(mainArm.center().z > rig.torso.center().z,
                 "aiming main-hand arm OBB must sit forward of the torso OBB");
 
         // (2) The same frontal upper-chest ray: TORSO when neutral, RIGHT_ARM when the arm is raised.
@@ -206,15 +196,17 @@ public class LimbRigGameTest {
     // (d) Crouch: the head OBB drops
     // ============================================================================================
 
-    /** Crouching lowers the head pivot, so the rig's head OBB centre drops below its standing height. */
+    /**
+     * Crouching lowers the head pivot, so the rig's head OBB centre drops below its standing height.
+     */
     @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public void crouchDropsHead(GameTestHelper helper) {
         FakePlayer standing = newPlayer(helper);
         FakePlayer crouched = newPlayer(helper);
         crouched.setPose(Pose.CROUCHING);   // isCrouching() reads getPose() == CROUCHING
 
-        double standHeadY = HumanoidRig.compute(standing).head.center.y;
-        double crouchHeadY = HumanoidRig.compute(crouched).head.center.y;
+        double standHeadY = HumanoidRig.compute(standing).head.center().y;
+        double crouchHeadY = HumanoidRig.compute(crouched).head.center().y;
         helper.assertTrue(crouchHeadY < standHeadY,
                 "crouch head OBB must drop: crouched y=" + crouchHeadY + " vs standing y=" + standHeadY);
         helper.succeed();

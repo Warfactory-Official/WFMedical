@@ -9,13 +9,17 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
+import java.util.Map;
+import java.util.WeakHashMap;
+
 /**
  * Server-authoritative sync channel for the medical system.
  *
- * <p>S2C packets carry authoritative state ({@link MedicalSyncPacket} full snapshots,
- * {@link TraumaDeltaPacket} deltas, {@link ActiveTreatmentPacket} action-progress). C2S packets are pure
- * REQUESTS ({@link MedicalActionPacket} start-a-treatment, {@link SetTargetLimbPacket} set-target-hint):
- * clients never create or remove trauma, the server validates every request before acting.</p>
+ * <p>S2C packets carry authoritative state ({@link MedicalSyncPacket} full baseline +
+ * {@link MedicalDeltaPacket} incremental updates, {@link ActiveTreatmentPacket} action-progress). C2S packets
+ * are pure REQUESTS ({@link MedicalActionPacket} start-a-treatment, {@link SetTargetLimbPacket}
+ * set-target-hint, {@link RemoveTourniquetPacket} remove-tourniquet): clients never create or remove trauma,
+ * the server validates every request before acting.</p>
  */
 public final class MedicalNetworking {
 
@@ -25,7 +29,12 @@ public final class MedicalNetworking {
             () -> PROTOCOL,
             PROTOCOL::equals,
             PROTOCOL::equals);
-
+    /**
+     * The last full snapshot sent to each player, used to diff incremental {@link MedicalDeltaPacket}s. Weak
+     * keys so an entry vanishes once the player's {@link ServerPlayer} is GC'd — a logout/respawn creates a
+     * new instance with no entry, forcing a fresh full baseline. Server-thread access only.
+     */
+    private static final Map<ServerPlayer, MedicalSyncPacket> LAST_SENT = new WeakHashMap<>();
     private static boolean registered;
 
     private MedicalNetworking() {
@@ -49,14 +58,8 @@ public final class MedicalNetworking {
                 })
                 .add();
 
-        CHANNEL.messageBuilder(TraumaDeltaPacket.class, 1, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(TraumaDeltaPacket::encode)
-                .decoder(TraumaDeltaPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleClient();
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
+        // (packet id 1 retired: the write-only trauma-delta channel was removed; the full-snapshot sync
+        // above already carries every change via the revision bump.)
 
         // C2S: request to begin a timed treatment.
         CHANNEL.messageBuilder(MedicalActionPacket.class, 2, NetworkDirection.PLAY_TO_SERVER)
@@ -98,20 +101,57 @@ public final class MedicalNetworking {
                     ctx.get().setPacketHandled(true);
                 })
                 .add();
+
+        // C2S: request to remove a tourniquet from a limb (UI-driven, no item).
+        CHANNEL.messageBuilder(RemoveTourniquetPacket.class, 6, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(RemoveTourniquetPacket::encode)
+                .decoder(RemoveTourniquetPacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleServer(ctx.get().getSender());
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
+
+        // S2C: incremental medical update — only the changed components, applied onto the client's baseline.
+        CHANNEL.messageBuilder(MedicalDeltaPacket.class, 7, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(MedicalDeltaPacket::encode)
+                .decoder(MedicalDeltaPacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleClient();
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
     }
 
     /**
-     * Send a full authoritative snapshot to one player.
+     * Send a full authoritative snapshot to one player, and record it as that player's baseline so subsequent
+     * {@link #syncTo} calls can diff against it.
      */
     public static void sendFull(ServerPlayer player, MedicalProfile profile) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), MedicalSyncPacket.fromProfile(profile));
+        MedicalSyncPacket full = MedicalSyncPacket.fromProfile(profile);
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), full);
+        LAST_SENT.put(player, full);
     }
 
     /**
-     * Send an incremental trauma change to one player.
+     * Push the player's current state in the cheapest correct form: a full {@link MedicalSyncPacket} baseline
+     * the first time (or after a logout/respawn clears the tracked baseline), otherwise a
+     * {@link MedicalDeltaPacket} of only the components that changed since the last send. A no-change call
+     * sends nothing. The engine calls this wherever it previously sent a full snapshot.
      */
-    public static void sendDelta(ServerPlayer player, TraumaDeltaPacket packet) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+    public static void syncTo(ServerPlayer player, MedicalProfile profile) {
+        MedicalSyncPacket prev = LAST_SENT.get(player);
+        if (prev == null) {
+            sendFull(player, profile);
+            return;
+        }
+        MedicalSyncPacket full = MedicalSyncPacket.fromProfile(profile);
+        MedicalDeltaPacket delta = MedicalDeltaPacket.diff(prev, full);
+        if (delta.isEmpty()) {
+            return; // nothing observable changed; keep the recorded baseline
+        }
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), delta);
+        LAST_SENT.put(player, full);
     }
 
     /**

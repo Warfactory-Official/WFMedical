@@ -11,37 +11,26 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * Client MOD-bus bootstrap for Warfactory Medical. Registers the key bindings and the HUD overlays. This
- * class is only subscribed on {@link Dist#CLIENT}, so a dedicated server never class-loads any of the
- * client-only types it references.
- *
- * <p>The overlay {@code INSTANCE} fields are provided by a later overlay agent
- * ({@link HealthBarOverlay#INSTANCE}, {@link ActionProgressOverlay#INSTANCE}); they are forward references
- * here and are resolved when the whole project compiles.</p>
+ * Client MOD-bus bootstrap: registers key bindings and HUD overlays. CLIENT-ONLY (Dist.CLIENT).
  */
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class WFMedicalClient {
 
     /**
-     * Guards against the mod-bus overlay event reaching this subscriber more than once per launch.
+     * Guards against the mod-bus overlay event firing more than once per launch.
      */
     private static boolean overlaysRegistered;
 
     private WFMedicalClient() {
     }
 
-    /**
-     * Register the three rebindable medical key mappings.
-     */
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         MedicalKeyMappings.register(event);
     }
 
     /**
-     * Register the HUD overlays. The custom health bar renders just above the vanilla player-health slot
-     * (the vanilla hearts are hidden by {@link MedicalClientEvents}); the action-progress overlay renders
-     * on top of everything.
+     * Health bar above vanilla PLAYER_HEALTH slot (hearts hidden by MedicalClientEvents); action-progress above all.
      */
     @SubscribeEvent
     public static void onRegisterOverlays(RegisterGuiOverlaysEvent event) {

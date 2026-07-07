@@ -5,9 +5,7 @@ import com.lowdragmc.lowdraglib.gui.modular.ModularUIGuiContainer;
 import net.minecraft.client.Minecraft;
 
 /**
- * Client-only helper that opens a purely client-side {@link ModularUI} (no server networking), mirroring
- * {@code UIFactory.initClientUI}. CLIENT-ONLY: references {@code net.minecraft.client.Minecraft} and the
- * {@code @Environment(CLIENT)} {@link ModularUIGuiContainer}; only call it from client code.
+ * Opens a purely client-side LDLib {@link ModularUI} (no server networking). CLIENT-ONLY.
  */
 public final class ClientUIOpener {
 
@@ -15,14 +13,9 @@ public final class ClientUIOpener {
     }
 
     /**
-     * Wire the given UI to a client {@link ModularUIGuiContainer} and display it. Calls
-     * {@link ModularUI#initWidgets()} first (required so widgets receive {@code gui}/{@code initWidget()}),
-     * then swaps the player's container menu to the UI's menu so vanilla input routing works.
-     *
-     * <p>No-op when there is no local player. The window id reuses the current container id, which is only
-     * used for server↔client widget-update packet matching and is irrelevant for a client-only UI.</p>
-     *
-     * @param ui the fully-built (but not yet initialised) ModularUI to open
+     * Wire the given UI to a client ModularUIGuiContainer and display it. {@link ModularUI#initWidgets()}
+     * must be called first (required by LDLib so widgets receive initWidget). Window id reuses the current
+     * container id (used only for server↔client packet matching; irrelevant for a client-only UI).
      */
     public static void openClientUI(ModularUI ui) {
         Minecraft mc = Minecraft.getInstance();

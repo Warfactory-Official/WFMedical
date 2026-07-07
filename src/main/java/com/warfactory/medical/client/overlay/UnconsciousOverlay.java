@@ -16,94 +16,72 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * CLIENT-ONLY screen effect: a CLOSING DARK VIGNETTE shown while the local player is PASSED OUT. This is the
- * generic "unconscious" overlay: it gates on the SINGLE merged
- * {@link com.warfactory.medical.core.HealthState#UNCONSCIOUS} state
- * ({@link ClientMedicalCache#stats()}.{@code unconscious()}), which covers BOTH internal causes — an opioid
- * overdose unconsciousness and a bleed-out unconsciousness. Gated purely on that server-authoritative synced state;
- * this overlay never mutates medical state and only ever reads synced client state.
- *
- * <p>Rather than a hard cut to black, it renders "losing consciousness": the screen edges close in with a
- * dark vignette (the vanilla {@code textures/misc/vignette.png} tinted black, NON-pulsing, unlike the red
- * {@link PainVignetteOverlay}) while a mild uniform darkening dims the whole view. The centre stays faintly
- * visible so it composes with the separate {@link com.warfactory.medical.client.effect.PassoutBlurEffect
- * blur} and blood-loss desaturation passes — the combined read is a blurry, vignetted, dimmed view, not an
- * opaque wall.</p>
- *
- * <p>The transition never snaps: a static client-side {@link #fade} value is eased toward {@code 1.0} while
- * passed out and toward {@code 0.0} otherwise (matching {@link PassoutBlurEffect}'s fade rate), so the edges
- * close in and open back up gradually (e.g. after a {@code NALOXONE} injection ends an overdose unconsciousness, or
- * on revive from a bleed-out unconsciousness).</p>
- *
- * <p>Cost is ~zero for a conscious player whose fade has settled: {@link #render} early-returns before any
- * draw call once {@code fade <= 0.001}. It guards every nullable, restores all {@link RenderSystem} state it
- * changes, and never throws inside the render hook. Allocation-light: no per-frame object churn.</p>
- *
- * <p>SELF-REGISTERING: the nested {@link Registrar} subscribes to the MOD event bus on {@link Dist#CLIENT}
- * and registers {@link #INSTANCE} above all other overlays, mirroring {@link PainVignetteOverlay}.</p>
+ * CLIENT-ONLY closing dark vignette while the local player is PASSED OUT. Gates on the single merged
+ * {@code UNCONSCIOUS} state (covers both overdose and bleed-out causes). Composes with the separate
+ * {@link com.warfactory.medical.client.effect.PassoutBlurEffect} and blood-loss desaturation: together
+ * they read as a blurry, vignetted, dimmed view rather than a hard cut to black.
  */
 @OnlyIn(Dist.CLIENT)
 public final class UnconsciousOverlay implements IGuiOverlay {
 
-    /**
-     * The singleton overlay instance; registered by {@link Registrar}.
-     */
     public static final IGuiOverlay INSTANCE = new UnconsciousOverlay();
 
-    /**
-     * Overlay id used when registering with Forge.
-     */
     public static final String OVERLAY_ID = "wfmedical_unconscious";
 
-    /**
-     * Vanilla vignette sprite reused for the edge falloff (opaque edges, transparent centre).
-     */
     private static final ResourceLocation VIGNETTE_TEXTURE =
             new ResourceLocation("minecraft", "textures/misc/vignette.png");
 
     /**
-     * Per-frame easing factor toward the fade target; matches {@link PassoutBlurEffect} so they close together.
+     * Matches PassoutBlurEffect's FADE_STEP so vignette and blur close/open together.
      */
     private static final float FADE_STEP = 0.06F;
     /**
-     * Below this fade the overlay is invisible; early-return keeps conscious cost ~0.
+     * Below this the overlay is invisible; early-return keeps conscious cost ~0.
      */
     private static final float FADE_EPSILON = 0.001F;
 
-    /**
-     * Maps fade (0..1) onto the dark-vignette alpha; the texture's own falloff shapes the edge closing.
-     */
     private static final float VIGNETTE_STRENGTH = 1.0F;
     /**
-     * Hard clamp on the vignette alpha so the edges are EXTREME but never a perfectly opaque frame on their own.
+     * Edges are extreme but never a perfectly opaque frame on their own.
      */
     private static final float VIGNETTE_MAX = 0.97F;
     /**
-     * Whole-screen dim while merely downed but NOT dying: kept low so the centre stays clearly visible (this is
-     * the "just extreme vignetting" look the design calls for outside of the final moments before death).
+     * Low so the centre stays visible; produces "just vignetting" look outside the final death stretch.
      */
     private static final float UNIFORM_DARK_BASE = 0.35F;
     /**
-     * Death-timer progress ({@link ClientMedicalCache#deathProgress()}) above which the FULL pre-death blackout
-     * begins ramping in. Below it there is no blackout at all — only the extreme vignette. Set high so the
-     * blackout is confined to the last stretch before death ("full screen blackout only right before death").
+     * Death-timer progress above which the full-screen blackout ramps in. Set high so the blackout is
+     * confined to the last stretch before death.
      */
     private static final float BLACKOUT_START = 0.75F;
-    /**
-     * Draw z; matches vanilla's far-back vignette depth so world/HUD sit in front.
-     */
     private static final int Z_OFFSET = -90;
 
     /**
-     * Smoothed fade toward the passed-out target; drives the extreme vignette + the base dim.
+     * Drives the extreme vignette + base dim.
      */
     private static float fade;
     /**
-     * Smoothed fade toward the pre-death blackout target; drives the full-screen black, only near death.
+     * Drives the full-screen black; only ramps up near death.
      */
     private static float black;
 
     private UnconsciousOverlay() {
+    }
+
+    /**
+     * Snap fades to zero on respawn so a pre-death blackout does not linger onto the fresh life.
+     */
+    public static void reset() {
+        fade = 0.0F;
+        black = 0.0F;
+    }
+
+    private static float ease(float value, float target) {
+        return clamp01(value + (target - value) * FADE_STEP);
+    }
+
+    private static float clamp01(float v) {
+        return v < 0.0F ? 0.0F : (v > 1.0F ? 1.0F : v);
     }
 
     @Override
@@ -153,41 +131,12 @@ public final class UnconsciousOverlay implements IGuiOverlay {
     }
 
     /**
-     * Snap both fades to zero immediately (no easing). Called on respawn so a vignette / pre-death blackout
-     * that was on-screen at the moment of death does not linger and briefly black out the fresh life while it
-     * eases back down.
-     */
-    public static void reset() {
-        fade = 0.0F;
-        black = 0.0F;
-    }
-
-    /**
-     * Ease {@code value} one step toward {@code target} at {@link #FADE_STEP}, clamped to {@code [0,1]}.
-     */
-    private static float ease(float value, float target) {
-        return clamp01(value + (target - value) * FADE_STEP);
-    }
-
-    /**
-     * Clamp to {@code [0,1]}.
-     */
-    private static float clamp01(float v) {
-        return v < 0.0F ? 0.0F : (v > 1.0F ? 1.0F : v);
-    }
-
-    /**
-     * MOD-bus registrar so the overlay self-registers without touching client scaffolding. Runs only on
-     * {@link Dist#CLIENT}; the vignette is registered above all other overlays so it dims the HUD while the
-     * player is passed out.
+     * Self-registers via MOD bus on CLIENT; drawn above all other overlays.
      */
     @OnlyIn(Dist.CLIENT)
     @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class Registrar {
 
-        /**
-         * Guards against the mod-bus overlay event reaching this registrar more than once per launch.
-         */
         private static boolean registered;
 
         private Registrar() {

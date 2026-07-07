@@ -23,16 +23,26 @@ import net.minecraftforge.fml.common.Mod;
 public final class PainSwayHandler {
 
     private static final float SWAY_START = 0.15F;
-    /** Peak sway amplitude (degrees) at full intensity, on each axis. */
+    /**
+     * Peak sway amplitude (degrees) at full intensity, on each axis.
+     */
     private static final float MAX_SWAY_DEG = 2.5F;
-    /** Noise advance per tick (radians); low, so the drift is a slow unsteadiness with a faster tremor on top. */
+    /**
+     * Noise advance per tick (radians); low, so the drift is a slow unsteadiness with a faster tremor on top.
+     */
     private static final double PHASE_STEP = 0.09;
-    /** Sway multiplier at full ADS (bracing): 0.35 = a 65% reduction, but never zero. */
+    /**
+     * Sway multiplier at full ADS (bracing): 0.35 = a 65% reduction, but never zero.
+     */
     private static final float ADS_STEADINESS = 0.35F;
 
-    /** Rolling noise phase; advanced only while sway is active. */
+    /**
+     * Rolling noise phase; advanced only while sway is active.
+     */
     private static double swayPhase;
-    /** Sway offset (degrees) applied last tick, so we can apply only the per-tick delta. */
+    /**
+     * Sway offset (degrees) applied last tick, so we can apply only the per-tick delta.
+     */
     private static double appliedYaw;
     private static double appliedPitch;
 
@@ -57,6 +67,11 @@ public final class PainSwayHandler {
                 && ClientMedicalCache.state() != HealthState.UNCONSCIOUS;
         if (active) {
             float intensity = swayIntensity(ClientMedicalCache.stats().totalPain());
+            // A tourniquet on an arm makes the hands shaky (restricted circulation) -> a sway floor, treated
+            // like pain (so ADS bracing still steadies it partially below).
+            if (ClientMedicalCache.stats().anyArmTourniquet()) {
+                intensity = Math.max(intensity, (float) MedicalConfig.tourniquetArmSway());
+            }
             float ads = TaczCompat.isLoaded() ? TaczGunState.aimingProgress(player) : 0.0F;
             if (intensity > 0.0F && ads > 0.0F) {
                 intensity *= Mth.lerp(ads, 1.0F, ADS_STEADINESS);

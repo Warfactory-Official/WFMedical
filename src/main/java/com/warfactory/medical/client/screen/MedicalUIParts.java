@@ -24,32 +24,14 @@ import net.minecraftforge.registries.ForgeRegistries;
 import java.util.*;
 
 /**
- * Shared, CLIENT-ONLY widget builders and helpers used by BOTH {@link CharacterSheetUI} and
- * {@link RadialMenuUI}. Everything here reads only the client-synced {@link ClientMedicalCache} snapshot
- * and SENDS request packets; it never mutates medical state (the server is authoritative).
- *
- * <p><b>Public API for the UI agents:</b></p>
- * <ul>
- *   <li>Colors: {@link #limbColor(float)}, {@link #stateColor(HealthState)}.</li>
- *   <li>Selection: {@link #selectedLimb()}, {@link #selectLimb(LimbType)}.</li>
- *   <li>Actions: {@link #requestAction(ItemStack, LimbType)}, {@link #availableMedicalItems()}.</li>
- *   <li>Snapshot reads (never NPE): {@link #stats()}, {@link #limbSummaries()}, {@link #limbSummary(LimbType)}.</li>
- *   <li>Labels: {@link #limbName(LimbType)}, {@link #stateName(HealthState)}.</li>
- *   <li>Widgets: {@link #bodyDiagram(int, int, int, int)}.</li>
- * </ul>
- *
- * <p>All live widgets returned here are marked {@code setClientSideWidget()} so their suppliers re-read the
- * client cache every tick/frame (required for client-only UIs — see the LDLib cheatsheet Q4).</p>
+ * Shared CLIENT-ONLY widget builders and helpers for {@link CharacterSheetUI} and {@link RadialMenuUI}.
+ * Reads the synced {@link ClientMedicalCache} snapshot and sends request packets; never mutates medical
+ * state. All returned live widgets are marked {@code setClientSideWidget()} so their suppliers re-read the
+ * cache each tick (required for client-only LDLib UIs).
  */
 public final class MedicalUIParts {
 
-    /**
-     * ARGB opaque-white; used for the selected-limb highlight border.
-     */
     private static final int HIGHLIGHT_COLOR = 0xFFFFFFFF;
-    /**
-     * Border thickness (px) of the selected-limb highlight.
-     */
     private static final int HIGHLIGHT_BORDER = 2;
 
     private MedicalUIParts() {
@@ -58,10 +40,7 @@ public final class MedicalUIParts {
     // ------------------------------------------------------------------ colors
 
     /**
-     * Map a limb health fraction to a tile color along a red -> yellow -> green gradient.
-     *
-     * @param healthPercent01 limb health in {@code [0,1]} (clamped); 0 = destroyed, 1 = full
-     * @return opaque ARGB color (0xFFRRGGBB): red at 0, yellow at 0.5, green at 1
+     * Red→yellow→green gradient; 0 = destroyed (red), 0.5 = yellow, 1 = full (green).
      */
     public static int limbColor(float healthPercent01) {
         float p = healthPercent01;
@@ -83,10 +62,7 @@ public final class MedicalUIParts {
     }
 
     /**
-     * Map a high-level {@link HealthState} to a representative ARGB color for badges / borders.
-     *
-     * @param state the synced health state (nullable -> treated as HEALTHY-ish white)
-     * @return opaque ARGB color
+     * ARGB color for the given health state (null → white).
      */
     public static int stateColor(HealthState state) {
         if (state == null) {
@@ -102,18 +78,12 @@ public final class MedicalUIParts {
 
     // ------------------------------------------------------------------ selection
 
-    /**
-     * @return the UI-local selected limb (nullable), mirroring the server targeting hint.
-     */
     public static LimbType selectedLimb() {
         return ClientMedicalCache.selectedLimb();
     }
 
     /**
-     * Select a limb: updates the client-local highlight AND sends a {@link SetTargetLimbPacket} so the
-     * server biases subsequent treatments toward it. Passing {@code null} clears the preference.
-     *
-     * @param limb the limb to target, or null to clear
+     * Updates client-local highlight AND sends SetTargetLimbPacket so the server biases treatments.
      */
     public static void selectLimb(LimbType limb) {
         ClientMedicalCache.setSelectedLimb(limb);
@@ -123,13 +93,7 @@ public final class MedicalUIParts {
     // ------------------------------------------------------------------ actions
 
     /**
-     * Request the server to begin a treatment with the given medical item, targeting {@code limb}. Sends a
-     * {@link MedicalActionPacket} keyed by the stack's registry name; the server validates the request
-     * (the client never applies the treatment itself). No-op for empty / non-registered / non-medical
-     * stacks.
-     *
-     * @param medicalItemStack the medical item stack to use (its registry id identifies the treatment)
-     * @param limb             the targeted limb, or null to let the server auto-pick
+     * Sends MedicalActionPacket to server; server validates and applies — the client never applies it itself.
      */
     public static void requestAction(ItemStack medicalItemStack, LimbType limb) {
         if (medicalItemStack == null || medicalItemStack.isEmpty()
@@ -143,12 +107,15 @@ public final class MedicalUIParts {
         MedicalNetworking.sendToServer(new MedicalActionPacket(id, limb));
     }
 
+    public static void requestRemoveTourniquet(LimbType limb) {
+        if (limb == null) {
+            return;
+        }
+        MedicalNetworking.sendToServer(new RemoveTourniquetPacket(limb));
+    }
+
     /**
-     * The distinct {@link MedicalItem} stacks currently in the local player's inventory, for building
-     * action buttons / radial wedges. Deduplicated by item type; empty stacks are skipped. Returns an
-     * empty list when there is no local player.
-     *
-     * @return a fresh, mutable list of one representative stack per distinct medical item
+     * Distinct medical item stacks in the player's inventory, deduplicated by item type.
      */
     public static List<ItemStack> availableMedicalItems() {
         List<ItemStack> out = new ArrayList<>();
@@ -172,18 +139,12 @@ public final class MedicalUIParts {
 
     // ------------------------------------------------------------------ safe snapshot reads
 
-    /**
-     * @return the latest synced {@link DerivedStats}; never null (healthy defaults if none received).
-     */
     public static DerivedStats stats() {
         return ClientMedicalCache.stats();
     }
 
     /**
-     * The per-limb summary array from the latest snapshot, indexed to match {@link LimbType#VALUES} order
-     * when possible. Falls back to a full array of healthy defaults when no snapshot exists.
-     *
-     * @return a per-limb summary array of length {@code LimbType.VALUES.length}; never null
+     * Per-limb summaries indexed to match {@link LimbType#VALUES}; falls back to healthy defaults.
      */
     public static LimbSummary[] limbSummaries() {
         LimbType[] all = LimbType.VALUES;
@@ -195,11 +156,7 @@ public final class MedicalUIParts {
     }
 
     /**
-     * The synced summary for one limb, or a healthy default (100%, no bleeding/pain/fracture) when no
-     * snapshot has arrived or the limb is missing from it.
-     *
-     * @param limb the limb to look up (must not be null)
-     * @return a never-null {@link LimbSummary} for that limb
+     * Synced summary for one limb, or a healthy default (100%, no flags) when no snapshot exists.
      */
     public static LimbSummary limbSummary(LimbType limb) {
         MedicalSyncPacket snap = ClientMedicalCache.get();
@@ -218,16 +175,10 @@ public final class MedicalUIParts {
 
     // ------------------------------------------------------------------ labels
 
-    /**
-     * @return the display name Component for a limb ({@code gui.wfmedical.limb.<name>}).
-     */
     public static Component limbName(LimbType limb) {
         return Component.translatable("gui.wfmedical.limb." + limb.name().toLowerCase(Locale.ROOT));
     }
 
-    /**
-     * @return the display name Component for a health state ({@code gui.wfmedical.state.<name>}).
-     */
     public static Component stateName(HealthState state) {
         HealthState s = state == null ? HealthState.HEALTHY : state;
         return Component.translatable("gui.wfmedical.state." + s.name().toLowerCase(Locale.ROOT));
@@ -236,23 +187,9 @@ public final class MedicalUIParts {
     // ------------------------------------------------------------------ body diagram
 
     /**
-     * Build a simple humanoid body diagram from six colored limb tiles (HEAD, TORSO, LEFT_ARM, RIGHT_ARM,
-     * LEFT_LEG, RIGHT_LEG) laid out in a body shape within the given rectangle. Each tile:
-     * <ul>
-     *   <li>is filled with a live color from that limb's synced health% ({@link #limbColor(float)}), read
-     *       every frame via a {@code Supplier<IGuiTexture>} (marked client-side);</li>
-     *   <li>is clickable to {@link #selectLimb(LimbType)} that limb;</li>
-     *   <li>shows a white highlight border while it is the {@link #selectedLimb()};</li>
-     *   <li>shows a hover tooltip (limb name, health%, bleeding, pain, fracture), refreshed each tick.</li>
-     * </ul>
-     * "Left"/"Right" are the anatomical (player-perspective) sides and are drawn on the diagram's left /
-     * right respectively. The whole group is marked {@code setClientSideWidget()} so live suppliers update.
-     *
-     * @param x      group left, relative to the parent it will be added to
-     * @param y      group top, relative to the parent
-     * @param width  total diagram width in px
-     * @param height total diagram height in px
-     * @return a {@link WidgetGroup} the caller adds to a {@code ui.mainGroup}
+     * Six clickable health-colored limb tiles in a body shape. "Left"/"Right" are anatomical sides, drawn
+     * on diagram's left/right respectively. Each tile selects its limb and shows a live tooltip. The group
+     * is marked setClientSideWidget() so supplier-driven textures update each frame.
      */
     public static WidgetGroup bodyDiagram(int x, int y, int width, int height) {
         WidgetGroup group = new WidgetGroup(x, y, width, height);
@@ -318,9 +255,6 @@ public final class MedicalUIParts {
         group.addWidget(click);
     }
 
-    /**
-     * Build the hover tooltip lines for a limb from the current snapshot.
-     */
     private static List<Component> limbTooltip(LimbType limb) {
         LimbSummary s = limbSummary(limb);
         List<Component> lines = new ArrayList<>(4);

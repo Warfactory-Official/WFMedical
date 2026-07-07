@@ -1,20 +1,17 @@
 package com.warfactory.medical.config;
 
 import com.warfactory.medical.core.PhysiologyParams;
+import com.warfactory.medical.core.damage.DamageCategory;
 import com.warfactory.medical.core.damage.HitRegMode;
+import com.warfactory.medical.core.limb.LimbType;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.config.ModConfig;
 
 /**
- * COMMON-side {@link ForgeConfigSpec} holding the medical system's numeric tunables.
- *
- * <p>These are the "engine knobs" (update cadence, blood volume, thresholds, feature toggles). The
- * data-driven trauma/treatment definitions live separately in {@link MedicalDefinitions}. Everything
- * here is server-authoritative; the client reads a synced snapshot.</p>
- *
- * <p>Register with {@link #register(ModLoadingContext)} during mod construction, or register
- * {@link #SPEC} directly ({@code context.registerConfig(ModConfig.Type.COMMON, MedicalConfig.SPEC)}).</p>
+ * COMMON-side {@link ForgeConfigSpec} holding the medical system's numeric tunables (engine knobs:
+ * update cadence, blood volume, thresholds, feature toggles). Data-driven trauma/treatment definitions
+ * live in {@link MedicalDefinitions}. Everything here is server-authoritative.
  */
 public final class MedicalConfig {
 
@@ -39,8 +36,12 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.BooleanValue ENABLE_PAIN;
     private static final ForgeConfigSpec.BooleanValue ENABLE_BLEEDOUT;
     private static final ForgeConfigSpec.IntValue BLEEDOUT_TICKS;
-    private static final ForgeConfigSpec.BooleanValue LETHAL_BLOWS_ENABLED;
-    private static final ForgeConfigSpec.DoubleValue LETHAL_BLOW_HEALTH_FRACTION;
+    private static final ForgeConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_DEFAULT;
+    private static final ForgeConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_BALLISTIC;
+    private static final ForgeConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_EXPLOSION;
+    private static final ForgeConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_BLUNT;
+    private static final ForgeConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_UNARMED;
+    private static final ForgeConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_FALL;
     private static final ForgeConfigSpec.BooleanValue FINISH_DOWNED_ON_HIT;
     private static final ForgeConfigSpec.BooleanValue EFFECT_IMMUNE_IN_CREATIVE;
     private static final ForgeConfigSpec.IntValue MAX_TRAUMA_PER_LIMB;
@@ -56,6 +57,13 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.IntValue ASPHYXIA_AIR_LOSS_PER_TICK;
     private static final ForgeConfigSpec.IntValue ASPHYXIA_UNCONSCIOUS_TICKS;
     private static final ForgeConfigSpec.IntValue ASPHYXIA_WEAKNESS_AMPLIFIER;
+    private static final ForgeConfigSpec.BooleanValue DROWNING_ASPHYXIA_ENABLED;
+    private static final ForgeConfigSpec.IntValue ASPHYXIA_STRUGGLE_TICKS;
+    private static final ForgeConfigSpec.DoubleValue ASPHYXIA_MOVE_MULTIPLIER;
+    private static final ForgeConfigSpec.DoubleValue STIMULANT_SPEED_BONUS;
+    private static final ForgeConfigSpec.DoubleValue CLOTTING_BOOST_THRESHOLD_BONUS;
+    private static final ForgeConfigSpec.DoubleValue CLOTTING_BOOST_RATE_MULTIPLIER;
+    private static final ForgeConfigSpec.IntValue CLOTTING_AGENT_DURATION_TICKS;
     private static final ForgeConfigSpec.BooleanValue GEOMETRIC_HIT_LOCATION;
     private static final ForgeConfigSpec.BooleanValue POSE_AWARE_ARMS;
     private static final ForgeConfigSpec.DoubleValue HEAD_BAND_BOTTOM;
@@ -82,6 +90,14 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.DoubleValue PAIN_SHARE_TORSO;
     private static final ForgeConfigSpec.DoubleValue PAIN_SHARE_ARM;
     private static final ForgeConfigSpec.DoubleValue PAIN_SHARE_LEG;
+    private static final ForgeConfigSpec.DoubleValue HEALTH_SHARE_HEAD;
+    private static final ForgeConfigSpec.DoubleValue HEALTH_SHARE_TORSO;
+    private static final ForgeConfigSpec.DoubleValue HEALTH_SHARE_ARM;
+    private static final ForgeConfigSpec.DoubleValue HEALTH_SHARE_LEG;
+    private static final ForgeConfigSpec.DoubleValue TOURNIQUET_BLEED_MULTIPLIER;
+    private static final ForgeConfigSpec.DoubleValue TOURNIQUET_LEG_SPEED_MULTIPLIER;
+    private static final ForgeConfigSpec.DoubleValue TOURNIQUET_ARM_SPEED_MULTIPLIER;
+    private static final ForgeConfigSpec.DoubleValue TOURNIQUET_ARM_SWAY;
     private static final ForgeConfigSpec.BooleanValue ADRENALINE_ENABLED;
     private static final ForgeConfigSpec.IntValue ADRENALINE_PAIN_KO_DELAY_TICKS;
 
@@ -173,6 +189,40 @@ public final class MedicalConfig {
                 .comment("Max SHARE of total pain (0..1) a fully-painful LEG can contribute (per leg). Femoral "
                         + "trauma is genuinely shock-grade, so legs weigh more than arms. Default 0.20.")
                 .defineInRange("painShareLeg", 0.20D, 0.0D, 1.0D);
+        HEALTH_SHARE_HEAD = b
+                .comment("Max SHARE of the FULL health bar a fully-destroyed HEAD can remove from the life pool. "
+                        + "Per-limb CAPS so one limb can never drain the whole pool; a limb that reaches its cap is "
+                        + "'drained' (disabled + fractured) and further damage overflows into bleeding. Default 0.35.")
+                .defineInRange("healthShareHead", 0.35D, 0.0D, 1.0D);
+        HEALTH_SHARE_TORSO = b
+                .comment("Max SHARE of the FULL health bar a fully-destroyed TORSO can remove. The torso carries "
+                        + "most of the life pool. Default 0.55.")
+                .defineInRange("healthShareTorso", 0.55D, 0.0D, 1.0D);
+        HEALTH_SHARE_ARM = b
+                .comment("Max SHARE of the FULL health bar a fully-destroyed ARM can remove (per arm). Small: an arm "
+                        + "cannot cost your life directly, but a drained arm is disabled and overflows into bleeding. "
+                        + "Default 0.12.")
+                .defineInRange("healthShareArm", 0.12D, 0.0D, 1.0D);
+        HEALTH_SHARE_LEG = b
+                .comment("Max SHARE of the FULL health bar a fully-destroyed LEG can remove (per leg). A drained leg "
+                        + "is disabled; both legs drained forces a crawl. Default 0.18.")
+                .defineInRange("healthShareLeg", 0.18D, 0.0D, 1.0D);
+        TOURNIQUET_BLEED_MULTIPLIER = b
+                .comment("Multiplier applied to a limb's bleeding while a TOURNIQUET is on it (arms/legs only). "
+                        + "Lower = a tourniquet slows blood loss more; it never fully stops it and does NOT treat "
+                        + "the underlying wound (remove it and full bleeding returns). Default 0.20.")
+                .defineInRange("tourniquetBleedMultiplier", 0.20D, 0.0D, 1.0D);
+        TOURNIQUET_LEG_SPEED_MULTIPLIER = b
+                .comment("Movement multiplier applied PER LEG wearing a tourniquet (0.85 = 15% slower per leg) "
+                        + "so leaving them on permanently is discouraged. Default 0.85.")
+                .defineInRange("tourniquetLegSpeedMultiplier", 0.85D, 0.0D, 1.0D);
+        TOURNIQUET_ARM_SPEED_MULTIPLIER = b
+                .comment("Movement multiplier applied PER ARM wearing a tourniquet (minor). Default 0.95.")
+                .defineInRange("tourniquetArmSpeedMultiplier", 0.95D, 0.0D, 1.0D);
+        TOURNIQUET_ARM_SWAY = b
+                .comment("Weapon-sway intensity floor (0..1, like pain sway) while ANY arm wears a tourniquet. "
+                        + "Default 0.30.")
+                .defineInRange("tourniquetArmSway", 0.30D, 0.0D, 1.0D);
         ADRENALINE_ENABLED = b
                 .comment("If true, a PURELY pain-driven knockout (one that blood loss alone would not cause) is "
                         + "held off for adrenalinePainKoDelayTicks, mimicking adrenaline: the player keeps their "
@@ -193,27 +243,47 @@ public final class MedicalConfig {
         EFFECT_IMMUNE_IN_CREATIVE = b.comment("Creative-mode players ignore medical penalties.").define("effectImmuneInCreative", true);
         ENABLE_INJECTABLES = b.comment("Master toggle for the injectable/opioid substance system (morphine, naloxone, ...).").define("enableInjectables", true);
         ASPHYXIA_ENABLED = b
-                .comment("If true, a heavy opioid overdose can trigger ASPHYXIA (respiratory depression) before "
-                        + "unconsciousness: air drains rapidly (sped-up drowning) with weakness, no sprint and "
-                        + "blurred vision, ending in consciousness loss when the air runs out.")
+                .comment("If true, a heavy opioid overdose can trigger ASPHYXIA (respiratory depression): heavy "
+                        + "movement constraint, weakness, no sprint/jump and a blur + heavy vignette, ending in a "
+                        + "FATAL unconsciousness unless the drug is reversed (naloxone) or decays in time.")
                 .define("enableAsphyxia", true);
+        DROWNING_ASPHYXIA_ENABLED = b
+                .comment("If true, going underwater with no air is handled as ASPHYXIA (drowning) instead of "
+                        + "vanilla drowning damage: once your breath runs out you struggle, then pass out and "
+                        + "DROWN TO DEATH unless you reach the surface in time. Vanilla drowning damage is suppressed.")
+                .define("enableDrowningAsphyxia", true);
         b.pop();
 
         b.push("balance");
         BLEEDOUT_TICKS = b
                 .comment("Ticks a player may remain unconscious from bleeding out before dying.")
                 .defineInRange("bleedoutTicks", 2400, 20, 72000);
-        LETHAL_BLOWS_ENABLED = b
-                .comment("If true, a single blow big enough to deplete the player's current health kills them "
-                        + "outright (kill on impact) instead of dropping them into a survivable unconsciousness. "
-                        + "Unconsciousness then only happens from GRADUAL depletion (bleeding/accumulated trauma), "
-                        + "an overdose, or an admin override -- it is no longer a mandatory step before every death.")
-                .define("lethalBlowsEnabled", true);
-        LETHAL_BLOW_HEALTH_FRACTION = b
-                .comment("A blow is 'lethal on impact' when its damage is at least this fraction of the player's "
-                        + "current (derived) health. 1.0 = the hit must fully deplete remaining health; lower = "
-                        + "even near-fatal hits execute. Only consulted when lethalBlowsEnabled is true.")
-                .defineInRange("lethalBlowHealthFraction", 1.0D, 0.1D, 10.0D);
+        b.comment("MAJOR TRAUMA (instant death): a hit kills outright -- before it could become a survivable",
+                        "unconsciousness -- when its damage reaches this fraction of the player's FULL healthy health",
+                        "bar (maxHealthHearts) AND the medical armor model did not BLOCK it. Per damage category so a",
+                        "sniper, a blast and a fall tune apart; categories without their own entry use",
+                        "majorTraumaFractionDefault. Fire/chemical/radiation never instant-kill on impact (they are",
+                        "damage-over-time). Set an entry high (e.g. 100) to effectively disable instant death for it.")
+                .push("lethality");
+        MAJOR_TRAUMA_FRACTION_DEFAULT = b
+                .comment("Default fraction for categories without a specific entry (melee slashing, piercing, generic).")
+                .defineInRange("majorTraumaFractionDefault", 1.0D, 0.1D, 100.0D);
+        MAJOR_TRAUMA_FRACTION_BALLISTIC = b
+                .comment("Firearms/bullets -- a full healthy bar's worth of bullet in one hit kills outright.")
+                .defineInRange("majorTraumaFractionBallistic", 0.9D, 0.1D, 100.0D);
+        MAJOR_TRAUMA_FRACTION_EXPLOSION = b
+                .comment("Blasts.")
+                .defineInRange("majorTraumaFractionExplosion", 0.9D, 0.1D, 100.0D);
+        MAJOR_TRAUMA_FRACTION_BLUNT = b
+                .comment("Heavy impact/crushing (falling blocks, anvils, wall slams).")
+                .defineInRange("majorTraumaFractionBlunt", 1.1D, 0.1D, 100.0D);
+        MAJOR_TRAUMA_FRACTION_UNARMED = b
+                .comment("Bare-handed strikes -- set high so punches essentially never one-shot.")
+                .defineInRange("majorTraumaFractionUnarmed", 3.0D, 0.1D, 100.0D);
+        MAJOR_TRAUMA_FRACTION_FALL = b
+                .comment("Falls -- above 1.0 so only a catastrophic fall instant-kills; lesser falls injure legs.")
+                .defineInRange("majorTraumaFractionFall", 1.5D, 0.1D, 100.0D);
+        b.pop();
         FINISH_DOWNED_ON_HIT = b
                 .comment("If true, any real damage taken while already unconscious/downed finishes the player "
                         + "(they can be killed while helpless). If false, a downed player is immune to further "
@@ -246,8 +316,27 @@ public final class MedicalConfig {
                         + "attacks. 1 = Weakness I, 2 = Weakness II, etc.; 0 = disabled. Default 1.")
                 .defineInRange("brokenArmMeleeWeaknessLevel", 1, 0, 10);
         DRUG_DECAY_PER_TICK = b
-                .comment("How much injectable drug load decays per tick (higher = shorter dosing window before it clears).")
-                .defineInRange("drugDecayPerTick", 0.0005D, 0.0D, 1.0D);
+                .comment("How much injectable drug load decays per tick (higher = shorter dosing window before it "
+                        + "clears). Lower values make the drug 'stat' come-down outlast a stimulant's beneficial "
+                        + "effect window. Default 0.00035.")
+                .defineInRange("drugDecayPerTick", 0.00035D, 0.0D, 1.0D);
+        STIMULANT_SPEED_BONUS = b
+                .comment("Movement-speed bonus fraction added at FULL stimulant strength (0.30 = +30% speed). A "
+                        + "combat stimulant also overrides injury slowdown and clears the jump penalty while active.")
+                .defineInRange("stimulantSpeedBonus", 0.30D, 0.0D, 5.0D);
+        CLOTTING_BOOST_THRESHOLD_BONUS = b
+                .comment("How much a FULL clotting boost raises the wound severity that can self-clot without a "
+                        + "bandage, ADDED to bleedingSelfHealThreshold (0.70 -> a full boost lets even a severe "
+                        + "bleed close on its own). Default 0.70.")
+                .defineInRange("clottingBoostThresholdBonus", 0.70D, 0.0D, 1.0D);
+        CLOTTING_BOOST_RATE_MULTIPLIER = b
+                .comment("How much FASTER a boosted wound self-clots: the self-heal rate is multiplied by "
+                        + "(1 + clottingBoost * this). 10.0 -> up to 11x the normal clot speed at full boost. Default 10.0.")
+                .defineInRange("clottingBoostRateMultiplier", 10.0D, 0.0D, 100.0D);
+        CLOTTING_AGENT_DURATION_TICKS = b
+                .comment("How long (ticks) the clotting boost from a hemostatic BOOST_CLOTTING item lasts "
+                        + "(20 ticks = 1 second). Default 2400 (2 minutes).")
+                .defineInRange("clottingAgentDurationTicks", 2400, 1, 72000);
         OVERDOSE_LETHAL_ENABLED = b
                 .comment("If true, a severe overdose (drug load >= overdoseLethalThreshold) drains health during the overdose unconsciousness.")
                 .define("overdoseLethalEnabled", true);
@@ -274,11 +363,21 @@ public final class MedicalConfig {
                         + "faster suffocation; net drain also has to overcome vanilla's on-land air regen.")
                 .defineInRange("asphyxiaAirLossPerTick", 12, 1, 300);
         ASPHYXIA_UNCONSCIOUS_TICKS = b
-                .comment("Ticks the player stays unconscious after passing out from asphyxia.")
+                .comment("Ticks after passing out from asphyxia before it turns FATAL. If the cause is not cleared "
+                        + "in this window (surface / reverse the drug), the player dies. Default 200 (10 seconds).")
                 .defineInRange("asphyxiaUnconsciousTicks", 200, 1, 72000);
         ASPHYXIA_WEAKNESS_AMPLIFIER = b
                 .comment("Amplifier of the Weakness effect applied while asphyxiating (0 = Weakness I, 1 = Weakness II, ...).")
                 .defineInRange("asphyxiaWeaknessAmplifier", 1, 0, 9);
+        ASPHYXIA_STRUGGLE_TICKS = b
+                .comment("Ticks a player consciously struggles for air (heavily slowed, blurred) once asphyxia "
+                        + "begins, before passing out. Clearing the cause in this window recovers cleanly. "
+                        + "Default 60 (3 seconds).")
+                .defineInRange("asphyxiaStruggleTicks", 60, 1, 12000);
+        ASPHYXIA_MOVE_MULTIPLIER = b
+                .comment("Movement-speed multiplier while consciously asphyxiating (heavy constraint). Sprint and "
+                        + "jump are also blocked. Default 0.25 = a quarter speed.")
+                .defineInRange("asphyxiaMoveMultiplier", 0.25D, 0.0D, 1.0D);
         b.pop();
 
         b.push("hitlocation");
@@ -353,9 +452,6 @@ public final class MedicalConfig {
     private MedicalConfig() {
     }
 
-    /**
-     * Registers {@link #SPEC} as this mod's COMMON config.
-     */
     public static void register(ModLoadingContext context) {
         context.registerConfig(ModConfig.Type.COMMON, SPEC);
     }
@@ -429,6 +525,58 @@ public final class MedicalConfig {
         return PAIN_SHARE_LEG.get().floatValue();
     }
 
+    public static float healthShareHead() {
+        return HEALTH_SHARE_HEAD.get().floatValue();
+    }
+
+    public static float healthShareTorso() {
+        return HEALTH_SHARE_TORSO.get().floatValue();
+    }
+
+    public static float healthShareArm() {
+        return HEALTH_SHARE_ARM.get().floatValue();
+    }
+
+    public static float healthShareLeg() {
+        return HEALTH_SHARE_LEG.get().floatValue();
+    }
+
+    /**
+     * Max share of the FULL health bar a fully-destroyed limb of this type can remove (per-limb cap). Mirrors
+     * {@link PhysiologyParams#healthShare}; used at damage time to detect a "drained" limb.
+     */
+    public static float healthShare(LimbType lt) {
+        if (lt == LimbType.HEAD) {
+            return healthShareHead();
+        }
+        if (lt == LimbType.TORSO) {
+            return healthShareTorso();
+        }
+        return lt.isLeg() ? healthShareLeg() : healthShareArm();
+    }
+
+    /**
+     * Multiplier applied to a limb's bleeding while a tourniquet is on it (slows blood loss, never treats).
+     */
+    public static float tourniquetBleedMultiplier() {
+        return TOURNIQUET_BLEED_MULTIPLIER.get().floatValue();
+    }
+
+    public static float tourniquetLegSpeedMultiplier() {
+        return TOURNIQUET_LEG_SPEED_MULTIPLIER.get().floatValue();
+    }
+
+    public static float tourniquetArmSpeedMultiplier() {
+        return TOURNIQUET_ARM_SPEED_MULTIPLIER.get().floatValue();
+    }
+
+    /**
+     * Weapon-sway intensity floor (0..1) while any arm wears a tourniquet (read client-side).
+     */
+    public static double tourniquetArmSway() {
+        return TOURNIQUET_ARM_SWAY.get();
+    }
+
     /**
      * If true, a purely pain-driven knockout is delayed by the adrenaline grace timer.
      */
@@ -436,9 +584,6 @@ public final class MedicalConfig {
         return ADRENALINE_ENABLED.get();
     }
 
-    /**
-     * Ticks a pain-driven knockout is held off by adrenaline once pain reaches knockout level.
-     */
     public static int adrenalinePainKoDelayTicks() {
         return ADRENALINE_PAIN_KO_DELAY_TICKS.get();
     }
@@ -500,18 +645,29 @@ public final class MedicalConfig {
     }
 
     /**
-     * If true, a single blow that would deplete the player's current health kills on impact instead of
-     * dropping them into a survivable unconsciousness.
+     * Fraction of the player's FULL healthy health bar a single (non-blocked) hit of the given category must
+     * deal to be a MAJOR TRAUMA that kills on impact. Per-category; unlisted categories use the default.
      */
-    public static boolean lethalBlowsEnabled() {
-        return LETHAL_BLOWS_ENABLED.get();
+    public static double majorTraumaFraction(DamageCategory cat) {
+        if (cat == null) {
+            return MAJOR_TRAUMA_FRACTION_DEFAULT.get();
+        }
+        return switch (cat) {
+            case BALLISTIC -> MAJOR_TRAUMA_FRACTION_BALLISTIC.get();
+            case EXPLOSION -> MAJOR_TRAUMA_FRACTION_EXPLOSION.get();
+            case BLUNT -> MAJOR_TRAUMA_FRACTION_BLUNT.get();
+            case UNARMED -> MAJOR_TRAUMA_FRACTION_UNARMED.get();
+            case FALL -> MAJOR_TRAUMA_FRACTION_FALL.get();
+            default -> MAJOR_TRAUMA_FRACTION_DEFAULT.get();
+        };
     }
 
     /**
-     * Fraction of current health a single blow must deal to count as a lethal (kill-on-impact) blow.
+     * Whether a damage category can ever cause instant death on impact. Fire/chemical/radiation are
+     * damage-over-time conditions and never instant-kill from a single hit.
      */
-    public static double lethalBlowHealthFraction() {
-        return LETHAL_BLOW_HEALTH_FRACTION.get();
+    public static boolean canInstakillOnImpact(DamageCategory cat) {
+        return cat != DamageCategory.FIRE && cat != DamageCategory.CHEMICAL && cat != DamageCategory.RADIATION;
     }
 
     /**
@@ -533,72 +689,58 @@ public final class MedicalConfig {
         return LEG_FRACTURE_SPEED_MULTIPLIER.get().floatValue();
     }
 
-    /**
-     * Master toggle for the injectable/opioid substance system.
-     */
     public static boolean enableInjectables() {
         return ENABLE_INJECTABLES.get();
     }
 
-    /**
-     * How much injectable drug load decays per tick.
-     */
     public static double drugDecayPerTick() {
         return DRUG_DECAY_PER_TICK.get();
     }
 
-    /**
-     * If true, a severe overdose drains health during the overdose unconsciousness.
-     */
+    public static float stimulantSpeedBonus() {
+        return STIMULANT_SPEED_BONUS.get().floatValue();
+    }
+
+    public static double clottingBoostThresholdBonus() {
+        return CLOTTING_BOOST_THRESHOLD_BONUS.get();
+    }
+
+    public static double clottingBoostRateMultiplier() {
+        return CLOTTING_BOOST_RATE_MULTIPLIER.get();
+    }
+
+    public static int clottingAgentDurationTicks() {
+        return CLOTTING_AGENT_DURATION_TICKS.get();
+    }
+
     public static boolean overdoseLethalEnabled() {
         return OVERDOSE_LETHAL_ENABLED.get();
     }
 
-    /**
-     * Drug load at/above which an overdose unconsciousness also causes a respiratory-depression health drain.
-     */
     public static double overdoseLethalThreshold() {
         return OVERDOSE_LETHAL_THRESHOLD.get();
     }
 
-    /**
-     * Health points drained per tick during a severe overdose unconsciousness.
-     */
     public static double overdoseLethalDrainPerTick() {
         return OVERDOSE_LETHAL_DRAIN_PER_TICK.get();
     }
 
-    /**
-     * Master toggle for the overdose asphyxia (respiratory-depression) phase.
-     */
     public static boolean asphyxiaEnabled() {
         return ASPHYXIA_ENABLED.get();
     }
 
-    /**
-     * Drug load at/above which a heavy overdose can trigger asphyxia.
-     */
     public static double asphyxiaThreshold() {
         return ASPHYXIA_THRESHOLD.get();
     }
 
-    /**
-     * Probability (0..1) that a qualifying overdose injection triggers asphyxia instead of instant unconsciousness.
-     */
     public static double asphyxiaChance() {
         return ASPHYXIA_CHANCE.get();
     }
 
-    /**
-     * Air supply units drained per tick while asphyxiating (sped-up drowning).
-     */
     public static int asphyxiaAirLossPerTick() {
         return ASPHYXIA_AIR_LOSS_PER_TICK.get();
     }
 
-    /**
-     * Ticks the player stays unconscious after passing out from asphyxia.
-     */
     public static int asphyxiaUnconsciousTicks() {
         return ASPHYXIA_UNCONSCIOUS_TICKS.get();
     }
@@ -610,90 +752,77 @@ public final class MedicalConfig {
         return ASPHYXIA_WEAKNESS_AMPLIFIER.get();
     }
 
+    public static boolean drowningAsphyxiaEnabled() {
+        return DROWNING_ASPHYXIA_ENABLED.get();
+    }
+
+    public static int asphyxiaStruggleTicks() {
+        return ASPHYXIA_STRUGGLE_TICKS.get();
+    }
+
+    public static float asphyxiaMoveMultiplier() {
+        return ASPHYXIA_MOVE_MULTIPLIER.get().floatValue();
+    }
+
     /**
-     * Master switch for the geometric (deterministic) hit-location system. Off -> legacy weighted sampler.
+     * Master switch for the geometric hit-location system; off = legacy weighted sampler.
      */
     public static boolean geometricHitLocation() {
         return GEOMETRIC_HIT_LOCATION.get();
     }
 
-    /**
-     * If true, an actively aiming victim has frontal-upper hits reassigned to the raised arm.
-     */
     public static boolean poseAwareArms() {
         return POSE_AWARE_ARMS.get();
     }
 
-    /**
-     * Fraction (0..1) of body height at/above which a hit is classified as the head.
-     */
     public static double headBandBottom() {
         return HEAD_BAND_BOTTOM.get();
     }
 
-    /**
-     * Fraction (0..1) of body height at/below which a hit is classified as a leg.
-     */
     public static double legBandTop() {
         return LEG_BAND_TOP.get();
     }
 
     /**
-     * Normalized horizontal offset (|nx|, 0..1) at/above which a torso-height hit is redirected to an arm.
+     * Normalized horizontal offset (|nx|) at/above which a torso-height hit is redirected to an arm.
      */
     public static double armSideThreshold() {
         return ARM_SIDE_THRESHOLD.get();
     }
 
-    /**
-     * Melee aim-ray length in blocks used when reconstructing the geometric hit location.
-     */
     public static double meleeReach() {
         return MELEE_REACH.get();
     }
 
     /**
-     * If true, player hits are classified against the server-side rigged limb boxes (Tier 2); otherwise
-     * the banded-AABB hit location is used.
+     * If true, player hits use server-side rigged limb boxes (Tier 2); otherwise banded-AABB.
      */
     public static boolean riggedLimbBoxes() {
         return RIGGED_LIMB_BOXES.get();
     }
 
     /**
-     * Amount (in blocks) each rigged limb box is inflated to absorb pose-replica drift.
+     * Inflation (blocks) applied to each rigged limb box to absorb pose-replica drift.
      */
     public static double limbBoxPadding() {
         return LIMB_BOX_PADDING.get();
     }
 
-    /**
-     * If true (and Open Persistence is present), persistent logout bodies carry/accrue the owner's medical
-     * profile and round-trip it player&harr;body on logout/login.
-     */
     public static boolean openPersistenceCompat() {
         return OPEN_PERSISTENCE_COMPAT.get();
     }
 
-    /**
-     * If true (and TACZ is present), a held TACZ gun poses the rig's arms with the baked TACZ third-person
-     * pose driven by synced aiming progress, instead of the generic raised-forward approximation.
-     */
     public static boolean taczArmPose() {
         return TACZ_ARM_POSE.get();
     }
 
     /**
-     * How incoming attacks are registered against players / bodies (OFF = vanilla tight box, ENVELOPE = model
-     * silhouette, PRECISE = envelope + rig gap-rejection).
+     * OFF = vanilla box, ENVELOPE = model silhouette, PRECISE = envelope + rig gap-rejection.
      */
     public static HitRegMode hitRegistrationMode() {
         return HITREG_MODE.get();
     }
 
-    /**
-     * Blocks the hit-scan box is widened (X/Z) to reach the arms for ENVELOPE / PRECISE registration.
-     */
     public static double hitEnvelopeInflation() {
         return HIT_ENVELOPE_INFLATION.get();
     }
@@ -726,7 +855,16 @@ public final class MedicalConfig {
                 painShareArm(),
                 painShareLeg(),
                 painSaturationK(),
-                adrenalineEnabled()
+                adrenalineEnabled(),
+                asphyxiaMoveMultiplier(),
+                stimulantSpeedBonus(),
+                healthShareHead(),
+                healthShareTorso(),
+                healthShareArm(),
+                healthShareLeg(),
+                tourniquetBleedMultiplier(),
+                tourniquetLegSpeedMultiplier(),
+                tourniquetArmSpeedMultiplier()
         );
     }
 }

@@ -7,13 +7,16 @@ import com.warfactory.medical.capability.MedicalCapabilities;
 import com.warfactory.medical.capability.MedicalProvider;
 import com.warfactory.medical.compat.OpenPersistenceCompat;
 import com.warfactory.medical.config.MedicalConfig;
+import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.damage.*;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
+import com.warfactory.medical.core.trauma.TraumaCategory;
 import com.warfactory.medical.core.trauma.TraumaRegistry;
+import com.warfactory.medical.core.trauma.TraumaType;
 import com.warfactory.medical.network.MedicalNetworking;
 import com.warfactory.medical.server.MedicalActionService;
 import com.warfactory.medical.server.MedicalEffects;
@@ -23,6 +26,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -47,21 +51,15 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The Forge FORGE-bus event handler that drives the entire medical pipeline.
+ * Forge event handler that drives the medical pipeline.
  *
- * <p>Auto-registered via {@link Mod.EventBusSubscriber}; every handler is a static method. All work is
- * server-authoritative and gated behind {@code instanceof ServerPlayer} / {@code !level.isClientSide}
- * so nothing ever runs on a logical client. The heavy lifting lives in {@link MedicalEngine} (scheduled
- * physiology) and the {@code core.damage.*} pipeline (damage -> trauma); this class only wires vanilla
- * events to them and performs the two authoritative interceptions the engine cannot: translating raw
- * hurt into trauma, and converting lethal damage into a bleed-out unconsciousness.</p>
+ * <p>All work is server-authoritative. The heavy lifting lives in {@link MedicalEngine} (scheduled
+ * physiology) and {@code core.damage.*}; this class wires vanilla events to them, translating raw hurt
+ * into trauma and converting lethal damage into a bleed-out unconsciousness.</p>
  */
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class MedicalEventHandler {
 
-    /**
-     * Capability attachment key for the per-player medical data.
-     */
     private static final ResourceLocation MEDICAL_KEY = new ResourceLocation(WFMedical.MOD_ID, "medical");
 
     /**
@@ -73,14 +71,20 @@ public final class MedicalEventHandler {
      */
     private static final float BLOCKED_RESIDUAL_MAX = 1.0F;
 
+    /**
+     * Fraction of a drained limb's overflow damage redirected into an external laceration.
+     */
+    private static final float OVERFLOW_BLEED_FACTOR = 0.8F;
+    /**
+     * Cap on a single overflow bleed's severity so one huge hit into a maxed limb stays bounded.
+     */
+    private static final float OVERFLOW_BLEED_MAX = 1.0F;
+
     private MedicalEventHandler() {
     }
 
     // ------------------------------------------------------------------ capability attach
 
-    /**
-     * Attach a fresh {@link MedicalProvider} to every player and wire its invalidation listener.
-     */
     @SubscribeEvent
     public static void onAttachCapabilities(AttachCapabilitiesEvent<Entity> event) {
         Entity object = event.getObject();
@@ -96,9 +100,6 @@ public final class MedicalEventHandler {
 
     // ------------------------------------------------------------------ scheduled physiology
 
-    /**
-     * Fan the server tick out to the engine, which enforces its own cadence and dirty-skip.
-     */
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END) {
@@ -107,9 +108,8 @@ public final class MedicalEventHandler {
     }
 
     /**
-     * Per-player tick hook that advances the overdose ASPHYXIA phase for any asphyxiating server player. Runs
-     * every tick (not the engine's throttled cadence) so the sped-up air drain is smooth and reliably
-     * overrides vanilla's air regen; a cheap no-op for everyone not currently asphyxiating.
+     * Advances asphyxia state every tick (not the engine's throttled cadence) so it responds immediately;
+     * {@link MedicalEngine#tickBreathing} early-outs cheaply for anyone breathing normally.
      */
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
@@ -123,9 +123,22 @@ public final class MedicalEventHandler {
         if (data == null) {
             return;
         }
-        MedicalProfile profile = data.getProfile();
-        if (profile.isAsphyxiating()) {
-            MedicalEngine.tickAsphyxia(player, profile);
+        MedicalEngine.tickBreathing(player, data.getProfile());
+    }
+
+    /**
+     * Suppresses vanilla drowning damage and routes it through the asphyxia system instead.
+     */
+    @SubscribeEvent
+    public static void onDrownDamage(LivingAttackEvent event) {
+        if (!MedicalConfig.drowningAsphyxiaEnabled()) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer)) {
+            return;
+        }
+        if (event.getSource().is(DamageTypes.DROWN)) {
+            event.setCanceled(true);
         }
     }
 
@@ -155,11 +168,9 @@ public final class MedicalEventHandler {
     }
 
     /**
-     * Translate incoming damage into persistent trauma instead of directly draining health. Runs only for
-     * a server-side player that is neither creative/spectator-immune nor being hit by an
-     * invulnerability-bypassing source (void, {@code /kill}), which are left to vanilla so admin kills and
-     * out-of-world deaths still work. When trauma is generated the vanilla amount is zeroed (or reduced to
-     * a small residual for a fully-blocked hit) so health stays purely derived.
+     * Translate incoming damage into persistent trauma. Invulnerability-bypassing sources (void, {@code /kill})
+     * are left to vanilla so admin kills still work. When trauma is generated the vanilla amount is zeroed
+     * (or reduced to a small residual for a fully-blocked hit) so health stays purely derived.
      */
     @SubscribeEvent
     public static void onLivingHurt(LivingHurtEvent event) {
@@ -190,93 +201,151 @@ public final class MedicalEventHandler {
             return;
         }
 
-        // --- Lethal / finishing blow: die on impact instead of the damage->trauma translation below. ---
-        // Unconsciousness is a SURVIVABLE state reached by GRADUAL depletion (bleeding / accumulated
-        // trauma), an overdose, or an admin override -- it is NOT a mandatory step before every death. Two
-        // cases kill outright here:
-        //   (a) FINISH: the player is ALREADY downed/unconscious and takes a real hit -- helpless, so it
-        //       kills (fixes "an unconscious player can't be killed").
-        //   (b) KILL ON IMPACT: a single blow big enough to deplete their current derived health -- a
-        //       genuinely lethal hit (sniper / explosion / heavy weapon), distinct from the many small hits
-        //       that accumulate into a survivable unconsciousness.
-        // Everything else falls through to the normal damage->trauma translation (health stays derived).
-        float currentHealth = player.getHealth();
+        // Finishing a helpless, already-downed player is independent of the blow's magnitude or armor: any
+        // real hit kills them (fixes "an unconscious player can't be killed"), gated by finishDownedOnHit.
         boolean alreadyDowned = profile.isDowned() || profile.getState() == HealthState.UNCONSCIOUS;
         boolean finishDowned = alreadyDowned && MedicalConfig.finishDownedOnHit();
-        boolean killOnImpact = MedicalConfig.lethalBlowsEnabled()
-                && currentHealth > 0.0F
-                && amount >= currentHealth * (float) MedicalConfig.lethalBlowHealthFraction();
-        if (finishDowned || killOnImpact) {
+
+        // Otherwise classify + armor-evaluate the hit and decide MAJOR TRAUMA vs a survivable damage->trauma
+        // translation. Instant death is INTRINSIC (no on/off toggle): a hit the medical armor did not BLOCK
+        // whose damage alone reaches this category's fraction of the FULL healthy bar kills on impact --
+        // distinct from the many small hits that accumulate into a survivable unconsciousness (health stays
+        // derived). Unconsciousness is thus never a mandatory step before every death.
+        HurtResolution res = finishDowned ? null : resolveHit(player, src, amount, profile);
+        if (finishDowned || (res != null && res.majorTrauma())) {
             markDead(player, data, profile);
             // Guarantee the vanilla hit is fatal (this killing blow bypasses the derived-health model), then
             // fall through to vanilla so actuallyHurt() -> die() -> LivingDeathEvent runs (which now only
             // finalizes and never re-intercepts, because the profile is already DEAD).
-            event.setAmount(Math.max(amount, currentHealth + 1.0F));
+            event.setAmount(Math.max(amount, player.getHealth() + 1.0F));
             return;
         }
 
-        // Taking damage interrupts any in-progress timed treatment.
+        // Survivable hit. Taking damage interrupts any in-progress timed treatment.
         if (profile.hasActiveTreatment()) {
             MedicalActionService.cancel(player, "damaged");
         }
+        if (!res.traumaAdded()) {
+            // Nothing translated (e.g. empty registry): leave vanilla behaviour intact so the player is
+            // never accidentally invulnerable.
+            return;
+        }
+        profile.markDirty();
+        data.bumpRevision();
 
-        RandomSource rand = player.getRandom();
-        long nowTick = player.level().getGameTime();
+        // Health is now derived from trauma; stop vanilla from double-counting the same hit. A fully blocked
+        // hit still leaves a cosmetic vanilla-like nick so armour "thunk" reads as a light bruise.
+        if (res.armor() == ArmorEvaluation.Outcome.BLOCKED) {
+            event.setAmount(Math.min(amount * BLOCKED_RESIDUAL_FRACTION, BLOCKED_RESIDUAL_MAX));
+        } else {
+            event.setAmount(0.0F);
+        }
+    }
+
+    /**
+     * Classifies the hit, evaluates medical armor, and either reports a major (lethal-on-impact) trauma or
+     * merges generated trauma into {@code profile}. Does NOT enact death or touch the event amount.
+     */
+    private static HurtResolution resolveHit(LivingEntity victim, DamageSource src, float amount, MedicalProfile profile) {
+        RandomSource rand = victim.getRandom();
+        long nowTick = victim.level().getGameTime();
         TraumaRegistry registry = TraumaRegistry.active();
 
-
         DamageCategory cat = DamageClassifier.classify(src);
-        LimbType limb = HitLocation.pick(player, src, cat, rand);
-        ArmorEvaluation.Outcome outcome = ArmorEvaluation.evaluate(player, limb, cat, amount, rand);
-        List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limb, amount, registry, nowTick, rand);
+        LimbType limb = HitLocation.pick(victim, src, cat, rand);
+        ArmorEvaluation.Outcome outcome = ArmorEvaluation.evaluate(victim, limb, cat, amount, rand);
 
+        // MAJOR TRAUMA: a non-blocked hit that alone reaches this category's fraction of the FULL healthy bar.
+        boolean majorTrauma = outcome != ArmorEvaluation.Outcome.BLOCKED
+                && MedicalConfig.canInstakillOnImpact(cat)
+                && amount >= MedicalConfig.maxHealthPoints() * (float) MedicalConfig.majorTraumaFraction(cat);
+        if (majorTrauma) {
+            return new HurtResolution(true, false, outcome);
+        }
+
+        List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limb, amount, registry, nowTick, rand);
+        Limb targetLimb = profile.limb(limb);
+        targetLimb.rebuildCache();
+        float beforeReduction = targetLimb.getCachedHealthReduction();
+        boolean added = mergeTrauma(profile, limb, generated);
+        if (added) {
+            applyDepletionEffects(targetLimb, limb, beforeReduction, registry, nowTick, rand);
+        }
+        return new HurtResolution(false, added, outcome);
+    }
+
+    /**
+     * When a limb's health reduction reaches its capped share ("drained"): force a fracture and redirect the
+     * overflow of THIS hit into an external laceration. The overflow bleed is deliberately external (stoppable
+     * with a bandage/tourniquet) so a maxed limb is not an unstoppable death sentence in combat.
+     */
+    private static void applyDepletionEffects(Limb limb, LimbType limbType, float beforeReduction,
+                                              TraumaRegistry registry, long nowTick, RandomSource rand) {
+        float cap = MedicalConfig.healthShare(limbType) * MedicalConfig.maxHealthPoints();
+        if (cap <= 0.0F) {
+            return;
+        }
+        limb.rebuildCache();
+        float afterReduction = limb.getCachedHealthReduction();
+        if (afterReduction < cap) {
+            return; // not drained
+        }
+        int maxPerLimb = MedicalConfig.maxTraumaPerLimb();
+        // Fracture-on-depletion: a drained limb breaks (if the feature is on and it is not already fractured).
+        if (MedicalConfig.enableFractures() && !limb.hasCachedFracture()) {
+            TraumaType fracture = resolveTrauma(registry, "fracture", TraumaCategory.FRACTURE);
+            if (fracture != null) {
+                limb.tryMerge(new Trauma(fracture, limbType, 1.0F, nowTick), maxPerLimb);
+            }
+        }
+        // Overflow of THIS hit beyond the cap -> a large EXTERNAL laceration on that limb (carrying the blend
+        // of heavy bleeding + some pain). Deliberately an external bleed, not internal bleeding, so it stays
+        // STOPPABLE on the limb with a bandage / tourniquet -- otherwise a maxed limb would be an unstoppable
+        // death sentence in any fight without a hemostatic.
+        float overflow = afterReduction - Math.max(cap, beforeReduction);
+        if (overflow > 0.0F && MedicalConfig.enableBleeding()) {
+            TraumaType bleed = resolveTrauma(registry, "laceration_large", TraumaCategory.LACERATION);
+            if (bleed != null) {
+                float sev = Math.min(overflow * OVERFLOW_BLEED_FACTOR, OVERFLOW_BLEED_MAX);
+                if (sev > 0.0F) {
+                    limb.tryMerge(new Trauma(bleed, limbType, sev, nowTick), maxPerLimb);
+                }
+            }
+        }
+        limb.rebuildCache();
+    }
+
+    private static TraumaType resolveTrauma(TraumaRegistry registry, String id, TraumaCategory category) {
+        TraumaType type = registry.get(id);
+        if (type == null) {
+            type = registry.firstOfCategory(category);
+        }
+        return type;
+    }
+
+    /**
+     * Merge generated trauma into the profile's target limb, respecting the fracture feature toggle and the
+     * per-limb cap. Returns whether anything was actually added.
+     */
+    private static boolean mergeTrauma(MedicalProfile profile, LimbType limb, List<Trauma> generated) {
         boolean added = false;
         int maxPerLimb = MedicalConfig.maxTraumaPerLimb();
         Limb targetLimb = profile.limb(limb);
         for (int i = 0; i < generated.size(); i++) {
             Trauma t = generated.get(i);
-            // Respect the fracture feature toggle: drop fractures rather than filtering upstream.
             if (t.isFracture() && !MedicalConfig.enableFractures()) {
                 continue;
             }
             targetLimb.tryMerge(t, maxPerLimb);
             added = true;
         }
-
-        if (!added) {
-            // Nothing translated (e.g. empty registry): leave vanilla behaviour intact so the player is
-            // never accidentally invulnerable.
-            return;
-        }
-
-        profile.markDirty();
-        data.bumpRevision();
-
-        // Health is now derived from trauma; stop vanilla from double-counting the same hit. A fully
-        // blocked hit still leaves a cosmetic vanilla-like nick so armour "thunk" reads as a light bruise.
-        if (outcome == ArmorEvaluation.Outcome.BLOCKED) {
-            float residual = Math.min(amount * BLOCKED_RESIDUAL_FRACTION, BLOCKED_RESIDUAL_MAX);
-            event.setAmount(residual);
-        } else {
-            event.setAmount(0.0F);
-        }
+        return added;
     }
 
-    // ------------------------------------------------------------------ death finalization
-
     /**
-     * Finalize a death. Unconsciousness is NOT a mandatory step before death: this handler NEVER cancels the
-     * event. Whatever made the blow lethal — a kill-on-impact / finishing blow already flagged DEAD in
-     * {@link #onLivingHurt}, the engine's expired bleed-out timer, a lethal overdose drain, {@code /kill}, the
-     * void, or plain vanilla damage that outran the derived-health model — is allowed straight through. All we
-     * do is finalize the medical bookkeeping (mark DEAD, clear every downed/overdose/bleed-out marker, cancel
-     * any treatment, broadcast the downed=false edge and restore the standing hitbox) so no tracker keeps
-     * rendering a downed pose on a dying player and the body doesn't die with the rotated downed collision box.
-     *
-     * <p>The actual "gradual depletion becomes a survivable unconsciousness" behaviour lives in
-     * {@link com.warfactory.medical.core.Physiology} (lethal condition -> UNCONSCIOUS while bleed-out is
-     * enabled) together with the &ge;1-HP pin in {@link MedicalEffects}: a player collapses BEFORE their health
-     * ever reaches zero, so a death event here only ever means a genuine kill.</p>
+     * Finalizes medical bookkeeping on death: mark DEAD, clear downed/overdose/bleed-out markers, cancel
+     * treatment, broadcast downed=false, and restore the standing hitbox. Never cancels the event — any
+     * cause (kill-on-impact, bleed-out timer, lethal overdose, /kill, void) goes straight through.
      */
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
@@ -300,19 +369,14 @@ public final class MedicalEventHandler {
         }
     }
 
+    // ------------------------------------------------------------------ death finalization
+
     /**
-     * Finalize a player as DEAD in the medical model: set the state, clear every transient downed / overdose /
-     * bleed-out / asphyxia marker and any admin-forced override, cancel any in-progress treatment, broadcast
-     * the downed=false edge to trackers, and refresh the vanilla hitbox/eye-height back to standing. Idempotent
-     * and shared by {@link #onLivingHurt} (kill-on-impact / finishing a downed player) and {@link #onLivingDeath}.
+     * Sets the medical state to DEAD, clears all transient downed/overdose/bleed-out markers, cancels
+     * treatment, broadcasts downed=false, and restores the standing hitbox. Idempotent.
      */
     private static void markDead(ServerPlayer player, IMedicalData data, MedicalProfile profile) {
-        profile.setState(HealthState.DEAD);
-        profile.setForcedState(null);
-        profile.setOverdoseUnconscious(false);
-        profile.setOverdoseUntilTick(0L);
-        profile.setBleedoutSinceTick(-1L);
-        profile.setAsphyxiating(false);
+        profile.enterDeadState(false);
         if (profile.hasActiveTreatment()) {
             MedicalActionService.cancel(player, "dead");
         }
@@ -323,80 +387,71 @@ public final class MedicalEventHandler {
         // Restore the standing collision box / eye-height so the dying body isn't left with the rotated downed
         // hitbox (and the low camera), which otherwise lingered into the respawn as a twisted pose.
         player.refreshDimensions();
-        profile.markDirty();
         data.bumpRevision();
     }
 
-    // ------------------------------------------------------------------ incapacitation (unconscious)
-
     /**
-     * While unconscious, a player is fully helpless: they cannot act. Movement/sprint/jump are already
-     * derived-locked (speed 0, {@code jumpMultiplier}/sprint blocked via the mixin + attribute modifier), and
-     * jump is additionally hard-cancelled in {@code LivingEntityMixin}. The handlers below block the remaining
-     * interaction surface — using/placing items, breaking blocks, attacking and interacting with entities —
-     * for any unconscious player. They read the server-authoritative {@link MedicalState} (which is also
-     * client-correct for the local player), so they no-op for a conscious player and only ever cancel a downed
-     * player's own actions (a medic interacting WITH a downed player is a separate, conscious actor and is
-     * never blocked). Cancelling the event on both logical sides gives instant client feedback and stays
-     * server-authoritative.
+     * Block all interaction (place/use/break/attack) when the player cannot use their hands:
+     * {@link MedicalState#isHandsDisabled} is true while unconscious OR with both arms disabled. A medic
+     * acting on a downed player is a separate conscious actor and is never blocked.
      */
     @SubscribeEvent
     public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
-        if (MedicalState.isUnconscious(event.getEntity())) {
+        if (MedicalState.isHandsDisabled(event.getEntity())) {
             event.setCanceled(true);
         }
     }
 
+    // ------------------------------------------------------------------ incapacitation (unconscious)
+
     @SubscribeEvent
     public static void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
-        if (MedicalState.isUnconscious(event.getEntity())) {
+        if (MedicalState.isHandsDisabled(event.getEntity())) {
             event.setCanceled(true);
         }
     }
 
     @SubscribeEvent
     public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
-        if (MedicalState.isUnconscious(event.getEntity())) {
+        if (MedicalState.isHandsDisabled(event.getEntity())) {
             event.setCanceled(true);
         }
     }
 
     @SubscribeEvent
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
-        if (MedicalState.isUnconscious(event.getEntity())) {
+        if (MedicalState.isHandsDisabled(event.getEntity())) {
             event.setCanceled(true);
         }
     }
 
     @SubscribeEvent
     public static void onEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
-        if (MedicalState.isUnconscious(event.getEntity())) {
+        if (MedicalState.isHandsDisabled(event.getEntity())) {
             event.setCanceled(true);
         }
     }
 
     @SubscribeEvent
     public static void onAttackEntity(AttackEntityEvent event) {
-        if (MedicalState.isUnconscious(event.getEntity())) {
+        if (MedicalState.isHandsDisabled(event.getEntity())) {
             event.setCanceled(true);
         }
     }
 
     @SubscribeEvent
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
-        if (event.getPlayer() != null && MedicalState.isUnconscious(event.getPlayer())) {
+        if (event.getPlayer() != null && MedicalState.isHandsDisabled(event.getPlayer())) {
             event.setCanceled(true);
         }
     }
 
     @SubscribeEvent
     public static void onUseItemStart(LivingEntityUseItemEvent.Start event) {
-        if (event.getEntity() instanceof Player player && MedicalState.isUnconscious(player)) {
+        if (event.getEntity() instanceof Player player && MedicalState.isHandsDisabled(player)) {
             event.setCanceled(true);
         }
     }
-
-    // ------------------------------------------------------------------ lifecycle
 
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
@@ -404,6 +459,8 @@ public final class MedicalEventHandler {
             MedicalEngine.onPlayerJoin(player);
         }
     }
+
+    // ------------------------------------------------------------------ lifecycle
 
     @SubscribeEvent
     public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
@@ -427,16 +484,10 @@ public final class MedicalEventHandler {
     }
 
     /**
-     * Keep the medical attribute modifiers (notably the +10 MAX_HEALTH lift) consistent across a gamemode
-     * switch. Without this, entering creative/spectator strips our modifiers (creative immunity calls
-     * {@link MedicalEffects#clear}), and returning to survival never re-adds them because a healthy player is
-     * skipped by the engine's dirty fast-path — leaving max-health rolled back to the vanilla 20.
-     *
-     * <p>The event fires BEFORE the switch is applied, so {@code player.isCreative()} still reflects the OLD
-     * mode; the decision is made purely on {@link PlayerEvent.PlayerChangeGameModeEvent#getNewGameMode()}. If
-     * the NEW mode is creative/spectator and creative-immunity is enabled we strip our modifiers; otherwise we
-     * fully re-sync (re-adds the modifier, sets health to the derived target, pushes a snapshot). Server-only
-     * and null-safe against a missing capability.</p>
+     * Keeps attribute modifiers consistent across a gamemode switch. The event fires BEFORE the switch, so
+     * {@code player.isCreative()} still reports the OLD mode; we use {@code getNewGameMode()} instead.
+     * On a creative/spectator→survival transition the stale flags would wrongly skip re-adding the +10
+     * MAX_HEALTH modifier, so we pass the authoritative decision computed from the new mode.
      */
     @SubscribeEvent
     public static void onChangeGameMode(PlayerEvent.PlayerChangeGameModeEvent event) {
@@ -453,20 +504,14 @@ public final class MedicalEventHandler {
         if (immuneNext) {
             MedicalEffects.clear(player);
         } else {
-            // The event fires BEFORE the switch, so player.isCreative()/isSpectator() still report the OLD
-            // mode; the parameterless resync() would re-consult those stale flags and, on a
-            // creative/spectator -> survival transition, wrongly keep treating the player as creative-immune
-            // and skip re-adding the +10 MAX_HEALTH modifier. Pass the authoritative decision (immuneNext is
-            // false in this branch, so effects MUST be applied) computed from getNewGameMode() above.
             MedicalEngine.resync(player, true);
         }
     }
 
     /**
-     * Downed-state catch-up for late observers. Edge broadcasts only fire on a state change, so a viewer
-     * who begins tracking a player who is ALREADY downed would otherwise never learn it. When a server
-     * player starts tracking another server player, push the target's current downed state to just that
-     * viewer. Null-safe: if the target has no medical capability, nothing is sent.
+     * Downed-state catch-up for late observers: edge broadcasts only fire on a state change, so a viewer who
+     * starts tracking an already-downed player would never learn it. Sends the current downed state to just
+     * that viewer.
      */
     @SubscribeEvent
     public static void onStartTracking(PlayerEvent.StartTracking event) {
@@ -484,10 +529,9 @@ public final class MedicalEventHandler {
     }
 
     /**
-     * Carry the medical profile across the clone boundary. Per design, a true-death respawn does NOT
-     * auto-heal by carrying trauma (the fresh clone keeps its pristine default profile), while a
-     * non-death clone (dimension change, e.g. returning from the End) preserves the full trauma graph.
-     * The original's capabilities are temporarily revived so they can be read after death invalidation.
+     * Carries the medical profile across a non-death clone boundary (dimension change preserves trauma);
+     * a true-death respawn keeps a fresh profile. The original's caps are temporarily revived to read after
+     * death invalidation.
      */
     @SubscribeEvent
     public static void onPlayerClone(PlayerEvent.Clone event) {
@@ -503,8 +547,6 @@ public final class MedicalEventHandler {
             original.invalidateCaps();
         }
     }
-
-    // Open Persistence integration
 
     @SubscribeEvent
     public static void onPersistentBodyHurt(LivingHurtEvent event) {
@@ -532,35 +574,27 @@ public final class MedicalEventHandler {
         }
         MedicalProfile profile = data.getProfile();
 
-        RandomSource rand = victim.getRandom();
-        long nowTick = victim.level().getGameTime();
-        TraumaRegistry registry = TraumaRegistry.active();
         // Gap-rejection is handled pre-hit in onLivingAttackGapReject (persistent bodies included), so this
-        // only sees attacks that connected with a limb.
-        DamageCategory cat = DamageClassifier.classify(src);
-        LimbType limb = HitLocation.pick(victim, src, cat, rand);
-        ArmorEvaluation.Outcome outcome = ArmorEvaluation.evaluate(victim, limb, cat, amount, rand);
-        List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limb, amount, registry, nowTick, rand);
-
-        boolean added = false;
-        int maxPerLimb = MedicalConfig.maxTraumaPerLimb();
-        Limb targetLimb = profile.limb(limb);
-        for (int i = 0; i < generated.size(); i++) {
-            Trauma t = generated.get(i);
-            if (t.isFracture() && !MedicalConfig.enableFractures()) {
-                continue;
-            }
-            targetLimb.tryMerge(t, maxPerLimb);
-            added = true;
+        // only sees attacks that connected with a limb. Same intrinsic major-trauma rule as live players.
+        HurtResolution res = resolveHit(victim, src, amount, profile);
+        if (res.majorTrauma()) {
+            // A massive blow destroys the body: mark the carried profile DEAD and let the vanilla lethal
+            // amount kill the entity (bodies keep vanilla health, so here we DO push the amount).
+            profile.enterDeadState(false);
+            data.bumpRevision();
+            event.setAmount(Math.max(amount, victim.getHealth() + 1.0F));
+            return;
         }
-        if (added) {
+        if (res.traumaAdded()) {
             profile.markDirty();
             data.bumpRevision();
         }
-        // Deliberately NOT zeroing event.getAmount(): the body keeps vanilla health (no offline physiology
-        // tick), so Open Persistence's health/death handling is untouched -- we only stamp the carried profile.
+        // Deliberately NOT zeroing event.getAmount() for a survivable hit: the body keeps vanilla health (no
+        // offline physiology tick), so Open Persistence's health/death handling is untouched -- we only stamp
+        // the carried profile.
     }
 
+    // Open Persistence integration
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onLogoutCopyProfileToBody(PlayerEvent.PlayerLoggedOutEvent event) {
@@ -579,10 +613,16 @@ public final class MedicalEventHandler {
             if (bodyData != null) {
                 bodyData.load(playerData.save());
                 bodyData.bumpRevision();
+                // Give the body the owner's derived health pool (default 30, not the vanilla 20) so a
+                // combat-logged body is exactly as killable as the player was. Bodies don't tick physiology,
+                // so stamp it once here (a permanent modifier that survives a restart).
+                if (body instanceof LivingEntity living) {
+                    DerivedStats stats = bodyData.getProfile().recompute(MedicalConfig.toPhysiologyParams());
+                    MedicalEffects.applyToBody(living, stats);
+                }
             }
         });
     }
-
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onLoginCopyProfileFromBody(PlayerEvent.PlayerLoggedInEvent event) {
@@ -606,7 +646,6 @@ public final class MedicalEventHandler {
         });
     }
 
-
     private static Optional<Entity> findPersistentBody(ServerPlayer player) {
         UUID id = player.getUUID();
         AABB box = player.getBoundingBox().inflate(4.0);
@@ -614,5 +653,8 @@ public final class MedicalEventHandler {
                 e -> OpenPersistenceCompat.isPersistentBody(e)
                         && OpenPersistenceCompat.bodyOwner(e).map(id::equals).orElse(false));
         return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
+    }
+
+    private record HurtResolution(boolean majorTrauma, boolean traumaAdded, ArmorEvaluation.Outcome armor) {
     }
 }

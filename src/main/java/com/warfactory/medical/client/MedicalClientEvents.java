@@ -1,6 +1,7 @@
 package com.warfactory.medical.client;
 
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.api.MedicalState;
 import com.warfactory.medical.client.render.HitboxDebugRenderer;
 import com.warfactory.medical.client.screen.CharacterSheetUI;
 import com.warfactory.medical.client.screen.RadialMenuUI;
@@ -8,17 +9,18 @@ import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.compat.tacz.TaczPoseCaptureClient;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
-import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.client.event.RenderGuiOverlayEvent;
+import net.minecraftforge.client.event.RenderHandEvent;
 import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -41,9 +43,7 @@ public final class MedicalClientEvents {
     }
 
     /**
-     * Poll the medical key bindings at the end of each client tick. A binding only fires when no screen is
-     * open and the local player exists; {@link net.minecraft.client.KeyMapping#consumeClick()} drains the
-     * queued presses so a held key does not repeat.
+     * Poll medical key bindings at end of tick; drain queued clicks so held keys don't repeat.
      */
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
@@ -81,19 +81,10 @@ public final class MedicalClientEvents {
     }
 
     /**
-     * Safety net for the vanilla {@link DeathScreen} respawn/title buttons.
-     *
-     * <p>{@code DeathScreen} disables its buttons in {@code init()} and re-enables them only on the EXACT tick
-     * its internal counter reaches 20. If that precise tick is ever missed — e.g. an {@code init()} re-run on a
-     * window resize after the counter already passed 20, or a skipped screen tick — the buttons stay disabled
-     * forever and the player can never click "Respawn". (Our old death handling, which cancelled the death event
-     * and pinned the player alive, could also leave the client showing a death screen the server disagreed with;
-     * the death redesign removes that desync, and this is belt-and-braces on top.)</p>
-     *
-     * <p>Once a death screen has been open a little while with EVERY button still disabled, re-enable them all.
-     * We only act when nothing is active, so this never re-enables the respawn button that vanilla intentionally
-     * disables right after a click (the title button stays active, so the "stuck" condition is not detected).
-     * Uses only public API ({@link Screen#children()}, {@link AbstractWidget#active}).</p>
+     * Safety net for the vanilla DeathScreen respawn button. DeathScreen re-enables buttons only on the
+     * EXACT tick its counter reaches 20 — missed on window resize or skipped screen tick, leaving buttons
+     * disabled forever. Once the screen has been open >25 ticks with every button still disabled, force
+     * them all active. Skips if any button is already active, so it never clobbers a just-clicked button.
      */
     private static void keepRespawnButtonUsable(Minecraft mc) {
         Screen screen = mc.screen;
@@ -123,9 +114,7 @@ public final class MedicalClientEvents {
     }
 
     /**
-     * Hide the vanilla hearts so our own health bar (drawn by {@code HealthBarOverlay}) replaces them.
-     * Only the {@code PLAYER_HEALTH} overlay is cancelled — absorption, armor, food, etc. are untouched.
-     * In creative / spectator vanilla already hides the hearts, so we skip cancelling there.
+     * Cancel the vanilla PLAYER_HEALTH overlay so our HealthBarOverlay replaces it; skipped in creative/spectator.
      */
     @SubscribeEvent
     public static void onRenderGuiOverlayPre(RenderGuiOverlayEvent.Pre event) {
@@ -137,6 +126,18 @@ public final class MedicalClientEvents {
             return;
         }
         event.setCanceled(true);
+    }
+
+    /**
+     * Hide the first-person hand(s) while both arms are drained/disabled — the player physically can't raise
+     * them. Cancelling {@link RenderHandEvent} suppresses the held-item + arm render for that frame.
+     */
+    @SubscribeEvent
+    public static void onRenderHand(RenderHandEvent event) {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null && MedicalState.isBothArmsDisabled(player)) {
+            event.setCanceled(true);
+        }
     }
 
     /**

@@ -13,15 +13,8 @@ import com.warfactory.medical.network.MedicalNetworking;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * Server-authoritative application of an injectable {@link Substance} to a player's medical state.
- *
- * <p>Injection is SYSTEMIC (no limb target). An opioid raises the perceived-pain mask and adds to the
- * accumulating {@code drugLoad}; crossing the substance's overdose threshold renders the player unconscious
- * (locks movement / jump via the derived-movement path and shows a black screen client-side). An antidote
- * slams {@code drugLoad} down, ends the overdose unconsciousness immediately and drops pain suppression to
- * zero (pain rushes back). Every mutation recomputes the derived stats and pushes them onto the vanilla body
- * this instant,
- * then sends a full sync so the client reacts without waiting for the next engine pass.</p>
+ * Server-authoritative application of an injectable {@link Substance} to a player's medical state. Injection
+ * is systemic (no limb target); every mutation recomputes derived stats and pushes a full sync immediately.
  */
 public final class SubstanceService {
 
@@ -66,7 +59,7 @@ public final class SubstanceService {
             profile.setDrugLoad(Math.max(0.0F, profile.getDrugLoad() - substance.reversalAmount()));
             profile.setOverdoseUntilTick(0L);
             profile.setOverdoseUnconscious(false);
-            profile.setAsphyxiating(false);
+            profile.clearAsphyxia();
             profile.setPainSuppression(0.0F);
         } else {
             // Opioid: strong pain immunity + accumulating drug load. Re-dosing to stay pain-free stacks the
@@ -74,11 +67,29 @@ public final class SubstanceService {
             // unless a heavy (but not yet lethal) overdose instead trips the asphyxia phase first.
             profile.setPainSuppression(Math.max(profile.getPainSuppression(), substance.painSuppression()));
             profile.setDrugLoad(profile.getDrugLoad() + substance.doseLoad());
+            // Timed stimulant / clotting effects (e.g. Combat Stimulant): full strength until now+effectTicks.
+            // The beneficial window ends there while the drug LOAD above lingers much longer (the come-down).
+            if (substance.effectTicks() > 0) {
+                long end = now + substance.effectTicks();
+                if (substance.clottingBoost() > 0.0F) {
+                    profile.setClottingBoost(Math.max(profile.getClottingBoost(), substance.clottingBoost()));
+                    if (profile.getClottingBoostEndTick() < end) {
+                        profile.setClottingBoostEndTick(end);
+                    }
+                }
+                if (substance.stimulantStrength() > 0.0F) {
+                    profile.setStimulant(Math.max(profile.getStimulant(), substance.stimulantStrength()));
+                    if (profile.getStimulantEndTick() < end) {
+                        profile.setStimulantEndTick(end);
+                    }
+                }
+            }
             if (profile.getDrugLoad() >= substance.overdoseThreshold()) {
                 if (shouldStartAsphyxia(player, profile)) {
-                    // Conscious respiratory-depression precursor: the per-tick engine hook drains the player's
-                    // air (weakness / no sprint / blur) and tips them into unconsciousness when it runs out.
-                    profile.setAsphyxiating(true);
+                    // Conscious respiratory-depression precursor: the per-tick breathing hook then drains the
+                    // player's air (weakness / heavy slow / blur) and tips them into a FATAL unconsciousness
+                    // unless the drug is reversed (naloxone) or decays back below the asphyxia threshold in time.
+                    profile.startAsphyxia(now);
                 } else {
                     profile.setOverdoseUntilTick(now + substance.unconsciousTicks());
                     profile.setOverdoseUnconscious(true);
@@ -107,10 +118,8 @@ public final class SubstanceService {
     }
 
     /**
-     * Whether this heavy overdose injection should trip the conscious ASPHYXIA phase instead of an immediate
-     * overdose unconsciousness. Requires the feature enabled, the drug load in the heavy window (at/above
-     * {@code asphyxiaThreshold} but below the lethal threshold, since a severe overdose goes straight under),
-     * the player still conscious and not already asphyxiating, and a successful {@code asphyxiaChance} roll.
+     * True if this overdose should enter the conscious asphyxia phase instead of immediate unconsciousness
+     * (requires feature enabled, load in the asphyxia window but below lethal threshold, and a chance roll).
      */
     private static boolean shouldStartAsphyxia(ServerPlayer player, MedicalProfile profile) {
         if (!MedicalConfig.asphyxiaEnabled()) {

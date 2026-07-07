@@ -73,6 +73,31 @@ public final class MedicalState {
     }
 
     /**
+     * @return true when BOTH arms are drained/disabled — hands cannot swing, use or interact, and the
+     * first-person hands are hidden.
+     */
+    public static boolean isBothArmsDisabled(Player player) {
+        DerivedStats s = stats(player);
+        return s != null && s.bothArmsDisabled();
+    }
+
+    /**
+     * @return true when BOTH legs are drained/disabled — the player is forced into a crawl.
+     */
+    public static boolean isBothLegsDisabled(Player player) {
+        DerivedStats s = stats(player);
+        return s != null && s.bothLegsDisabled();
+    }
+
+    /**
+     * @return true when the player cannot use their hands at all — unconscious OR both arms disabled.
+     */
+    public static boolean isHandsDisabled(Player player) {
+        DerivedStats s = stats(player);
+        return s != null && (s.state() == HealthState.UNCONSCIOUS || s.bothArmsDisabled());
+    }
+
+    /**
      * Whether a player is currently "downed" (unconscious / passed out), correct on BOTH logical sides and
      * for ANY player — not just the local one. Used by the hitbox / eye-height mixins, which run for every
      * player on both sides.

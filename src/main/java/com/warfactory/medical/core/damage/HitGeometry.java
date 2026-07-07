@@ -27,7 +27,7 @@ public final class HitGeometry {
 
 
     private static final double HITSCAN_RANGE = 64.0;
-   // Slack (blocks) so a fast projectile already past/inside the box still yields an entry point.
+    // Slack (blocks) so a fast projectile already past/inside the box still yields an entry point.
     private static final double TRACE_MARGIN = 1.0;
     //Pose band floor: frontal-upper hits above this relY are reassigned to a raised arm when aiming.
     private static final double UPPER_ARM_LOW = 0.55;
@@ -169,7 +169,7 @@ public final class HitGeometry {
                 return null;
             }
             Vec3 d = dir.normalize();
-            return new Vec3[] {from.subtract(d.scale(TRACE_MARGIN)), to.add(d.scale(TRACE_MARGIN))};
+            return new Vec3[]{from.subtract(d.scale(TRACE_MARGIN)), to.add(d.scale(TRACE_MARGIN))};
         }
         if (attacker instanceof LivingEntity shooter && attacker != victim) {
             boolean ballistic = (cat == DamageCategory.BALLISTIC);
@@ -181,7 +181,7 @@ public final class HitGeometry {
                 Vec3 eye = shooter.getEyePosition();
                 Vec3 look = shooter.getViewVector(1.0F);
                 double range = ballistic ? HITSCAN_RANGE : MedicalConfig.meleeReach();
-                return new Vec3[] {eye, eye.add(look.scale(range))};
+                return new Vec3[]{eye, eye.add(look.scale(range))};
             }
         }
         return null;
@@ -318,13 +318,15 @@ public final class HitGeometry {
             double t = obb.rayEntry(origin, localDir);
             if (t < best) {
                 best = t;
-                limb = obb.limb;
+                limb = obb.limb();
             }
         }
         return best == Double.POSITIVE_INFINITY ? null : limb;
     }
 
-    /** Nearest-OBB (by {@link Obb#distanceSq}) limb for a point-only source; never {@code null}. */
+    /**
+     * Nearest-OBB (by {@link Obb#distanceSq}) limb for a point-only source; never {@code null}.
+     */
     private static LimbType rigPointPick(LivingEntity victim, Vec3 worldPoint) {
         Vec3 local = worldToLocalPoint(victim, worldPoint);
         HumanoidRig.LocalRig rig = HumanoidRig.compute(victim);
@@ -334,13 +336,15 @@ public final class HitGeometry {
             double d = obb.distanceSq(local);
             if (d < best) {
                 best = d;
-                limb = obb.limb;
+                limb = obb.limb();
             }
         }
         return limb;
     }
 
-    /** World point -> entity-local (feet origin, Y-up, X=right, Z=front), body-yaw removed. */
+    /**
+     * World point -> entity-local (feet origin, Y-up, X=right, Z=front), body-yaw removed.
+     */
     private static Vec3 worldToLocalPoint(LivingEntity victim, Vec3 world) {
         double yaw = Math.toRadians(victim.yBodyRot);
         Vec3 front = new Vec3(-Math.sin(yaw), 0.0, Math.cos(yaw));
@@ -349,7 +353,9 @@ public final class HitGeometry {
         return new Vec3(off.dot(right), off.y, off.dot(front));
     }
 
-    /** World direction -> entity-local axes (no translation), matching {@link #worldToLocalPoint}. */
+    /**
+     * World direction -> entity-local axes (no translation), matching {@link #worldToLocalPoint}.
+     */
     private static Vec3 worldToLocalDir(LivingEntity victim, Vec3 dir) {
         double yaw = Math.toRadians(victim.yBodyRot);
         Vec3 front = new Vec3(-Math.sin(yaw), 0.0, Math.cos(yaw));

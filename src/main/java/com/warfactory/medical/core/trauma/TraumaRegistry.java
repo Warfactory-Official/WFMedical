@@ -6,10 +6,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Holds the set of known {@link TraumaType} definitions (populated from config at load time).
- *
- * <p>A single {@link #active()} instance is exposed so other modules can resolve trauma types by id
- * during NBT load / networking without threading the registry through every call.</p>
+ * Holds the known {@link TraumaType} definitions. A single {@link #active()} instance is exposed so other
+ * modules can resolve trauma types by id during NBT load / networking without threading the registry through.
  */
 public final class TraumaRegistry {
 

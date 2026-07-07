@@ -172,12 +172,14 @@ public final class MedicalEngine {
             player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 60, armWeakness - 1, true, false, true));
         }
 
-        // (5) Delta-ish sync: only when the authoritative revision moved past the last sent one.
+        // (5) Sync only when the authoritative revision moved past the last sent one. syncTo sends an
+        // incremental delta against the client's baseline (or a full snapshot the first time / after a
+        // resync re-established the baseline).
         if (wasDirty) {
             data.bumpRevision();
         }
         if (data.needsSync()) {
-            MedicalNetworking.sendFull(player, profile);
+            MedicalNetworking.syncTo(player, profile);
             data.markSynced();
         }
 
@@ -214,6 +216,17 @@ public final class MedicalEngine {
      * profile dirty on any transition so the recompute re-derives mobility (overdose locks / wake unlocks).
      */
     private static void advanceSubstances(ServerPlayer player, MedicalProfile profile, long nowTick, int interval) {
+        // Timed stimulant / clotting effects END on their own deadline (default 3 min); the injected drug LOAD
+        // lingers LONGER (the come-down / crash), so the buff is gone while the overdose risk is still present.
+        if (profile.getStimulant() > 0.0F && nowTick >= profile.getStimulantEndTick()) {
+            profile.setStimulant(0.0F);
+            profile.markDirty();
+        }
+        if (profile.getClottingBoost() > 0.0F && nowTick >= profile.getClottingBoostEndTick()) {
+            profile.setClottingBoost(0.0F);
+            profile.markDirty();
+        }
+
         // Severe overdose: drug load at/above the lethal line drives the respiratory-depression drain AND
         // sustains the unconsciousness past the fixed timer. Without this, the drain stopped when the timed
         // window elapsed (guarded by isOverdoseUnconscious), so a single dose-stack could never exhaust health
@@ -266,77 +279,127 @@ public final class MedicalEngine {
                     player.setHealth(next);
                 } else {
                     // Fatal tick: the drain would cross the 1-HP UNCONSCIOUS pin floor -> die now.
-                    profile.setForcedState(HealthState.DEAD);
-                    profile.setState(HealthState.DEAD);
-                    profile.setOverdoseUnconscious(false);
-                    profile.setOverdoseUntilTick(0L);
-                    profile.setBleedoutSinceTick(-1L);
-                    if (profile.hasActiveTreatment()) {
-                        MedicalActionService.cancel(player, "dead");
-                    }
-                    profile.markDirty();
-                    player.setHealth(0.0F); // vanilla death pipeline resolves the rest
+                    enactEngineDeath(player, profile);
                 }
             }
         }
     }
 
     /**
-     * Per-tick ASPHYXIA advance, driven from {@link com.warfactory.medical.event.MedicalEventHandler}'s player
-     * tick (NOT the throttled engine cadence) so the air drain is smooth and reliably overrides vanilla's
-     * on-land air regen. While the player is asphyxiating this drains their air supply fast (sped-up drowning)
-     * and pins a short Weakness effect; when the air runs out the player loses consciousness via the overdose
-     * cause (a WAKE timer, not a death timer) rather than drowning to death. Aborts cleanly if the overdose has
-     * cleared (antidote / decay), the player already went under (or died) by another path, or creative immunity
-     * applies — in which case the air recovers naturally.
+     * Per-tick breathing / ASPHYXIA advance, driven from {@link com.warfactory.medical.event.MedicalEventHandler}'s
+     * player tick (NOT the throttled engine cadence) so it responds immediately and reliably overrides vanilla's
+     * air handling. Asphyxia is NOT physical trauma; it is its own condition with two interchangeable causes:
+     * <ul>
+     *   <li>DROWNING — underwater with the breath gone (routed here instead of vanilla drowning damage);</li>
+     *   <li>DRUG — a heavy opioid overdose (respiratory depression), started probabilistically on injection.</li>
+     * </ul>
+     * Lifecycle: a conscious STRUGGLE window (heavily slowed, blurred, no sprint/jump), then PASS OUT with a
+     * death deadline; the player DIES unless the cause is cleared first (reach the surface / reverse or decay the
+     * drug). Clearing the cause at any point recovers cleanly. A cheap no-op for anyone breathing normally.
      *
-     * <p>Sprint-block and the client blur come from {@link MedicalProfile#isAsphyxiating()} flowing through the
-     * derived snapshot (synced when asphyxia starts / ends), so this hook only handles air + weakness + hand-off.</p>
+     * <p>The heavy movement constraint, blur and vignette come from {@link MedicalProfile#isAsphyxiating()} /
+     * the UNCONSCIOUS state flowing through the derived snapshot, so this hook only drives air, weakness and the
+     * conscious&rarr;unconscious&rarr;death (or recovery) progression.</p>
      */
-    public static void tickAsphyxia(ServerPlayer player, MedicalProfile profile) {
-        if (!profile.isAsphyxiating()) {
-            return;
-        }
+    public static void tickBreathing(ServerPlayer player, MedicalProfile profile) {
+        // Creative/spectator immunity: drop any asphyxia and let air recover.
         if ((player.isCreative() || player.isSpectator()) && MedicalConfig.effectImmuneInCreative()) {
-            stopAsphyxia(player, profile);
+            if (profile.isAsphyxiating() || profile.isAsphyxiaUnconscious()) {
+                profile.clearAsphyxia();
+                profile.markDirty();
+                resync(player);
+            }
             return;
         }
-        // Safety: the player already went under (or died) by another path — the merged unconscious handling
-        // takes over. (Naloxone counterplay clears the asphyxia flag directly on injection, so once asphyxia
-        // has started it otherwise runs deterministically to consciousness loss rather than aborting on decay.)
-        if (profile.isOverdoseUnconscious()
-                || profile.getState() == HealthState.UNCONSCIOUS
-                || profile.getState() == HealthState.DEAD) {
-            stopAsphyxia(player, profile);
+        // A dead / dying player is left alone (mirrors tickPlayer's top guard).
+        if (player.getHealth() <= 0.0F) {
             return;
         }
-        // Refresh the debilitating Weakness while asphyxiating (short + re-applied each tick, no particles).
-        player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 40,
-                MedicalConfig.asphyxiaWeaknessAmplifier(), true, false, true));
-        // Sped-up drowning: drain air fast, overriding vanilla's on-land regen (which runs earlier this tick).
-        int next = player.getAirSupply() - MedicalConfig.asphyxiaAirLossPerTick();
-        if (next > 0) {
-            player.setAirSupply(next);
+
+        boolean drowning = MedicalConfig.drowningAsphyxiaEnabled()
+                && player.isUnderWater() && player.getAirSupply() <= 0;
+
+        // Fast path: nothing to do unless an asphyxia episode is in progress or drowning is about to start one.
+        if (!profile.isAsphyxiating() && !profile.isAsphyxiaUnconscious() && !drowning) {
             return;
         }
-        // Out of air -> lose consciousness (overdose cause) rather than drowning to death. Clamp air at 0 so
-        // vanilla never applies its own drowning damage, then hand off to the normal overdose wake timer.
-        player.setAirSupply(0);
-        profile.setAsphyxiating(false);
-        profile.setOverdoseUntilTick(player.level().getGameTime() + MedicalConfig.asphyxiaUnconsciousTicks());
-        profile.setOverdoseUnconscious(true);
-        profile.markDirty();
-        resync(player);
+
+        long now = player.level().getGameTime();
+        // A drug cause SUSTAINS an asphyxia while the overdose stays heavy; naloxone / decay clears it.
+        boolean drugCause = MedicalConfig.asphyxiaEnabled()
+                && profile.getDrugLoad() >= (float) MedicalConfig.asphyxiaThreshold();
+        boolean causeActive = drowning || drugCause;
+
+        // --- Already passed out from asphyxia: recover if the cause has cleared, else die at the deadline.
+        if (profile.isAsphyxiaUnconscious()) {
+            player.setAirSupply(0); // hold at 0 so vanilla never deals its own drowning damage in the meantime
+            if (!causeActive) {
+                profile.clearAsphyxia();
+                profile.markDirty();
+                resync(player); // wakes back up; air recovers naturally
+                return;
+            }
+            if (now >= profile.getAsphyxiaDeadlineTick()) {
+                killByAsphyxia(player, profile);
+            }
+            return;
+        }
+
+        // --- Conscious struggle: recover if the cause clears, else drain toward passing out.
+        if (profile.isAsphyxiating()) {
+            if (!causeActive) {
+                profile.clearAsphyxia();
+                profile.markDirty();
+                resync(player); // recovered before passing out; air recovers naturally
+                return;
+            }
+            // Debilitating weakness while fighting for air (short + re-applied each tick, no particles).
+            player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 40,
+                    MedicalConfig.asphyxiaWeaknessAmplifier(), true, false, true));
+            // Drain the air bar for feedback, then hold it at 0 so vanilla never applies drowning damage.
+            int air = player.getAirSupply();
+            player.setAirSupply(air > 0 ? Math.max(0, air - MedicalConfig.asphyxiaAirLossPerTick()) : 0);
+            // Struggle window elapsed -> pass out; a death deadline starts ticking.
+            if (now - profile.getAsphyxiaSince() >= MedicalConfig.asphyxiaStruggleTicks()) {
+                player.setAirSupply(0);
+                profile.setAsphyxiating(false);
+                profile.setAsphyxiaUnconscious(true);
+                profile.setAsphyxiaDeadlineTick(now + MedicalConfig.asphyxiaUnconsciousTicks());
+                profile.markDirty();
+                resync(player);
+            }
+            return;
+        }
+
+        // --- Not yet asphyxiating: DROWNING starts an episode here. (A drug asphyxia is instead started,
+        // probabilistically, by SubstanceService on injection so the asphyxiaChance roll still governs it.)
+        if (drowning) {
+            profile.startAsphyxia(now);
+            profile.markDirty();
+            resync(player);
+        }
     }
 
     /**
-     * End the asphyxia phase without a knockout (recovery / abort) and re-sync so sprint, the blur flag and
-     * effects settle back; the player's air then recovers naturally via vanilla regen.
+     * Enact an asphyxia death: force the DEAD state (so a recompute agrees and {@link MedicalEffects} stops
+     * pinning the unconscious health floor), clear the asphyxia + bleed-out markers, cancel any treatment, and
+     * drop health to 0 so the vanilla death pipeline resolves the rest. Mirrors the severe-overdose lethal path.
      */
-    private static void stopAsphyxia(ServerPlayer player, MedicalProfile profile) {
-        profile.setAsphyxiating(false);
-        profile.markDirty();
-        resync(player);
+    private static void killByAsphyxia(ServerPlayer player, MedicalProfile profile) {
+        enactEngineDeath(player, profile);
+    }
+
+    /**
+     * Engine-driven death enactment (severe-overdose drain and the asphyxia deadline): clear the full union
+     * of downed markers via {@link MedicalProfile#enterDeadState(boolean)} (pinned so recomputes agree until
+     * the vanilla death event fires), cancel any treatment, and drop health to 0.
+     */
+    private static void enactEngineDeath(ServerPlayer player, MedicalProfile profile) {
+        profile.enterDeadState(true);
+        if (profile.hasActiveTreatment()) {
+            MedicalActionService.cancel(player, "dead");
+        }
+        player.setHealth(0.0F);
     }
 
     /**
@@ -350,7 +413,9 @@ public final class MedicalEngine {
         // decay the load and run the overdose-unconsciousness timer instead of fast-path skipping the player.
         // Also keep ticking while any localized numbing is decaying, or an adrenaline pain-KO timer is running.
         if (profile.getDrugLoad() > 0.0F || profile.isOverdoseUnconscious() || profile.getOverdoseUntilTick() > 0L
-                || profile.anyLocalNumbing() || profile.getPainKoSince() > 0L || profile.isAdrenalineExhausted()) {
+                || profile.anyLocalNumbing() || profile.getPainKoSince() > 0L || profile.isAdrenalineExhausted()
+                || profile.isAsphyxiating() || profile.isAsphyxiaUnconscious()
+                || profile.getStimulant() > 0.0F || profile.getClottingBoost() > 0.0F) {
             return true;
         }
         DerivedStats c = profile.cached();
@@ -374,6 +439,15 @@ public final class MedicalEngine {
         // Painkillers wear off over time (perceived-pain suppression only; never heals the wound).
         if (profile.getPainSuppression() > 0.0F) {
             profile.setPainSuppression(profile.getPainSuppression() - PAIN_SUPPRESSION_DECAY_PER_TICK * interval);
+        }
+        // A clotting boost (hemostatic / combat stimulant) raises BOTH the severity a bleed can self-clot at
+        // AND the speed it clots. Computed once for this player and folded into the self-heal branch below.
+        float clot = profile.getClottingBoost();
+        double selfHealThreshold = MedicalConfig.bleedingSelfHealThreshold();
+        double selfHealRate = MedicalConfig.bleedingSelfHealRate();
+        if (clot > 0.0F) {
+            selfHealThreshold = Math.min(1.0, selfHealThreshold + clot * MedicalConfig.clottingBoostThresholdBonus());
+            selfHealRate *= (1.0 + clot * MedicalConfig.clottingBoostRateMultiplier());
         }
         for (LimbType lt : LimbType.VALUES) {
             Limb limb = profile.limb(lt);
@@ -422,8 +496,8 @@ public final class MedicalEngine {
                         //  - anything else (a severe bleed) slowly WORSENS until it is treated.
                         boolean bleeds = t.getType().getBleedingPerSeverity() > 0.0F;
                         double fractureMinutes = MedicalConfig.fractureSelfHealMinutes();
-                        if (bleeds && t.getSeverity() <= (float) MedicalConfig.bleedingSelfHealThreshold()) {
-                            t.setSeverity(t.getSeverity() - (float) MedicalConfig.bleedingSelfHealRate() * interval);
+                        if (bleeds && t.getSeverity() <= (float) selfHealThreshold) {
+                            t.setSeverity(t.getSeverity() - (float) selfHealRate * interval);
                             if (t.getSeverity() <= 0.0F && !t.getType().isPermanent()) {
                                 traumas.remove(i);
                             }

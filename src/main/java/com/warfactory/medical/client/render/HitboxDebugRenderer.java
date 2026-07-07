@@ -33,19 +33,20 @@ import java.util.List;
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class HitboxDebugRenderer {
 
-    public static boolean enabled = false;
     private static final double RANGE = 32.0;
-
     private static final int[][] EDGES = {
             {0, 1}, {2, 3}, {4, 5}, {6, 7}, // along X
             {0, 2}, {1, 3}, {4, 6}, {5, 7}, // along Y
             {0, 4}, {1, 5}, {2, 6}, {3, 7}  // along Z
     };
+    public static boolean enabled = false;
 
     private HitboxDebugRenderer() {
     }
 
-    /** Flip the overlay on/off (called from the keybind poll). */
+    /**
+     * Flip the overlay on/off (called from the keybind poll).
+     */
     public static void toggle() {
         enabled = !enabled;
     }
@@ -107,7 +108,7 @@ public final class HitboxDebugRenderer {
         double rx = -fz;
         double rz = fx;              // right = (-front.z, 0, front.x)
         for (Obb obb : rig.all()) {
-            float[] c = colorFor(obb.limb);
+            float[] c = colorFor(obb.limb());
             drawObb(mat, nrm, vc, obb, px, py, pz, fx, fz, rx, rz, c[0], c[1], c[2], alpha);
         }
     }
@@ -116,13 +117,13 @@ public final class HitboxDebugRenderer {
                                 double px, double py, double pz,
                                 double fx, double fz, double rx, double rz,
                                 float red, float green, float blue, float alpha) {
-        Vec3 c = obb.center;
-        Vec3 ax = obb.axisX;
-        Vec3 ay = obb.axisY;
-        Vec3 az = obb.axisZ;
-        double hx = obb.half.x;
-        double hy = obb.half.y;
-        double hz = obb.half.z;
+        Vec3 c = obb.center();
+        Vec3 ax = obb.axisX();
+        Vec3 ay = obb.axisY();
+        Vec3 az = obb.axisZ();
+        double hx = obb.half().x;
+        double hy = obb.half().y;
+        double hz = obb.half().z;
 
         Vec3[] corners = new Vec3[8];
         for (int sx = -1; sx <= 1; sx += 2) {

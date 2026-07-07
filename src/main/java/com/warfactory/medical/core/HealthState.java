@@ -26,9 +26,7 @@ public enum HealthState {
     private static final String LEGACY_KNOCKED_DOWN = "KNOCKED_DOWN";
 
     /**
-     * Resolve a persisted state name to a constant, tolerating the pre-merge legacy {@code "KNOCKED_DOWN"}
-     * string (which now maps to {@link #UNCONSCIOUS}), and falling back to {@code fallback} for anything
-     * unrecognised or {@code null}.
+     * Tolerates the legacy {@code "KNOCKED_DOWN"} name and falls back on unrecognised/null input.
      */
     public static HealthState byName(String name, HealthState fallback) {
         if (name == null) {

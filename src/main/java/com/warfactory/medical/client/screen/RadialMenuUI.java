@@ -24,71 +24,32 @@ import net.minecraft.world.item.TooltipFlag;
 import java.util.List;
 
 /**
- * CLIENT-ONLY quick medical interaction wheel. A full-screen {@link ModularUI} that dims the world and lays
- * out one round button per distinct medical item on a ring around a central body diagram, letting the player
- * pick a target limb (centre) and fire a treatment request (ring) in a single glance.
- *
- * <p><b>Side-safety:</b> lives under {@code com.warfactory.medical.client} and references
- * {@code net.minecraft.client.*}; only ever reached from client-tick key handling
- * ({@code MedicalClientEvents}) via {@link #open()}. It only READS the {@link ClientMedicalCache} snapshot
- * and SENDS request packets through {@link MedicalUIParts}; it never mutates authoritative medical state.</p>
- *
- * <p><b>Ring geometry:</b> for {@code n} distinct medical items the {@code i}-th button centre sits at
- * {@code theta = i / n * 2*PI - PI/2} (item 0 straight up, then clockwise), so
- * {@code cx = centreX + RING_RADIUS * cos(theta)} and {@code cy = centreY + RING_RADIUS * sin(theta)}; the
- * widget's top-left is that centre minus half the button size. This spaces up to the mod's nine items evenly
- * and degrades gracefully for {@code n = 0} (a centred hint) and small {@code n}.</p>
+ * CLIENT-ONLY quick medical interaction wheel. Ring geometry: button {@code i} of {@code n} sits at
+ * {@code theta = i/n * 2*PI - PI/2} (item 0 straight up, clockwise), centre at
+ * {@code (cx + RING_RADIUS*cos(theta), cy + RING_RADIUS*sin(theta))}; widget top-left is centre minus
+ * BUTTON_HALF. Reads ClientMedicalCache and sends request packets; never mutates medical state.
  */
 public final class RadialMenuUI {
 
-    /**
-     * Radius (px) of the circle the item buttons are arranged on, measured from the screen centre.
-     */
     private static final int RING_RADIUS = 96;
-    /**
-     * Side length (px) of each square item button.
-     */
     private static final int BUTTON_SIZE = 26;
     /**
-     * Half of {@link #BUTTON_SIZE}, used to convert a ring point into the button's top-left corner.
+     * Half BUTTON_SIZE; converts a ring centre point to the widget's top-left corner.
      */
     private static final int BUTTON_HALF = BUTTON_SIZE / 2;
-    /**
-     * Corner radius (px) for the rounded button backgrounds / hover border.
-     */
     private static final int BUTTON_RADIUS = 6;
-    /**
-     * Central body-diagram width (px).
-     */
     private static final int BODY_WIDTH = 56;
-    /**
-     * Central body-diagram height (px).
-     */
     private static final int BODY_HEIGHT = 84;
-    /**
-     * ARGB translucent black backdrop so the world dims behind the wheel.
-     */
     private static final int BACKDROP_COLOR = 0x90000000;
-    /**
-     * ARGB idle button background.
-     */
     private static final int BUTTON_BG_COLOR = 0xC0202020;
-    /**
-     * ARGB hover highlight border.
-     */
     private static final int BUTTON_HOVER_COLOR = 0xFFFFDD55;
-    /**
-     * ARGB for the vitals / hint text.
-     */
     private static final int TEXT_COLOR = 0xFFFFFFFF;
 
     private RadialMenuUI() {
     }
 
     /**
-     * Build and open the radial medical menu on the local client. No-op when there is no local player.
-     * Clicking a ring button requests that treatment against the currently selected limb and closes the
-     * wheel; clicking a limb in the centre re-targets without closing.
+     * Ring button click requests treatment and closes the wheel; centre limb click re-targets without closing.
      */
     public static void open() {
         Minecraft mc = Minecraft.getInstance();
@@ -117,6 +78,9 @@ public final class RadialMenuUI {
         // Live vitals + selected-limb readout just below the body diagram.
         addVitals(ui, cx, cy + BODY_HEIGHT / 2 + 4);
 
+        // "Remove Tourniquet" button (UI-driven removal for the currently selected limb).
+        addRemoveTourniquetButton(ui, cx, cy + BODY_HEIGHT / 2 + 4 + 4 * 10 + 6);
+
         List<ItemStack> items = MedicalUIParts.availableMedicalItems();
         if (items.isEmpty()) {
             // Graceful empty state: a centred hint above the diagram.
@@ -132,10 +96,6 @@ public final class RadialMenuUI {
         ClientUIOpener.openClientUI(ui);
     }
 
-    /**
-     * Lay the item buttons evenly on a circle of radius {@link #RING_RADIUS} around {@code (cx, cy)}.
-     * Button {@code i} sits at angle {@code i/n * 2*PI - PI/2} (item 0 at top, clockwise).
-     */
     private static void addRing(ModularUI ui, List<ItemStack> items, int cx, int cy) {
         int n = items.size();
         for (int i = 0; i < n; i++) {
@@ -150,11 +110,6 @@ public final class RadialMenuUI {
         }
     }
 
-    /**
-     * Add one round-ish medical-item button: a rounded dark background + the item icon, a hover highlight
-     * border, a full tooltip (item name + description), and a short name label beneath it. Clicking fires
-     * the treatment request against the selected limb and closes the wheel.
-     */
     private static void addItemButton(ModularUI ui, ItemStack stack, int btnX, int btnY, int centreX) {
         GuiTextureGroup face = new GuiTextureGroup(
                 new ColorRectTexture(BUTTON_BG_COLOR).setRadius(BUTTON_RADIUS),
@@ -181,9 +136,29 @@ public final class RadialMenuUI {
     }
 
     /**
-     * Add small live labels (selected limb, health, blood, pain) stacked below the body diagram. All are
-     * marked client-side so their suppliers re-read the {@link ClientMedicalCache} each tick.
+     * Server no-ops if the selected limb has no tourniquet, so the button can always be shown.
      */
+    private static void addRemoveTourniquetButton(ModularUI ui, int cx, int y) {
+        int w = 110;
+        int h = 14;
+        int x = cx - w / 2;
+        ButtonWidget button = new ButtonWidget(x, y, w, h,
+                new GuiTextureGroup(new ColorRectTexture(BUTTON_BG_COLOR).setRadius(BUTTON_RADIUS)),
+                (ClickData cd) -> {
+                    MedicalUIParts.requestRemoveTourniquet(MedicalUIParts.selectedLimb());
+                    Minecraft.getInstance().setScreen(null);
+                });
+        button.setHoverTexture(new ColorBorderTexture(2, BUTTON_HOVER_COLOR).setRadius(BUTTON_RADIUS));
+        button.setClientSideWidget();
+        ui.mainGroup.addWidget(button);
+
+        LabelWidget label = new LabelWidget(cx - 48, y + 3,
+                Component.translatable("gui.wfmedical.tourniquet.remove").getString());
+        label.setColor(TEXT_COLOR);
+        label.setClientSideWidget();
+        ui.mainGroup.addWidget(label);
+    }
+
     private static void addVitals(ModularUI ui, int cx, int topY) {
         int lineH = 10;
 
@@ -219,9 +194,6 @@ public final class RadialMenuUI {
         ui.mainGroup.addWidget(painLabel);
     }
 
-    /**
-     * Blood volume as a whole-number percentage from the latest snapshot; 100 when none/undefined.
-     */
     private static int bloodPercent() {
         MedicalSyncPacket snap = ClientMedicalCache.get();
         if (snap == null || snap.maxBloodMl() <= 0.0D) {
@@ -236,16 +208,10 @@ public final class RadialMenuUI {
         return (int) Math.round(pct);
     }
 
-    /**
-     * The full item tooltip (name + description) for a ring button's hover text.
-     */
     private static List<Component> itemTooltip(ItemStack stack) {
         return stack.getTooltipLines(Minecraft.getInstance().player, TooltipFlag.Default.NORMAL);
     }
 
-    /**
-     * A compact button caption: the item's display name, truncated so the wheel stays readable.
-     */
     private static String shortName(ItemStack stack) {
         String name = stack.getHoverName().getString();
         if (name.length() > 12) {

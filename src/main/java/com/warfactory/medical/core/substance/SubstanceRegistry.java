@@ -6,24 +6,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Holds the set of known {@link Substance} definitions, keyed by the registry-name string of the item that
- * injects them (populated from config at load time). Mirrors
- * {@link com.warfactory.medical.core.trauma.TraumaRegistry}.
- *
- * <p>A single {@link #active()} instance is exposed so the server can resolve a substance by item id
- * without threading the registry through every call. Hardcoded morphine + naloxone defaults are provided
- * as a safety net via {@link #withDefaults()} / {@link #registerDefaults()}.</p>
+ * Holds the set of known {@link Substance} definitions keyed by item registry-name, populated from config.
+ * A single {@link #active()} instance is exposed; hardcoded defaults act as an IO-free safety net.
  */
 public final class SubstanceRegistry {
 
-    /**
-     * Item id of the bundled morphine opioid injectable.
-     */
     public static final String MORPHINE_ITEM_ID = "wfmedical:morphine_syringe";
-    /**
-     * Item id of the bundled naloxone antidote injectable.
-     */
     public static final String NALOXONE_ITEM_ID = "wfmedical:naloxone_syringe";
+    public static final String COMBAT_STIMULANT_ITEM_ID = "wfmedical:combat_stimulant_i";
     private static volatile SubstanceRegistry active = withDefaults();
     private final Map<String, Substance> byItemId = new LinkedHashMap<>();
 
@@ -42,7 +32,7 @@ public final class SubstanceRegistry {
     }
 
     /**
-     * The bundled morphine opioid substance (safety-net default).
+     * Bundled morphine opioid (safety-net default).
      */
     public static Substance defaultMorphine() {
         return new Substance(
@@ -55,11 +45,14 @@ public final class SubstanceRegistry {
                 false,   // antidote
                 0.0F,    // reversalAmount (unused for opioid)
                 40,      // useDurationTicks
-                0.0D);   // bloodRestoreMl
+                0.0D,    // bloodRestoreMl
+                0.0F,    // clottingBoost
+                0.0F,    // stimulantStrength
+                0);      // effectTicks
     }
 
     /**
-     * The bundled naloxone antidote substance (safety-net default).
+     * Bundled naloxone antidote (safety-net default).
      */
     public static Substance defaultNaloxone() {
         return new Substance(
@@ -72,12 +65,35 @@ public final class SubstanceRegistry {
                 true,    // antidote
                 3.0F,    // reversalAmount
                 30,      // useDurationTicks
-                0.0D);   // bloodRestoreMl
+                0.0D,    // bloodRestoreMl
+                0.0F,    // clottingBoost
+                0.0F,    // stimulantStrength
+                0);      // effectTicks
     }
 
     /**
-     * @return a fresh registry pre-populated with the hardcoded morphine + naloxone defaults.
+     * The bundled Combat Stimulant I injectable (safety-net default). A heavily risky, high-dose stimulant:
+     * near-total anesthesia, a big speed boost + cleared jump penalty, and unnatural blood clotting for 3
+     * minutes — but a single dose leaves a large drug load whose come-down outlasts the effect, and a second
+     * dose overdoses hard (past the lethal line).
      */
+    public static Substance defaultCombatStimulant() {
+        return new Substance(
+                "combat_stimulant_i", COMBAT_STIMULANT_ITEM_ID,
+                0.0F,    // painSuppression (anesthesia comes from the stimulant strength below)
+                1.4F,    // doseLoad (HIGH — a single dose sits just under the lethal line; a second is fatal)
+                1.6F,    // overdoseThreshold
+                200,     // unconsciousTicks (if it does overdose)
+                2.6F,    // lethalThreshold
+                false,   // antidote
+                0.0F,    // reversalAmount
+                40,      // useDurationTicks
+                0.0D,    // bloodRestoreMl
+                1.0F,    // clottingBoost (unnatural — even severe bleeds clot)
+                0.97F,   // stimulantStrength (very insusceptible to pain + speed + jump clear)
+                3600);   // effectTicks (3 minutes)
+    }
+
     public static SubstanceRegistry withDefaults() {
         SubstanceRegistry r = new SubstanceRegistry();
         r.registerDefaults();
@@ -93,9 +109,6 @@ public final class SubstanceRegistry {
     // Hardcoded fallback defaults (IO-free safety net; mirrors the bundled TOML).
     // ---------------------------------------------------------------------
 
-    /**
-     * @return the substance bound to {@code itemId}, or {@code null} if unknown.
-     */
     public Substance get(String itemId) {
         return itemId == null ? null : byItemId.get(itemId);
     }
@@ -116,11 +129,9 @@ public final class SubstanceRegistry {
         byItemId.clear();
     }
 
-    /**
-     * Register the hardcoded morphine + naloxone defaults into this registry.
-     */
     public void registerDefaults() {
         register(defaultMorphine());
         register(defaultNaloxone());
+        register(defaultCombatStimulant());
     }
 }

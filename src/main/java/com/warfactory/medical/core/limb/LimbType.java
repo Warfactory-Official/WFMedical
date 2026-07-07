@@ -45,9 +45,6 @@ public enum LimbType {
         return displayName;
     }
 
-    /**
-     * Base hit-probability weight (torso highest, head lowest).
-     */
     public float getHitWeight() {
         return hitWeight;
     }

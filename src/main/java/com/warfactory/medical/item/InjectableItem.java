@@ -14,14 +14,9 @@ import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.level.Level;
 
 /**
- * A medical item that injects a {@link Substance} (opioid analgesic or antidote) when used. Extends
- * {@link MedicalItem} with a {@code null} {@link com.warfactory.medical.core.treatment.Treatment} so it is
- * automatically picked up by the existing {@code instanceof MedicalItem} channel-display / available-items
- * plumbing; the substance behaviour is entirely separate from the trauma-treatment path.
- *
- * <p>The mutation is server authoritative: only {@link SubstanceService#inject(ServerPlayer, Substance)}
- * may touch drug load / unconsciousness state, and the stack is consumed only when that call reports a change.
- * Clients merely play the use animation and swing.</p>
+ * Injectable substance item (opioid or antidote). Uses a {@code null} Treatment so the existing
+ * {@code instanceof MedicalItem} plumbing picks it up. Substance behavior is server authoritative;
+ * the stack is consumed only when {@link SubstanceService#inject} reports a change.
  */
 public class InjectableItem extends MedicalItem {
 
@@ -32,9 +27,6 @@ public class InjectableItem extends MedicalItem {
         this.substance = substance;
     }
 
-    /**
-     * The substance this item injects.
-     */
     public Substance getSubstance() {
         return substance;
     }

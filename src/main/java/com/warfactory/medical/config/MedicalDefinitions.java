@@ -32,9 +32,6 @@ import java.util.*;
  */
 public final class MedicalDefinitions {
 
-    /**
-     * File name in both the config directory and the classpath.
-     */
     public static final String FILE_NAME = "wfmedical_definitions.toml";
     private static final Logger LOGGER = LogUtils.getLogger();
 
@@ -42,8 +39,7 @@ public final class MedicalDefinitions {
     }
 
     /**
-     * Loads definitions into {@code registry}, {@code itemTreatments} and {@code substances}, copying the
-     * bundled defaults into {@code configDir} if the file is missing, then activating both registries.
+     * Loads definitions from TOML (copying bundled defaults if missing), then activates both registries.
      */
     public static void load(Path configDir, TraumaRegistry registry, Map<String, Treatment> itemTreatments,
                             SubstanceRegistry substances) {
@@ -193,7 +189,10 @@ public final class MedicalDefinitions {
                 bool(t, "antidote", false),
                 flt(t, "reversalAmount", 0.0F),
                 intOf(t, "useDurationTicks", 40),
-                dbl(t, "bloodRestoreMl", 0.0D)
+                dbl(t, "bloodRestoreMl", 0.0D),
+                flt(t, "clottingBoost", 0.0F),
+                flt(t, "stimulantStrength", 0.0F),
+                intOf(t, "effectTicks", 0)
         );
     }
 
@@ -280,8 +279,10 @@ public final class MedicalDefinitions {
                 Collections.emptySet(), 0.5F, 0.0D, 30, false));
         itemTreatments.put("wfmedical:local_anesthetic", new Treatment(TreatmentAction.NUMB_LIMB,
                 Collections.emptySet(), 0.9F, 0.0D, 50, false));
-        itemTreatments.put("wfmedical:tourniquet", new Treatment(TreatmentAction.REDUCE_BLEEDING,
-                EnumSet.of(TraumaCategory.LACERATION, TraumaCategory.PUNCTURE, TraumaCategory.INTERNAL_BLEEDING), 0.9F, 0.0D, 60, false));
+        itemTreatments.put("wfmedical:hemostatic", new Treatment(TreatmentAction.BOOST_CLOTTING,
+                Collections.emptySet(), 0.6F, 0.0D, 50, false));
+        itemTreatments.put("wfmedical:tourniquet", new Treatment(TreatmentAction.APPLY_TOURNIQUET,
+                Collections.emptySet(), 0.0F, 0.0D, 20, false));
         itemTreatments.put("wfmedical:medkit", new Treatment(TreatmentAction.HEAL_TRAUMA,
                 Collections.emptySet(), 1.0F, 250.0D, 160, true));
         itemTreatments.put("wfmedical:burn_ointment", new Treatment(TreatmentAction.TREAT_BURN,
@@ -292,6 +293,7 @@ public final class MedicalDefinitions {
         // Injectable substances (mirror the bundled TOML [[substance]] tables).
         substances.register(SubstanceRegistry.defaultMorphine());
         substances.register(SubstanceRegistry.defaultNaloxone());
+        substances.register(SubstanceRegistry.defaultCombatStimulant());
     }
 
     // ---------------------------------------------------------------------

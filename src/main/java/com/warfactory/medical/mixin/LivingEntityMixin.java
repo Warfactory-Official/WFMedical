@@ -25,8 +25,7 @@ public abstract class LivingEntityMixin {
         callbackInfo.setReturnValue(callbackInfo.getReturnValueF() * MedicalState.jumpMultiplier(player));
     }
 
-    // An unconscious player is fully helpless: hard-cancel the jump itself (belt-and-braces on top of the
-    // jumpMultiplier -> 0 scaling above), so no jump impulse, sound or event fires while downed.
+    // Belt-and-braces: hard-cancel the jump event itself so no impulse, sound or event fires while downed.
     @Inject(method = "jumpFromGround", at = @At("HEAD"), cancellable = true)
     private void wfmedical$blockJumpWhenUnconscious(CallbackInfo callbackInfo) {
         if ((Object) this instanceof Player player && MedicalState.isUnconscious(player)) {

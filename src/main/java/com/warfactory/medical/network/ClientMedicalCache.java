@@ -15,10 +15,6 @@ public final class ClientMedicalCache {
 
     private static volatile MedicalSyncPacket snapshot;
     /**
-     * Set by a delta when the local snapshot is known to be behind the server.
-     */
-    private static volatile boolean stale;
-    /**
      * Latest active-treatment state; null (or an inactive packet) means no overlay is shown.
      */
     private static volatile ActiveTreatmentPacket activeTreatment;
@@ -42,22 +38,21 @@ public final class ClientMedicalCache {
     }
 
     /**
-     * Store an authoritative full snapshot and clear the stale flag.
+     * Store an authoritative full snapshot (a fresh baseline).
      */
     public static void set(MedicalSyncPacket packet) {
         snapshot = packet;
-        stale = false;
     }
 
     /**
-     * Flag the current snapshot as out of date (a delta arrived); a full sync will follow.
+     * Patch the cached baseline with an incremental {@link MedicalDeltaPacket}. No-op when no baseline exists
+     * yet — a full snapshot always precedes deltas, so this only guards the brief pre-first-sync window.
      */
-    public static void markStale() {
-        stale = true;
-    }
-
-    public static boolean isStale() {
-        return stale;
+    public static void applyDelta(MedicalDeltaPacket delta) {
+        MedicalSyncPacket base = snapshot;
+        if (base != null) {
+            snapshot = delta.applyTo(base);
+        }
     }
 
     /**
@@ -159,7 +154,6 @@ public final class ClientMedicalCache {
      */
     public static void clear() {
         snapshot = null;
-        stale = false;
         activeTreatment = null;
         selectedLimb = null;
         debug = false;
