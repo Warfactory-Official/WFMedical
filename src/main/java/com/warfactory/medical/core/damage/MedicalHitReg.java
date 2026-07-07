@@ -3,6 +3,7 @@ package com.warfactory.medical.core.damage;
 import com.warfactory.medical.compat.OpenPersistenceCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.damage.rig.HumanoidRig;
+import com.warfactory.medical.core.damage.rig.RigTuning;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
@@ -17,6 +18,16 @@ import net.minecraft.world.phys.AABB;
  * gap-rejection (throwing out shots that threaded between the limbs) lives in {@link HitGeometry#isGapShot}.
  */
 public final class MedicalHitReg {
+
+    /**
+     * Static horizontal arm reach (blocks beyond the collision box, per side) for the UPRIGHT broad-phase
+     * envelope. Sized to contain a player's arm in ANY upright pose &mdash; hanging, mid-walk swing, a melee
+     * swing, or extended forward while aiming (hand ~0.75 from centre, ~0.45 past the 0.3 box edge) &mdash; so
+     * the box never has to be rebuilt from the animated pose for a standing/walking player. Deliberately a
+     * little generous: the broad phase only needs to CONTAIN the model; the fine-phase per-limb OBB test
+     * rejects the surplus, so over-reach costs a few extra fine tests but never a missed hit.
+     */
+    private static final double UPRIGHT_ARM_REACH = 0.25;
 
     private MedicalHitReg() {
     }
@@ -49,6 +60,18 @@ public final class MedicalHitReg {
         }
 
         if (MedicalConfig.riggedLimbBoxes() && HitGeometry.rigPoseSupported(living)) {
+            // Upright (idle / walk / run / sneak): the arms only ever swing within a FIXED envelope, so skip
+            // the per-frame pose rebuild (worldBounds runs the whole articulated compute()) and use a static
+            // horizontal reach that always contains them. This is the hot path -- once per projectile per tick
+            // per nearby player -- and the precise limb pick still runs the real pose in the fine phase, but
+            // only on an actual near-hit. While hitbox tuning is armed the static reach cannot be trusted to
+            // contain a box that was nudged outward, so fall through to the pose-derived bounds (debug only).
+            if (HitGeometry.isUprightHumanoid(living) && !RigTuning.ACTIVE) {
+                double reach = UPRIGHT_ARM_REACH + inflate;
+                return box.inflate(reach, inflate, reach);
+            }
+            // Non-upright (downed / crawl / swim / elytra): the silhouette is radically different (a lying body
+            // extends far along the ground), so here the pose-derived bounds genuinely matter.
             AABB rigBounds = HumanoidRig.worldBounds(living);
             return box.minmax(rigBounds).inflate(inflate);
         }

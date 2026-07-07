@@ -10,6 +10,7 @@ import com.warfactory.medical.core.damage.HitRegMode;
 import com.warfactory.medical.core.damage.MedicalHitReg;
 import com.warfactory.medical.core.damage.rig.HumanoidRig;
 import com.warfactory.medical.core.damage.rig.Obb;
+import com.warfactory.medical.core.damage.rig.RigTuning;
 import com.warfactory.medical.core.limb.LimbType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -107,9 +108,15 @@ public final class HitboxDebugRenderer {
         double fz = Math.cos(yaw);   // front = (-sin, 0, cos)
         double rx = -fz;
         double rz = fx;              // right = (-front.z, 0, front.x)
+        // While tuning, spotlight the limb being edited: brighten it, fade the rest so the target reads clearly.
+        LimbType hl = RigTuning.ACTIVE ? RigTuning.highlight : null;
         for (Obb obb : rig.all()) {
             float[] c = colorFor(obb.limb());
-            drawObb(mat, nrm, vc, obb, px, py, pz, fx, fz, rx, rz, c[0], c[1], c[2], alpha);
+            float a = alpha;
+            if (hl != null) {
+                a = obb.limb() == hl ? Math.min(1.0F, alpha + 0.4F) : alpha * 0.3F;
+            }
+            drawObb(mat, nrm, vc, obb, px, py, pz, fx, fz, rx, rz, c[0], c[1], c[2], a);
         }
     }
 

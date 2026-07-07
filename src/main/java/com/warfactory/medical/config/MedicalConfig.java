@@ -72,6 +72,7 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.DoubleValue MELEE_REACH;
     private static final ForgeConfigSpec.BooleanValue RIGGED_LIMB_BOXES;
     private static final ForgeConfigSpec.DoubleValue LIMB_BOX_PADDING;
+    private static final ForgeConfigSpec.BooleanValue HITBOX_DEBUG;
     private static final ForgeConfigSpec.BooleanValue OPEN_PERSISTENCE_COMPAT;
     private static final ForgeConfigSpec.BooleanValue TACZ_ARM_POSE;
     private static final ForgeConfigSpec.EnumValue<HitRegMode> HITREG_MODE;
@@ -412,6 +413,14 @@ public final class MedicalConfig {
                 .comment("Amount (in blocks) each rigged limb box is inflated to absorb pose-replica drift versus "
                         + "vanilla/mod animations.")
                 .defineInRange("limbBoxPadding", 0.02D, 0.0D, 0.5D);
+        HITBOX_DEBUG = b
+                .comment("DEBUG/TEST tool. If true, the rigged limb boxes become live-tunable: use",
+                        "'/wfmedical hitbox set|add <limb> <field> <value>' to nudge each box's position/size (in",
+                        "model units, 1/16 block) while watching the hitbox overlay (K key), then bake the dialled-in",
+                        "numbers back into HumanoidRig.BASE with '/wfmedical hitbox export'. Off (the default) has ZERO",
+                        "runtime cost -- the boxes are built straight from their fixed base spec, no tuning applied.",
+                        "The '/wfmedical hitbox debug on|off' command flips this live for a session without a reload.")
+                .define("hitboxDebug", false);
         b.pop();
 
         b.push("compat");
@@ -806,6 +815,14 @@ public final class MedicalConfig {
      */
     public static double limbBoxPadding() {
         return LIMB_BOX_PADDING.get();
+    }
+
+    /**
+     * If true, the rigged limb boxes are live-tunable via {@code /wfmedical hitbox} (debug/test only). Mirrored
+     * into {@link com.warfactory.medical.core.damage.rig.RigTuning#ACTIVE} at config load; off = zero cost.
+     */
+    public static boolean hitboxDebug() {
+        return HITBOX_DEBUG.get();
     }
 
     public static boolean openPersistenceCompat() {

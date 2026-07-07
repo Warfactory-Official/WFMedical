@@ -20,6 +20,7 @@ import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.damage.HitGeometry;
 import com.warfactory.medical.core.damage.rig.HumanoidRig;
 import com.warfactory.medical.core.damage.rig.Obb;
+import com.warfactory.medical.core.damage.rig.RigTuning;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.substance.Substance;
@@ -60,6 +61,9 @@ public final class WFMedicalCommands {
     private static final int DEFAULT_OVERDOSE_TICKS = 200;
     private static final SuggestionProvider<CommandSourceStack> LIMB_SUGGESTIONS =
             (ctx, b) -> SharedSuggestionProvider.suggest(Arrays.stream(LimbType.VALUES).map(Enum::name), b);
+    private static final SuggestionProvider<CommandSourceStack> HITBOX_FIELD_SUGGESTIONS =
+            (ctx, b) -> SharedSuggestionProvider.suggest(
+                    Arrays.stream(RigTuning.Field.VALUES).map(RigTuning.Field::lower), b);
 
     // ------------------------------------------------------------------ suggestion providers
     private static final SuggestionProvider<CommandSourceStack> TRAUMA_SUGGESTIONS =
@@ -262,6 +266,45 @@ public final class WFMedicalCommands {
                         .executes(ctx -> cmdRig(ctx.getSource(),
                                 DoubleArgumentType.getDouble(ctx, "maxDist")))));
 
+        // --- hitbox debug|status|show|export|set|add|reset
+        //   Live tuning of the rigged limb OBBs (position + size, model units) for extracting exact hitbox
+        //   values in test mode. All op-gated (inherited); mutators apply only while hitboxDebug is active.
+        root.then(Commands.literal("hitbox")
+                .executes(ctx -> cmdHitboxStatus(ctx.getSource()))
+                .then(Commands.literal("status").executes(ctx -> cmdHitboxStatus(ctx.getSource())))
+                .then(Commands.literal("show").executes(ctx -> cmdHitboxShow(ctx.getSource())))
+                .then(Commands.literal("export").executes(ctx -> cmdHitboxExport(ctx.getSource())))
+                .then(Commands.literal("debug")
+                        .executes(ctx -> cmdHitboxDebug(ctx.getSource(), !RigTuning.ACTIVE))
+                        .then(Commands.literal("on").executes(ctx -> cmdHitboxDebug(ctx.getSource(), true)))
+                        .then(Commands.literal("off").executes(ctx -> cmdHitboxDebug(ctx.getSource(), false))))
+                .then(Commands.literal("set")
+                        .then(Commands.argument("limb", StringArgumentType.word())
+                                .suggests(LIMB_SUGGESTIONS)
+                                .then(Commands.argument("field", StringArgumentType.word())
+                                        .suggests(HITBOX_FIELD_SUGGESTIONS)
+                                        .then(Commands.argument("value", DoubleArgumentType.doubleArg())
+                                                .executes(ctx -> cmdHitboxSet(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "limb"),
+                                                        StringArgumentType.getString(ctx, "field"),
+                                                        DoubleArgumentType.getDouble(ctx, "value")))))))
+                .then(Commands.literal("add")
+                        .then(Commands.argument("limb", StringArgumentType.word())
+                                .suggests(LIMB_SUGGESTIONS)
+                                .then(Commands.argument("field", StringArgumentType.word())
+                                        .suggests(HITBOX_FIELD_SUGGESTIONS)
+                                        .then(Commands.argument("amount", DoubleArgumentType.doubleArg())
+                                                .executes(ctx -> cmdHitboxAdd(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "limb"),
+                                                        StringArgumentType.getString(ctx, "field"),
+                                                        DoubleArgumentType.getDouble(ctx, "amount")))))))
+                .then(Commands.literal("reset")
+                        .executes(ctx -> cmdHitboxReset(ctx.getSource(), null))
+                        .then(Commands.argument("limb", StringArgumentType.word())
+                                .suggests(LIMB_SUGGESTIONS)
+                                .executes(ctx -> cmdHitboxReset(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "limb"))))));
+
         LiteralCommandNode<CommandSourceStack> node = dispatcher.register(root);
         dispatcher.register(Commands.literal("wfmed").requires(src -> src.hasPermission(2)).redirect(node));
     }
@@ -377,6 +420,177 @@ public final class WFMedicalCommands {
         String dump = sb.toString();
         src.sendSuccess(() -> Component.literal(dump), false);
         return 1;
+    }
+
+    // ------------------------------------------------------------------ hitbox tuning (debug/test)
+
+    /**
+     * Report whether hitbox tuning is armed and summarise any active deltas.
+     */
+    private static int cmdHitboxStatus(CommandSourceStack src) {
+        boolean cfg = MedicalConfig.hitboxDebug();
+        boolean active = RigTuning.ACTIVE;
+        int tuned = 0;
+        for (LimbType lt : LimbType.VALUES) {
+            for (RigTuning.Field f : RigTuning.Field.VALUES) {
+                if (RigTuning.delta(lt, f) != 0.0) {
+                    tuned++;
+                }
+            }
+        }
+        int nonzeroFields = tuned;
+        src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning: "
+                + (active ? "ARMED" : "inert") + " (config hitboxDebug=" + cfg + ")"
+                + ", " + nonzeroFields + " non-zero delta(s)."
+                + (active ? "" : "  Run '/wfmedical hitbox debug on' to apply live.")
+                + "  Use '/wfmedical hitbox show' to list, 'export' to bake."), false);
+        return 1;
+    }
+
+    /**
+     * Arm/disarm the tuning hot-path flag for this session (does not rewrite the config).
+     */
+    private static int cmdHitboxDebug(CommandSourceStack src, boolean enable) {
+        RigTuning.ACTIVE = enable;
+        src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning "
+                + (enable ? "ARMED" : "disarmed") + " for this session"
+                + (enable ? " (deltas now applied to the limb boxes)." : " (boxes back to their base spec).")
+                + "  Session-only; set hitlocation.hitboxDebug in the config to persist."), true);
+        return 1;
+    }
+
+    /**
+     * Set one limb/field delta to an absolute value (model units, 1/16 block).
+     */
+    private static int cmdHitboxSet(CommandSourceStack src, String limbName, String fieldName, double value) {
+        LimbType limb = parseLimb(src, limbName);
+        if (limb == null) {
+            return 0;
+        }
+        RigTuning.Field field = parseField(src, fieldName);
+        if (field == null) {
+            return 0;
+        }
+        RigTuning.set(limb, field, value);
+        src.sendSuccess(() -> Component.literal("[wfmedical] " + limb.name() + "." + field.lower()
+                + " delta = " + num(value) + hitboxApplyNote()), false);
+        return 1;
+    }
+
+    /**
+     * Nudge one limb/field delta by an amount (model units); prints the resulting delta.
+     */
+    private static int cmdHitboxAdd(CommandSourceStack src, String limbName, String fieldName, double amount) {
+        LimbType limb = parseLimb(src, limbName);
+        if (limb == null) {
+            return 0;
+        }
+        RigTuning.Field field = parseField(src, fieldName);
+        if (field == null) {
+            return 0;
+        }
+        double now = RigTuning.add(limb, field, amount);
+        src.sendSuccess(() -> Component.literal("[wfmedical] " + limb.name() + "." + field.lower()
+                + " delta " + (amount >= 0 ? "+" : "") + num(amount) + " -> " + num(now) + hitboxApplyNote()), false);
+        return 1;
+    }
+
+    /**
+     * Clear every delta, or just one limb's when {@code limbName} is given.
+     */
+    private static int cmdHitboxReset(CommandSourceStack src, String limbName) {
+        if (limbName == null) {
+            RigTuning.reset();
+            src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning cleared (all limbs)."), false);
+            return 1;
+        }
+        LimbType limb = parseLimb(src, limbName);
+        if (limb == null) {
+            return 0;
+        }
+        RigTuning.reset(limb);
+        src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning cleared for " + limb.name() + "."), false);
+        return 1;
+    }
+
+    /**
+     * Dump the current effective (base + delta) box spec per limb, flagging any non-zero deltas.
+     */
+    private static int cmdHitboxShow(CommandSourceStack src) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== wfmedical hitbox tuning (")
+                .append(RigTuning.ACTIVE ? "ARMED" : "inert, /wfmedical hitbox debug on")
+                .append(") ===\n effective spec (model units, standing) o=offset s=size p=pivot:");
+        for (LimbType lt : LimbType.VALUES) {
+            double[] base = HumanoidRig.baseSpec(lt);
+            double[] eff = new double[RigTuning.FIELDS];
+            StringBuilder deltas = new StringBuilder();
+            for (RigTuning.Field f : RigTuning.Field.VALUES) {
+                double d = RigTuning.delta(lt, f);
+                eff[f.ordinal()] = base[f.ordinal()] + d;
+                if (d != 0.0) {
+                    deltas.append(' ').append(f.lower()).append('=').append(d >= 0 ? "+" : "").append(num(d));
+                }
+            }
+            sb.append("\n ").append(String.format(java.util.Locale.ROOT, "%-10s", "[" + lt.name() + "]"))
+                    .append(" o=(").append(num(eff[0])).append(", ").append(num(eff[1])).append(", ").append(num(eff[2])).append(")")
+                    .append(" s=(").append(num(eff[3])).append(", ").append(num(eff[4])).append(", ").append(num(eff[5])).append(")")
+                    .append(" p=(").append(num(eff[6])).append(", ").append(num(eff[7])).append(", ").append(num(eff[8])).append(")")
+                    .append(HumanoidRig.usesCrouchOffset(lt) ? " +yOff" : "")
+                    .append(deltas.length() > 0 ? "  Δ" + deltas : "");
+        }
+        String dump = sb.toString();
+        src.sendSuccess(() -> Component.literal(dump), false);
+        return 1;
+    }
+
+    /**
+     * Print the effective spec as paste-ready {@code HumanoidRig.base()} rows so tuned values can be baked in.
+     */
+    private static int cmdHitboxExport(CommandSourceStack src) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("// Baked hitbox spec -> paste into HumanoidRig.base() (model units: ox,oy,oz, sx,sy,sz, px,py,pz)");
+        for (LimbType lt : LimbType.VALUES) {
+            double[] base = HumanoidRig.baseSpec(lt);
+            sb.append("\n b[LimbType.").append(lt.name()).append(".ordinal()] = new double[]{");
+            for (RigTuning.Field f : RigTuning.Field.VALUES) {
+                if (f.ordinal() > 0) {
+                    sb.append(", ");
+                }
+                sb.append(num(base[f.ordinal()] + RigTuning.delta(lt, f)));
+            }
+            sb.append("};");
+            if (HumanoidRig.usesCrouchOffset(lt)) {
+                sb.append("  // oy also gets +yOff while crouching");
+            }
+        }
+        String dump = sb.toString();
+        src.sendSuccess(() -> Component.literal(dump), false);
+        return 1;
+    }
+
+    private static String hitboxApplyNote() {
+        return RigTuning.ACTIVE ? "" : "  (inert -- '/wfmedical hitbox debug on' to apply)";
+    }
+
+    private static RigTuning.Field parseField(CommandSourceStack src, String name) {
+        RigTuning.Field f = RigTuning.Field.fromString(name);
+        if (f == null) {
+            src.sendFailure(Component.literal("[wfmedical] Unknown field: " + name
+                    + " (expected one of ox oy oz sx sy sz px py pz)"));
+        }
+        return f;
+    }
+
+    /**
+     * Compact double -> string: whole numbers print without a fractional part (e.g. {@code 8}, {@code -1.9}).
+     */
+    private static String num(double v) {
+        String s = Double.toString(v);
+        if (s.endsWith(".0")) {
+            s = s.substring(0, s.length() - 2);
+        }
+        return s;
     }
 
     /**

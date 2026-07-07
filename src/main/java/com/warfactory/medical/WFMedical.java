@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.config.MedicalDefinitions;
+import com.warfactory.medical.core.damage.rig.RigTuning;
 import com.warfactory.medical.core.substance.SubstanceRegistry;
 import com.warfactory.medical.core.trauma.TraumaRegistry;
 import com.warfactory.medical.core.treatment.Treatment;
@@ -13,6 +14,7 @@ import com.warfactory.medical.network.MedicalNetworking;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
+import net.minecraftforge.fml.event.config.ModConfigEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLPaths;
@@ -48,8 +50,20 @@ public final class WFMedical {
         // CapabilityManager.get(CapabilityToken) call in MedicalCapabilities (as Forge 1.20.1 requires) —
         // do NOT also call RegisterCapabilitiesEvent.register() for it, that double-registers and crashes.
         modBus.addListener(this::onCommonSetup);
+        // Mirror the hitboxDebug flag into the rig-tuning hot-path switch on load and every config reload.
+        modBus.addListener(this::onConfigChanged);
 
         LOGGER.info("[{}] {} constructed", MOD_ID, MOD_NAME);
+    }
+
+    /**
+     * Keep {@link RigTuning#ACTIVE} in step with {@code hitlocation.hitboxDebug} on config load/reload, so the
+     * limb-box tuning path is only ever armed when the test flag is set. Fires for our COMMON spec only.
+     */
+    private void onConfigChanged(ModConfigEvent event) {
+        if (event.getConfig().getSpec() == MedicalConfig.SPEC) {
+            RigTuning.ACTIVE = MedicalConfig.hitboxDebug();
+        }
     }
 
     /**

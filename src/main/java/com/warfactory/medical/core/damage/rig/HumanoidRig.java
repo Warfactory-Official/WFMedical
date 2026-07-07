@@ -42,6 +42,76 @@ public final class HumanoidRig {
     private static final double DEG2RAD = Math.PI / 180.0;
     private static final double LIMB_FREQ = 0.6662;
 
+    /**
+     * The fixed, upright base spec for each limb box (model units), the single source of truth for both the
+     * runtime rig and the {@code /wfmedical hitbox export} dump. Indexed by {@link LimbType#ordinal()}; each
+     * row is {@code {ox, oy, oz, sx, sy, sz, px, py, pz}} matching the leading {@code Part} ctor args
+     * (offset, size, pivot). HEAD and the two arms additionally get {@code +yOff} on {@code oy} while
+     * crouching — applied at {@link #part} time, NOT stored here. When {@link RigTuning#ACTIVE} the per-limb
+     * {@link RigTuning} deltas are added on top; otherwise these values are used verbatim.
+     */
+    private static final double[][] BASE = base();
+
+    private static double[][] base() {
+        double[][] b = new double[LimbType.VALUES.length][];
+        b[LimbType.HEAD.ordinal()] = new double[]{-4, -8, -4, 8, 8, 8, 0, 0, 0};
+        b[LimbType.TORSO.ordinal()] = new double[]{-4, 0, -2, 8, 12, 4, 0, 0, 0};
+        b[LimbType.LEFT_ARM.ordinal()] = new double[]{-1, -2, -2, 4, 12, 4, 5, 2, 0};
+        b[LimbType.RIGHT_ARM.ordinal()] = new double[]{-3, -2, -2, 4, 12, 4, -5, 2, 0};
+        b[LimbType.LEFT_LEG.ordinal()] = new double[]{-2, 0, -2, 4, 12, 4, 1.9, 12, 0};
+        b[LimbType.RIGHT_LEG.ordinal()] = new double[]{-2, 0, -2, 4, 12, 4, -1.9, 12, 0};
+        return b;
+    }
+
+    /**
+     * The upright base spec for a limb ({@code {ox,oy,oz,sx,sy,sz,px,py,pz}}, model units). Returns a copy;
+     * for the debug {@code hitbox show/export} commands. {@link #usesCrouchOffset} reports which limbs also
+     * take {@code +yOff} on {@code oy} at pose time.
+     */
+    public static double[] baseSpec(LimbType limb) {
+        return BASE[limb.ordinal()].clone();
+    }
+
+    /**
+     * True for the limbs whose {@code oy} gains the crouch {@code yOff} at pose time (head + both arms).
+     */
+    public static boolean usesCrouchOffset(LimbType limb) {
+        return limb == LimbType.HEAD || limb.isArm();
+    }
+
+    /**
+     * Build a {@link Part} from its {@link #BASE} spec, adding the crouch {@code yOff} to {@code oy} and, only
+     * when {@link RigTuning#ACTIVE}, the live {@link RigTuning} deltas. The {@code ACTIVE} branch is skipped
+     * entirely in normal play, so this is a plain base-spec read with no tuning cost.
+     */
+    private static Part part(LimbType limb, double yOff) {
+        int i = limb.ordinal();
+        double[] s = BASE[i];
+        double ox = s[0];
+        double oy = s[1] + yOff;
+        double oz = s[2];
+        double sx = s[3];
+        double sy = s[4];
+        double sz = s[5];
+        double px = s[6];
+        double py = s[7];
+        double pz = s[8];
+        if (RigTuning.ACTIVE) {
+            double[] d = RigTuning.deltas();
+            int b = i * RigTuning.FIELDS;
+            ox += d[b];
+            oy += d[b + 1];
+            oz += d[b + 2];
+            sx += d[b + 3];
+            sy += d[b + 4];
+            sz += d[b + 5];
+            px += d[b + 6];
+            py += d[b + 7];
+            pz += d[b + 8];
+        }
+        return new Part(ox, oy, oz, sx, sy, sz, px, py, pz, limb);
+    }
+
     // --- DOWNED (unconscious) pose replica: mirror the CLIENT lay-down so the rig matches the rendered body ---
     // Kept in lock-step with DownedPlayerRenderer (the PoseStack transform) and HumanoidModelMixin (the sprawl).
     /**
@@ -70,12 +140,16 @@ public final class HumanoidRig {
      */
     public static LocalRig compute(LivingEntity victim) {
 
-        Part head = new Part(-4, -8, -4, 8, 8, 8, 0, 0, 0, LimbType.HEAD);
-        Part body = new Part(-4, 0, -2, 8, 12, 4, 0, 0, 0, LimbType.TORSO);
-        Part rightArm = new Part(-3, -2, -2, 4, 12, 4, -5, 2, 0, LimbType.RIGHT_ARM);
-        Part leftArm = new Part(-1, -2, -2, 4, 12, 4, 5, 2, 0, LimbType.LEFT_ARM);
-        Part rightLeg = new Part(-2, 0, -2, 4, 12, 4, -1.9, 12, 0, LimbType.RIGHT_LEG);
-        Part leftLeg = new Part(-2, 0, -2, 4, 12, 4, 1.9, 12, 0, LimbType.LEFT_LEG);
+        Part body = part(LimbType.TORSO, 0.0);
+        Part rightLeg = part(LimbType.RIGHT_LEG, 0.0);
+        Part leftLeg = part(LimbType.LEFT_LEG, 0.0);
+
+        //Crouching does heavily affect y position of arms and head
+        double yOff = victim.isCrouching() ? 2.75 : 0;
+
+        Part head = part(LimbType.HEAD, yOff);
+        Part rightArm = part(LimbType.RIGHT_ARM, yOff);
+        Part leftArm = part(LimbType.LEFT_ARM, yOff);
 
         setupAnim(victim, head, body, rightArm, leftArm, rightLeg, leftLeg);
 

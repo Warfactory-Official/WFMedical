@@ -109,7 +109,7 @@ public record Obb(Vec3 center, Vec3 axisX, Vec3 axisY, Vec3 axisZ, Vec3 half, Li
         if (tMax < 0.0) {
             return Double.POSITIVE_INFINITY;
         }
-        return tMin < 0.0 ? 0.0 : tMin;
+        return Math.max(tMin, 0.0);
     }
 
     /**
