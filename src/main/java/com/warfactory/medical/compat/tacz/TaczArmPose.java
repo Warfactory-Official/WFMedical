@@ -11,13 +11,12 @@ public final class TaczArmPose {
                        double leftX, double leftY, double leftZ) {
     }
 
-    //baked states
     private static final Pose HOLD = new Pose(
-            -1.20, -0.10, 0.00,   // right arm
-            -1.35, 0.35, 0.00);   // left arm
+            -1.400, -0.300, 0.000,   // right arm
+            -1.400,  0.800, 0.000);  // left arm
     private static final Pose AIM = new Pose(
-            -1.52, -0.08, 0.05,   // right arm
-            -1.50, 0.22, -0.05);  // left arm
+            -1.600, -0.350, 0.000,   // right arm
+            -1.600,  0.800, 0.000);  // left arm
 
     private TaczArmPose() {
     }

@@ -235,13 +235,9 @@ public final class HitGeometry {
     }
 
     private static boolean rigUsable(LivingEntity victim) {
-        if (victim instanceof Player player && MedicalState.isDowned(player)) {
-            return false;
-        }
         if (!rigPoseSupported(victim)) {
             return false;
         }
-
         if (isUprightHumanoid(victim)) {
             AABB box = victim.getBoundingBox();
             return box.getYsize() >= box.getXsize();
@@ -252,6 +248,9 @@ public final class HitGeometry {
 
     public static boolean rigPoseSupported(LivingEntity victim) {
         if (isUprightHumanoid(victim)) {
+            return true;
+        }
+        if (victim instanceof Player player && MedicalState.isDowned(player)) {
             return true;
         }
         if (victim.isAutoSpinAttack()) {
@@ -266,6 +265,9 @@ public final class HitGeometry {
     }
 
     public static boolean isUprightHumanoid(LivingEntity victim) {
+        if (victim instanceof Player player && MedicalState.isDowned(player)) {
+            return false;
+        }
         if (victim.isVisuallySwimming() || victim.isFallFlying() || victim.isAutoSpinAttack()) {
             return false;
         }

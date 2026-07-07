@@ -1,5 +1,6 @@
 package com.warfactory.medical.core.damage.rig;
 
+import com.warfactory.medical.api.MedicalState;
 import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.compat.tacz.TaczArmPose;
 import com.warfactory.medical.compat.tacz.TaczGunState;
@@ -9,10 +10,14 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.Random;
 
 /**
  * Server-side replica of vanilla {@code HumanoidModel.setupAnim} + {@code PlayerModel}/renderer arm-pose
@@ -30,6 +35,17 @@ public final class HumanoidRig {
 
     private static final double DEG2RAD = Math.PI / 180.0;
     private static final double LIMB_FREQ = 0.6662;
+
+    // --- DOWNED (unconscious) pose replica: mirror the CLIENT lay-down so the rig matches the rendered body ---
+    // Kept in lock-step with DownedPlayerRenderer (the PoseStack transform) and HumanoidModelMixin (the sprawl).
+    /** Backward tip about world X to lay the model supine (DownedPlayerRenderer.LAY_DEGREES). */
+    private static final double DOWNED_LAY_RAD = Math.toRadians(-90.0);
+    /** Small fixed yaw so the sprawl is not grid-aligned (DownedPlayerRenderer.STABLE_YAW). */
+    private static final double DOWNED_STABLE_YAW_RAD = Math.toRadians(8.0);
+    /** Upward nudge (blocks) so the supine body rests on the surface (DownedPlayerRenderer.GROUND_LIFT). */
+    private static final double DOWNED_GROUND_LIFT = 0.1;
+    /** Half-range (radians) of the per-limb seeded sprawl (HumanoidModelMixin.TILT_RANGE). */
+    private static final float DOWNED_TILT_RANGE = 0.28F;
 
     private HumanoidRig() {
     }
@@ -96,12 +112,8 @@ public final class HumanoidRig {
      * to an entity-local {@link Obb}, padded by {@link MedicalConfig#limbBoxPadding()}.
      */
     public static LocalRig compute(LivingEntity victim) {
-        // Cube defs (addBox origin+size, model units) + base pivots (PartPose.offset).
-        // Head sized to the HAT/helmet layer (the base head cube + CubeDeformation(0.5) that the player model
-        // actually renders): 9x9x9 about the same centre, so the OBB envelops the whole visible head. The base
-        // 8x8x8 under-covered by ~0.5px all round -- worse than limbBoxPadding absorbs -- which read as a bad
-        // head tilt when pitched forward while sneaking. Other parts' outer layers are only +0.25px (< padding).
-        Part head = new Part(-4.5, -8.5, -4.5, 9, 9, 9, 0, 0, 0, LimbType.HEAD);
+
+        Part head = new Part(-4, -8, -4, 8, 8, 8, 0, 0, 0, LimbType.HEAD);
         Part body = new Part(-4, 0, -2, 8, 12, 4, 0, 0, 0, LimbType.TORSO);
         Part rightArm = new Part(-3, -2, -2, 4, 12, 4, -5, 2, 0, LimbType.RIGHT_ARM);
         Part leftArm = new Part(-1, -2, -2, 4, 12, 4, 5, 2, 0, LimbType.LEFT_ARM);
@@ -118,8 +130,55 @@ public final class HumanoidRig {
         rig.rightArm = toObb(rightArm, pad);
         rig.leftLeg = toObb(leftLeg, pad);
         rig.rightLeg = toObb(rightLeg, pad);
-        applyPoseTilt(victim, rig);
+        // A downed player is laid supine by the client renderer (a world-space transform applied OUTSIDE the
+        // model's own yaw); replicate that instead of the swim/elytra self-tilt. The two are mutually exclusive.
+        if (victim instanceof Player p && MedicalState.isDowned(p)) {
+            applyDownedLay(victim, rig);
+        } else {
+            applyPoseTilt(victim, rig);
+        }
         return rig;
+    }
+
+
+    public static AABB worldBounds(LivingEntity victim) {
+        LocalRig rig = compute(victim);
+        Vec3 pos = victim.position();
+        double yaw = Math.toRadians(victim.yBodyRot);
+        double fx = -Math.sin(yaw);
+        double fz = Math.cos(yaw);   // front = (-sin, 0, cos)
+        double rx = -fz;
+        double rz = fx;              // right = (-front.z, 0, front.x)
+        double minX = Double.POSITIVE_INFINITY, minY = minX, minZ = minX;
+        double maxX = Double.NEGATIVE_INFINITY, maxY = maxX, maxZ = maxX;
+        for (Obb obb : rig.all()) {
+            Vec3 c = obb.center;
+            Vec3 ax = obb.axisX;
+            Vec3 ay = obb.axisY;
+            Vec3 az = obb.axisZ;
+            double hx = obb.half.x;
+            double hy = obb.half.y;
+            double hz = obb.half.z;
+            for (int sx = -1; sx <= 1; sx += 2) {
+                for (int sy = -1; sy <= 1; sy += 2) {
+                    for (int sz = -1; sz <= 1; sz += 2) {
+                        double lx = c.x + sx * hx * ax.x + sy * hy * ay.x + sz * hz * az.x;
+                        double ly = c.y + sx * hx * ax.y + sy * hy * ay.y + sz * hz * az.y;
+                        double lz = c.z + sx * hx * ax.z + sy * hy * ay.z + sz * hz * az.z;
+                        double wx = pos.x + lx * rx + lz * fx;
+                        double wy = pos.y + ly;
+                        double wz = pos.z + lx * rz + lz * fz;
+                        if (wx < minX) minX = wx;
+                        if (wx > maxX) maxX = wx;
+                        if (wy < minY) minY = wy;
+                        if (wy > maxY) maxY = wy;
+                        if (wz < minZ) minZ = wz;
+                        if (wz > maxZ) maxZ = wz;
+                    }
+                }
+            }
+        }
+        return new AABB(minX, minY, minZ, maxX, maxY, maxZ);
     }
 
     /**
@@ -188,6 +247,77 @@ public final class HumanoidRig {
     /** {@code (x, y, z)} rotated about +X by the given cos/sin: {@code (x, y·c - z·s, y·s + z·c)}. */
     private static Vec3 rotX(Vec3 v, double cos, double sin) {
         return new Vec3(v.x, v.y * cos - v.z * sin, v.y * sin + v.z * cos);
+    }
+
+
+    private static void downedSprawl(Player p, Part head, Part rightArm, Part leftArm,
+                                     Part rightLeg, Part leftLeg) {
+        Random rng = new Random(p.getId());
+        head.xRot = downedTilt(rng) * 0.5F;
+        head.yRot = downedTilt(rng) * 0.5F;
+        head.zRot = downedTilt(rng);
+        sprawlPart(rightArm, rng);
+        sprawlPart(leftArm, rng);
+        sprawlPart(rightLeg, rng);
+        sprawlPart(leftLeg, rng);
+    }
+
+    private static void sprawlPart(Part part, Random rng) {
+        part.xRot += downedTilt(rng);
+        part.yRot += downedTilt(rng);
+        part.zRot += downedTilt(rng);
+    }
+
+    private static float downedTilt(Random rng) {
+        return (rng.nextFloat() * 2.0F - 1.0F) * DOWNED_TILT_RANGE;
+    }
+
+
+    private static void applyDownedLay(LivingEntity e, LocalRig rig) {
+        double yaw = Math.toRadians(e.yBodyRot);
+        double fX = -Math.sin(yaw);
+        double fZ = Math.cos(yaw);   // front = (-sin, 0, cos)
+        double rX = -fZ;
+        double rZ = fX;              // right = (-front.z, 0, front.x)
+        double cosA = Math.cos(DOWNED_STABLE_YAW_RAD);
+        double sinA = Math.sin(DOWNED_STABLE_YAW_RAD);
+        double cosL = Math.cos(DOWNED_LAY_RAD);
+        double sinL = Math.sin(DOWNED_LAY_RAD);
+        rig.head = layObb(rig.head, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL);
+        rig.torso = layObb(rig.torso, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL);
+        rig.leftArm = layObb(rig.leftArm, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL);
+        rig.rightArm = layObb(rig.rightArm, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL);
+        rig.leftLeg = layObb(rig.leftLeg, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL);
+        rig.rightLeg = layObb(rig.rightLeg, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL);
+    }
+
+    private static Obb layObb(Obb o, double fX, double fZ, double rX, double rZ,
+                              double cosA, double sinA, double cosL, double sinL) {
+        Vec3 c = lay(o.center, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, true);
+        Vec3 ax = lay(o.axisX, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, false);
+        Vec3 ay = lay(o.axisY, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, false);
+        Vec3 az = lay(o.axisZ, fX, fZ, rX, rZ, cosA, sinA, cosL, sinL, false);
+        return new Obb(c, ax, ay, az, o.half, o.limb);
+    }
+
+
+    private static Vec3 lay(Vec3 v, double fX, double fZ, double rX, double rZ,
+                            double cosA, double sinA, double cosL, double sinL, boolean lift) {
+       // local -> world offset: right=(rX,0,rZ), up=(0,1,0), front=(fX,0,fZ)
+        double ox = v.x * rX + v.z * fX;
+        double oy = v.y;
+        double oz = v.x * rZ + v.z * fZ;
+        // YP(stableYaw) about world Y
+        double yx = ox * cosA + oz * sinA;
+        double yz = -ox * sinA + oz * cosA;
+        // XP(lay) about world X
+        double xy = oy * cosL - yz * sinL;
+        double xz = oy * sinL + yz * cosL;
+        // world offset -> local
+        double lx = yx * rX + xz * rZ;
+        double ly = xy + (lift ? DOWNED_GROUND_LIFT : 0.0);
+        double lz = yx * fX + xz * fZ;
+        return new Vec3(lx, ly, lz);
     }
 
     // Vanilla HumanoidModel.setupAnim
@@ -332,6 +462,12 @@ public final class HumanoidRig {
         if (swimAmount > 0.0F) {
             swimAnim(e, head, rightArm, leftArm, rightLeg, leftLeg, limbSwing, swimAmount);
         }
+
+        // Downed sprawl: mirror HumanoidModelMixin's TAIL injection (seeded per-limb jitter + head reset) so the
+        // rig's limbs match the rendered unconscious body. Runs on the freshly-posed parts, before toObb.
+        if (e instanceof Player p && MedicalState.isDowned(p)) {
+            downedSprawl(p, head, rightArm, leftArm, rightLeg, leftLeg);
+        }
     }
 
     private static void poseRightArm(LivingEntity e, ArmPose pose, Part head, Part rightArm, Part leftArm,
@@ -437,10 +573,10 @@ public final class HumanoidRig {
             return;
         }
         TaczArmPose.Pose p = TaczArmPose.resolve(TaczGunState.aimingProgress(e));
-        rightArm.xRot = p.rightX();
+        rightArm.xRot = p.rightX() + head.xRot;
         rightArm.yRot = p.rightY() + head.yRot;
         rightArm.zRot = p.rightZ();
-        leftArm.xRot = p.leftX();
+        leftArm.xRot = p.leftX() + head.xRot;
         leftArm.yRot = p.leftY() + head.yRot;
         leftArm.zRot = p.leftZ();
     }

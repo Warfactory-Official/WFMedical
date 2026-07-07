@@ -3,6 +3,7 @@ package com.warfactory.medical.compat.tacz;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.LivingEntity;
 
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -21,30 +22,37 @@ public final class TaczPoseCaptureClient {
     public static void dump(LivingEntity holder, Consumer<String> out) {
         try {
             Class<?> managerClass = Class.forName(THIRD_PERSON_MANAGER);
-            Object animation = managerClass.getMethod("getAnimation", String.class).invoke(null, "default");
+            Method getAnimation = managerClass.getMethod("getAnimation", String.class);
+            getAnimation.setAccessible(true);
+            Object animation = getAnimation.invoke(null, "default");
             if (animation == null) {
                 out.accept("[wfmedical] TACZ third-person animation 'default' not found.");
                 return;
             }
+            Method hold = accessible(animation.getClass(), "animateGunHold", LivingEntity.class,
+                    ModelPart.class, ModelPart.class, ModelPart.class, ModelPart.class);
+            Method aim = accessible(animation.getClass(), "animateGunAim", LivingEntity.class,
+                    ModelPart.class, ModelPart.class, ModelPart.class, ModelPart.class, float.class);
+
             ModelPart[] parts = {emptyPart(), emptyPart(), emptyPart(), emptyPart()};
 
             reset(parts);
-            animation.getClass()
-                    .getMethod("animateGunHold", LivingEntity.class, ModelPart.class, ModelPart.class,
-                            ModelPart.class, ModelPart.class)
-                    .invoke(animation, holder, parts[0], parts[1], parts[2], parts[3]);
+            hold.invoke(animation, holder, parts[0], parts[1], parts[2], parts[3]);
             out.accept("HOLD  " + describe(parts));
 
             reset(parts);
-            animation.getClass()
-                    .getMethod("animateGunAim", LivingEntity.class, ModelPart.class, ModelPart.class,
-                            ModelPart.class, ModelPart.class, float.class)
-                    .invoke(animation, holder, parts[0], parts[1], parts[2], parts[3], 1.0F);
+            aim.invoke(animation, holder, parts[0], parts[1], parts[2], parts[3], 1.0F);
             out.accept("AIM   " + describe(parts));
             out.accept("[wfmedical] map the 4 parts (identify right/left arm by which rotated) -> TaczArmPose.");
         } catch (Throwable t) {
             out.accept("[wfmedical] TACZ pose capture failed: " + t);
         }
+    }
+
+    private static Method accessible(Class<?> owner, String name, Class<?>... params) throws NoSuchMethodException {
+        Method m = owner.getMethod(name, params);
+        m.setAccessible(true);
+        return m;
     }
 
     private static ModelPart emptyPart() {

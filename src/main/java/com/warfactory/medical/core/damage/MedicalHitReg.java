@@ -2,6 +2,7 @@ package com.warfactory.medical.core.damage;
 
 import com.warfactory.medical.compat.OpenPersistenceCompat;
 import com.warfactory.medical.config.MedicalConfig;
+import com.warfactory.medical.core.damage.rig.HumanoidRig;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
@@ -44,15 +45,17 @@ public final class MedicalHitReg {
         if (inflate <= 0.0) {
             return box;
         }
+
+        if (MedicalConfig.riggedLimbBoxes() && HitGeometry.rigPoseSupported(living)) {
+            AABB rigBounds = HumanoidRig.worldBounds(living);
+            return box.minmax(rigBounds).inflate(inflate);
+        }
+
         if (!HitGeometry.isUprightHumanoid(living)) {
-            // Prone / crawl / swim: the lying model overhangs the short box by ~half its STANDING height. The
-            // crawl box's own height (~0.6) is useless here, so size the all-round envelope to the standing
-            // length instead, so even the far foot registers. Classification against the tilted rig is separate.
             double standing = living.getDimensions(Pose.STANDING).height;
             double reach = Math.max(standing, 1.0) * 0.5 + inflate;
             return box.inflate(reach, inflate, reach);
         }
-        // Upright: widen X/Z to swallow the arm overhang; the box already spans the model's height.
         return box.inflate(inflate, 0.0, inflate);
     }
 }
