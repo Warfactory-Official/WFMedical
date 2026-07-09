@@ -115,6 +115,13 @@ public final class MedicalUIParts {
     }
 
     /**
+     * Interrupt the player's own in-progress treatment; the server validates and no item is consumed.
+     */
+    public static void requestCancelTreatment() {
+        MedicalNetworking.sendToServer(new CancelTreatmentPacket());
+    }
+
+    /**
      * Distinct medical item stacks in the player's inventory, deduplicated by item type.
      */
     public static List<ItemStack> availableMedicalItems() {
@@ -218,9 +225,11 @@ public final class MedicalUIParts {
 
     /**
      * Add one limb tile (color fill + selection border + transparent click button) to {@code group}.
-     * Coordinates are relative to {@code group}.
+     * Coordinates are relative to {@code group}. Public so {@link MedInteractionScreen} can place live,
+     * selectable tiles at hand-authored body-silhouette coordinates, not just the auto-laid-out
+     * {@link #bodyDiagram} grid.
      */
-    private static void addLimbTile(WidgetGroup group, LimbType limb, int tx, int ty, int tw, int th) {
+    public static void addLimbTile(WidgetGroup group, LimbType limb, int tx, int ty, int tw, int th) {
         if (tw <= 0 || th <= 0) {
             return;
         }
@@ -255,7 +264,7 @@ public final class MedicalUIParts {
         group.addWidget(click);
     }
 
-    private static List<Component> limbTooltip(LimbType limb) {
+    public static List<Component> limbTooltip(LimbType limb) {
         LimbSummary s = limbSummary(limb);
         List<Component> lines = new ArrayList<>(4);
         lines.add(limbName(limb));

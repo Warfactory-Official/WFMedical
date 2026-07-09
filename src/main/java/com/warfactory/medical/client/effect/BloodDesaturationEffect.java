@@ -18,6 +18,7 @@ import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import org.lwjgl.opengl.GL11;
 
 import java.util.List;
 
@@ -91,6 +92,14 @@ public final class BloodDesaturationEffect {
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+            // The final blit pass writes its fullscreen quad's depth (z=500, depthFunc ALWAYS) into the MAIN
+            // target's depth buffer. Vanilla clears depth just before the HUD, but this runs INSIDE the HUD pass
+            // (RenderGuiEvent.Pre), so that stale depth then occludes every depth-tested GUI draw after it --
+            // LDLib RenderType.gui() is LEQUAL, and item models write/test depth -- making mod overlays and
+            // inventory/hotbar items INVISIBLE. Re-clear the depth buffer to undo the write.
+            RenderSystem.depthMask(true);
+            RenderSystem.clearDepth(1.0);
+            RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
         } catch (Throwable t) {
             // A shader/GL failure must never crash the game: disable and tear down for the session.
             WFMedical.LOGGER.warn("[{}] Blood desaturation effect failed; disabling for this session",

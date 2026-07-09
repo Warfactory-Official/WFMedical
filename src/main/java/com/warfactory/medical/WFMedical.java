@@ -2,6 +2,7 @@ package com.warfactory.medical;
 
 import com.mojang.logging.LogUtils;
 import com.warfactory.medical.compat.TaczCompat;
+import com.warfactory.medical.config.MedicalClientConfig;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.config.MedicalDefinitions;
 import com.warfactory.medical.core.damage.rig.RigSpecIO;
@@ -46,6 +47,8 @@ public final class WFMedical {
 
         // COMMON config: numeric engine tunables (TOML).
         context.registerConfig(ModConfig.Type.COMMON, MedicalConfig.SPEC);
+        // CLIENT config: per-client HUD preferences (never synced), e.g. the damage-outline position.
+        context.registerConfig(ModConfig.Type.CLIENT, MedicalClientConfig.SPEC);
 
         // Mod-bus lifecycle listeners. NOTE: the medical capability registers itself lazily through the
         // CapabilityManager.get(CapabilityToken) call in MedicalCapabilities (as Forge 1.20.1 requires) —

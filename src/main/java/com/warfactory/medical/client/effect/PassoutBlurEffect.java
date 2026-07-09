@@ -16,6 +16,7 @@ import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import org.lwjgl.opengl.GL11;
 
 import java.util.List;
 
@@ -101,6 +102,13 @@ public final class PassoutBlurEffect {
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+            // The final blit pass writes its fullscreen quad's depth into the MAIN target's depth buffer; since
+            // this runs INSIDE the HUD pass (after vanilla's pre-HUD depth clear), that stale depth would occlude
+            // every depth-tested GUI draw after it (LDLib RenderType.gui() is LEQUAL, item models), making mod
+            // overlays and inventory/hotbar items invisible. Re-clear depth to undo it.
+            RenderSystem.depthMask(true);
+            RenderSystem.clearDepth(1.0);
+            RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
         } catch (Throwable t) {
             // A shader/GL failure must never crash the game: disable and tear down for the session.
             WFMedical.LOGGER.warn("[{}] Passed-out blur effect failed; disabling for this session",

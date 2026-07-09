@@ -175,6 +175,16 @@ public final class MedicalNetworking {
                     ctx.get().setPacketHandled(true);
                 })
                 .add();
+
+        // C2S: interrupt the sender's own in-progress treatment (interaction-menu cancel button).
+        CHANNEL.messageBuilder(CancelTreatmentPacket.class, 13, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(CancelTreatmentPacket::encode)
+                .decoder(CancelTreatmentPacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleServer(ctx.get().getSender());
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
     }
 
     /**

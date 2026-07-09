@@ -73,24 +73,35 @@ public final class ActionProgressOverlay implements IGuiOverlay {
 
     @Override
     public void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenW, int screenH) {
+        // The HUD overlay is not drawn while a screen (e.g. the interaction menu) is open; that screen draws the
+        // same bar itself via drawBar().
+        drawBar(graphics, screenW / 2 - BAR_WIDTH / 2, screenH - 60, BAR_WIDTH);
+    }
+
+    /**
+     * Draw the medical-action progress bar (label above, filled bar, percent) at {@code (x, barY)} with the given
+     * {@code width}, reading the live {@link ClientMedicalCache} active-treatment state. No-op (returns
+     * {@code false}) when no treatment is active. Shared by the HUD overlay and the interaction menu so both show
+     * an identical bar.
+     */
+    public static boolean drawBar(GuiGraphics graphics, int x, int barY, int width) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        if (player == null || mc.level == null) {
-            return;
+        if (player == null || mc.level == null || !ClientMedicalCache.hasActiveTreatment()) {
+            return false;
         }
-
-        if (!ClientMedicalCache.hasActiveTreatment()) {
-            return;
-        }
-
-        // Server-driven active treatment.
         ActiveTreatmentPacket a = ClientMedicalCache.activeTreatment();
         if (a == null || !a.active()) {
-            return;
+            return false;
         }
 
         long elapsed = mc.level.getGameTime() - a.startGameTime();
         float progress = a.totalTicks() <= 0 ? 1.0F : elapsed / (float) a.totalTicks();
+        if (progress < 0.0F) {
+            progress = 0.0F;
+        } else if (progress > 1.0F) {
+            progress = 1.0F;
+        }
 
         // Prefix label with the target's name when treating another entity (not self).
         String label;
@@ -106,25 +117,17 @@ public final class ActionProgressOverlay implements IGuiOverlay {
             label = actionLabel(a.action(), a.limb());
         }
 
-        if (progress < 0.0F) {
-            progress = 0.0F;
-        } else if (progress > 1.0F) {
-            progress = 1.0F;
-        }
-
-        int x = screenW / 2 - BAR_WIDTH / 2;
-        int y = screenH - 60;
-
         // Label sits just above the bar. Escape so a '%' in a (possibly modded) item name / label never
         // renders as LDLib's "Format error:" (see UiText).
         LABEL.updateText(UiText.escape(label));
-        LABEL.draw(graphics, -1, -1, x, y - 11, BAR_WIDTH, 9);
+        LABEL.draw(graphics, -1, -1, x, barY - 11, width, 9);
 
-        BACKGROUND.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT);
+        BACKGROUND.draw(graphics, -1, -1, x, barY, width, BAR_HEIGHT);
         FILL.setProgress(progress);
-        FILL.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT);
+        FILL.draw(graphics, -1, -1, x, barY, width, BAR_HEIGHT);
 
         PERCENT.updateText(UiText.escape(Math.round(progress * 100.0F) + "%"));
-        PERCENT.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT);
+        PERCENT.draw(graphics, -1, -1, x, barY, width, BAR_HEIGHT);
+        return true;
     }
 }

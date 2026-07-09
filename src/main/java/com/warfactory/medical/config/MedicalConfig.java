@@ -106,6 +106,7 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.DoubleValue TOURNIQUET_LEG_SPEED_MULTIPLIER;
     private static final ForgeConfigSpec.DoubleValue TOURNIQUET_ARM_SPEED_MULTIPLIER;
     private static final ForgeConfigSpec.DoubleValue TOURNIQUET_ARM_SWAY;
+    private static final ForgeConfigSpec.DoubleValue TOURNIQUET_RECOVERY_CHANCE;
     private static final ForgeConfigSpec.BooleanValue ADRENALINE_ENABLED;
     private static final ForgeConfigSpec.IntValue ADRENALINE_PAIN_KO_DELAY_TICKS;
     private static final ForgeConfigSpec.EnumValue<HitAuthority> HIT_AUTHORITY;
@@ -243,6 +244,11 @@ public final class MedicalConfig {
                 .comment("Weapon-sway intensity floor (0..1, like pain sway) while ANY arm wears a tourniquet. "
                         + "Default 0.30.")
                 .defineInRange("tourniquetArmSway", 0.30D, 0.0D, 1.0D);
+        TOURNIQUET_RECOVERY_CHANCE = b
+                .comment("Chance (0..1) that removing a tourniquet recovers it back into the remover's inventory. "
+                        + "On success the tourniquet item is returned (dropped at their feet if there is no room); "
+                        + "on failure it is lost. Default 0.60.")
+                .defineInRange("tourniquetRecoveryChance", 0.60D, 0.0D, 1.0D);
         ADRENALINE_ENABLED = b
                 .comment("If true, a PURELY pain-driven knockout (one that blood loss alone would not cause) is "
                         + "held off for adrenalinePainKoDelayTicks, mimicking adrenaline: the player keeps their "
@@ -686,6 +692,13 @@ public final class MedicalConfig {
      */
     public static double tourniquetArmSway() {
         return TOURNIQUET_ARM_SWAY.get();
+    }
+
+    /**
+     * Chance (0..1) that removing a tourniquet returns the item to the remover (else it is lost).
+     */
+    public static double tourniquetRecoveryChance() {
+        return TOURNIQUET_RECOVERY_CHANCE.get();
     }
 
     /**

@@ -3,7 +3,7 @@ package com.warfactory.medical.client;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.api.MedicalState;
 import com.warfactory.medical.client.render.HitboxDebugRenderer;
-import com.warfactory.medical.client.screen.CharacterSheetUI;
+import com.warfactory.medical.client.screen.MedInteractionScreen;
 import com.warfactory.medical.client.screen.RadialMenuUI;
 import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.compat.tacz.TaczPoseCaptureClient;
@@ -61,7 +61,7 @@ public final class MedicalClientEvents {
             return;
         }
         while (MedicalKeyMappings.OPEN_SHEET.consumeClick()) {
-            CharacterSheetUI.open();
+            MedInteractionScreen.open();
         }
         while (MedicalKeyMappings.OPEN_RADIAL.consumeClick()) {
             RadialMenuUI.open();

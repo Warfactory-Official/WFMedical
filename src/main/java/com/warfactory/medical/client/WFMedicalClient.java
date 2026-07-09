@@ -2,6 +2,7 @@ package com.warfactory.medical.client;
 
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.client.overlay.ActionProgressOverlay;
+import com.warfactory.medical.client.overlay.DamageOutlineOverlay;
 import com.warfactory.medical.client.overlay.HealthBarOverlay;
 import com.warfactory.medical.client.render.TourniquetLayer;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
@@ -59,6 +60,9 @@ public final class WFMedicalClient {
                 VanillaGuiOverlay.PLAYER_HEALTH.id(),
                 "wfmedical_health",
                 HealthBarOverlay.INSTANCE);
+        event.registerAboveAll(
+                "wfmedical_damage_outline",
+                DamageOutlineOverlay.INSTANCE);
         event.registerAboveAll(
                 "wfmedical_action_progress",
                 ActionProgressOverlay.INSTANCE);

@@ -12,6 +12,7 @@ import com.warfactory.medical.core.treatment.Treatment;
 import com.warfactory.medical.core.treatment.TreatmentAction;
 import com.warfactory.medical.item.InjectableItem;
 import com.warfactory.medical.item.MedicalItem;
+import com.warfactory.medical.item.ModItems;
 import com.warfactory.medical.network.ActiveTreatmentPacket;
 import com.warfactory.medical.network.MedicalNetworking;
 import com.warfactory.medical.network.MedicalSyncPacket;
@@ -308,7 +309,30 @@ public final class MedicalActionService {
         data.bumpRevision();
         MedicalEngine.resync(player);
         MedicalNetworking.broadcastTourniquets(player, profile);
+        recoverTourniquet(player);
         return true;
+    }
+
+    /**
+     * On a successful tourniquet removal, roll {@link MedicalConfig#tourniquetRecoveryChance} to return the
+     * tourniquet item to the remover; if their inventory is full it drops at their feet, and on a failed roll it
+     * is lost. Skipped in creative (the item is free there anyway).
+     */
+    private static void recoverTourniquet(ServerPlayer player) {
+        if (player.getAbilities().instabuild) {
+            return;
+        }
+        if (player.getRandom().nextFloat() >= (float) MedicalConfig.tourniquetRecoveryChance()) {
+            return; // lost
+        }
+        Item item = ModItems.TOURNIQUET.get();
+        if (item == null) {
+            return;
+        }
+        ItemStack stack = new ItemStack(item);
+        if (!player.getInventory().add(stack)) {
+            player.drop(stack, false);
+        }
     }
 
     /**
