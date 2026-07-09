@@ -5,6 +5,7 @@ import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.damage.rig.HumanoidRig;
 import com.warfactory.medical.core.damage.rig.Obb;
+import com.warfactory.medical.core.damage.rig.RigCache;
 import com.warfactory.medical.core.limb.LimbType;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.HumanoidArm;
@@ -20,6 +21,8 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 
@@ -45,6 +48,28 @@ public final class HitGeometry {
         }
         Vec3 hit = resolveHitPoint(victim, src, cat);
         return hit == null ? null : classifyLocal(victim, hit);
+    }
+
+    /**
+     * Through-and-through classify (R1 penetration): the ordered limbs a traced shot passes through, nearest
+     * first, spending a per-limb penetration budget so a shot can wound (say) a raised arm AND the torso
+     * behind it. The first element is the PRIMARY hit and is identical to {@link #classifyHit}'s nearest-OBB
+     * result, so a caller that only reads element 0 sees the same limb as before. Only ray-like sources
+     * pierce; point-only / non-rig hits collapse to the single {@link #classifyHit} limb. Never {@code null}
+     * &mdash; returns an empty list when no limb resolves at all.
+     */
+    public static List<LimbType> classifyHitPierced(LivingEntity victim, DamageSource src, DamageCategory cat) {
+        if (victim instanceof Player && MedicalConfig.riggedLimbBoxes() && rigUsable(victim)) {
+            Vec3[] seg = attackSegment(victim, src, cat);
+            if (seg != null) {
+                List<LimbType> pierced = rigRayPierce(victim, seg[0], seg[1]);
+                if (!pierced.isEmpty()) {
+                    return pierced;
+                }
+            }
+        }
+        LimbType single = classifyHit(victim, src, cat);
+        return single == null ? List.of() : List.of(single);
     }
 
     /**
@@ -311,7 +336,7 @@ public final class HitGeometry {
         }
         Vec3 origin = worldToLocalPoint(victim, from);
         Vec3 localDir = worldToLocalDir(victim, dir);
-        HumanoidRig.LocalRig rig = HumanoidRig.compute(victim);
+        HumanoidRig.LocalRig rig = RigCache.resolve(victim);
         double best = Double.POSITIVE_INFINITY;
         LimbType limb = null;
         for (Obb obb : rig.all()) {
@@ -325,11 +350,68 @@ public final class HitGeometry {
     }
 
     /**
+     * The limbs a ray passes through, nearest first, trimmed by the penetration budget (R1/R4). Every rig OBB
+     * the ray enters is collected with its entry distance, sorted, then walked front-to-back spending each
+     * limb's {@link MedicalConfig#penetrationResistance}; the nearest limb is always included, and the walk
+     * stops once the budget is exhausted (so a dense torso ends the shot sooner than a thin arm would). Uses
+     * {@link RigCache#resolve} so it shares the per-tick cache / client-hint pose. Empty when the ray misses.
+     */
+    private static List<LimbType> rigRayPierce(LivingEntity victim, Vec3 from, Vec3 to) {
+        Vec3 dir = to.subtract(from);
+        if (dir.lengthSqr() < 1.0e-12) {
+            return List.of();
+        }
+        Vec3 origin = worldToLocalPoint(victim, from);
+        Vec3 localDir = worldToLocalDir(victim, dir);
+        HumanoidRig.LocalRig rig = RigCache.resolve(victim);
+        Obb[] all = rig.all();
+        // Gather every entered OBB with its entry distance (n <= 6).
+        double[] ts = new double[all.length];
+        LimbType[] limbs = new LimbType[all.length];
+        int n = 0;
+        for (Obb obb : all) {
+            double t = obb.rayEntry(origin, localDir);
+            if (t != Double.POSITIVE_INFINITY) {
+                ts[n] = t;
+                limbs[n] = obb.limb();
+                n++;
+            }
+        }
+        if (n == 0) {
+            return List.of();
+        }
+        // Insertion sort by entry distance ascending (nearest first).
+        for (int i = 1; i < n; i++) {
+            double tk = ts[i];
+            LimbType lk = limbs[i];
+            int j = i - 1;
+            while (j >= 0 && ts[j] > tk) {
+                ts[j + 1] = ts[j];
+                limbs[j + 1] = limbs[j];
+                j--;
+            }
+            ts[j + 1] = tk;
+            limbs[j + 1] = lk;
+        }
+        // Spend the penetration budget front-to-back; the nearest limb is always hit.
+        List<LimbType> out = new ArrayList<>(n);
+        double budget = MedicalConfig.penetrationBudget();
+        for (int i = 0; i < n; i++) {
+            out.add(limbs[i]);
+            budget -= MedicalConfig.penetrationResistance(limbs[i]);
+            if (budget <= 0.0) {
+                break;
+            }
+        }
+        return out;
+    }
+
+    /**
      * Nearest-OBB (by {@link Obb#distanceSq}) limb for a point-only source; never {@code null}.
      */
     private static LimbType rigPointPick(LivingEntity victim, Vec3 worldPoint) {
         Vec3 local = worldToLocalPoint(victim, worldPoint);
-        HumanoidRig.LocalRig rig = HumanoidRig.compute(victim);
+        HumanoidRig.LocalRig rig = RigCache.resolve(victim);
         double best = Double.POSITIVE_INFINITY;
         LimbType limb = LimbType.TORSO;
         for (Obb obb : rig.all()) {

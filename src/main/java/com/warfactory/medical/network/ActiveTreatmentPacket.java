@@ -14,13 +14,13 @@ import net.minecraft.network.FriendlyByteBuf;
  * game time: {@code elapsed = clientGameTime - startGameTime; fraction = elapsed / totalTicks}.</p>
  */
 public record ActiveTreatmentPacket(boolean active, TreatmentAction action, LimbType limb, int totalTicks,
-                                    long startGameTime) {
+                                    long startGameTime, int targetEntityId) {
 
     /**
      * Convenience "no active treatment" instance for cancellation / completion.
      */
     public static ActiveTreatmentPacket inactive() {
-        return new ActiveTreatmentPacket(false, null, null, 0, 0L);
+        return new ActiveTreatmentPacket(false, null, null, 0, 0L, -1);
     }
 
     public static ActiveTreatmentPacket decode(FriendlyByteBuf buf) {
@@ -32,7 +32,8 @@ public record ActiveTreatmentPacket(boolean active, TreatmentAction action, Limb
         LimbType limb = buf.readBoolean() ? buf.readEnum(LimbType.class) : null;
         int totalTicks = buf.readVarInt();
         long startGameTime = buf.readLong();
-        return new ActiveTreatmentPacket(true, action, limb, totalTicks, startGameTime);
+        int targetEntityId = buf.readVarInt();
+        return new ActiveTreatmentPacket(true, action, limb, totalTicks, startGameTime, targetEntityId);
     }
 
     /**
@@ -65,6 +66,16 @@ public record ActiveTreatmentPacket(boolean active, TreatmentAction action, Limb
         }
         buf.writeVarInt(totalTicks);
         buf.writeLong(startGameTime);
+        buf.writeVarInt(targetEntityId);
+    }
+
+    /**
+     * Entity id of who is being treated ({@code -1} = the local player themself). Lets the overlay label a
+     * treatment aimed at another player / a downed body.
+     */
+    @Override
+    public int targetEntityId() {
+        return targetEntityId;
     }
 
     /**

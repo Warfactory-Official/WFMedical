@@ -11,12 +11,20 @@ import net.minecraft.server.level.ServerPlayer;
  * (if valid) starts the active treatment through {@link MedicalActionService#start}. Clients never mutate
  * medical state directly.
  */
-public record MedicalActionPacket(ResourceLocation itemId, LimbType limb) {
+public record MedicalActionPacket(ResourceLocation itemId, LimbType limb, int targetEntityId) {
+
+    /**
+     * Self-targeted convenience (e.g. the legacy G-key radial): {@code targetEntityId = -1} means "the actor".
+     */
+    public MedicalActionPacket(ResourceLocation itemId, LimbType limb) {
+        this(itemId, limb, -1);
+    }
 
     public static MedicalActionPacket decode(FriendlyByteBuf buf) {
         ResourceLocation itemId = buf.readResourceLocation();
         LimbType limb = buf.readBoolean() ? buf.readEnum(LimbType.class) : null;
-        return new MedicalActionPacket(itemId, limb);
+        int targetEntityId = buf.readVarInt();
+        return new MedicalActionPacket(itemId, limb, targetEntityId);
     }
 
     /**
@@ -34,15 +42,17 @@ public record MedicalActionPacket(ResourceLocation itemId, LimbType limb) {
         if (hasLimb) {
             buf.writeEnum(limb);
         }
+        buf.writeVarInt(targetEntityId);
     }
 
     /**
-     * Server-thread handler: validate the sender and delegate to the authoritative action service.
+     * Server-thread handler: validate the sender and delegate to the authoritative action service, which
+     * resolves the target ({@code -1} = the sender themself) and validates reach before starting anything.
      */
     public void handleServer(ServerPlayer sender) {
         if (sender == null) {
             return;
         }
-        MedicalActionService.start(sender, itemId, limb);
+        MedicalActionService.start(sender, itemId, limb, targetEntityId);
     }
 }

@@ -103,11 +103,35 @@ public final class HumanoidRig {
     }
 
     /**
+     * The built-in default geometry (wrapping the {@link #BASE}/{@link #POSE_ADJUST}/{@link #HAND_ADJUST}
+     * literals) and the ACTIVE spec the rig actually reads. {@link RigSpecIO} may swap in a file-loaded
+     * override via {@link #setSpec}; the literals here are the fallback when no override file is present.
+     */
+    private static final RigSpec DEFAULT_SPEC = new RigSpec(BASE, POSE_ADJUST, HAND_ADJUST);
+    private static volatile RigSpec spec = DEFAULT_SPEC;
+
+    /**
+     * A deep copy of the built-in default geometry, for {@link RigSpecIO} to overlay a partial file onto.
+     */
+    public static RigSpec defaultSpec() {
+        return DEFAULT_SPEC.copy();
+    }
+
+    /**
+     * Swap the active box geometry ({@code null} resets to the built-in defaults). Called by {@link RigSpecIO}
+     * on config load/reload and by {@code /wfmedical hitbox export file}. Published through a volatile so the
+     * server hit thread and client render thread always read a consistent spec.
+     */
+    public static void setSpec(RigSpec next) {
+        spec = (next == null) ? DEFAULT_SPEC : next;
+    }
+
+    /**
      * The STANDING base spec for a limb ({@code {ox,oy,oz,sx,sy,sz,px,py,pz}}, model units). Returns a copy;
-     * for the debug {@code hitbox show/export} commands.
+     * for the debug {@code hitbox show/export} commands. Reads the ACTIVE spec (override file or defaults).
      */
     public static double[] baseSpec(LimbType limb) {
-        return BASE[limb.ordinal()].clone();
+        return spec.base[limb.ordinal()].clone();
     }
 
     /**
@@ -115,7 +139,7 @@ public final class HumanoidRig {
      * the debug commands. STANDING is always all-zero.
      */
     public static double[] poseAdjustSpec(RigTuning.RigPose pose, LimbType limb) {
-        return POSE_ADJUST[pose.ordinal()][limb.ordinal()].clone();
+        return spec.poseAdjust[pose.ordinal()][limb.ordinal()].clone();
     }
 
     /**
@@ -123,7 +147,7 @@ public final class HumanoidRig {
      * commands. Only arm limbs with a non-NONE action are ever non-zero.
      */
     public static double[] handAdjustSpec(RigTuning.RigPose pose, RigTuning.HandAction hand, LimbType limb) {
-        return HAND_ADJUST[pose.ordinal()][hand.ordinal()][limb.ordinal()].clone();
+        return spec.handAdjust[pose.ordinal()][hand.ordinal()][limb.ordinal()].clone();
     }
 
     /**
@@ -176,8 +200,9 @@ public final class HumanoidRig {
      */
     private static Part part(LimbType limb, RigTuning.RigPose pose, RigTuning.HandAction hand) {
         int li = limb.ordinal();
-        double[] s = BASE[li];
-        double[] adj = POSE_ADJUST[pose.ordinal()][li];
+        RigSpec sp = spec; // read the active geometry once (override file or built-in defaults)
+        double[] s = sp.base[li];
+        double[] adj = sp.poseAdjust[pose.ordinal()][li];
         double ox = s[0] + adj[0];
         double oy = s[1] + adj[1];
         double oz = s[2] + adj[2];
@@ -190,7 +215,7 @@ public final class HumanoidRig {
         // Arms in a hand action get the baked per-(stance, action) overlay on top of the stance adjust.
         boolean armOverlay = limb.isArm() && hand != RigTuning.HandAction.NONE;
         if (armOverlay) {
-            double[] h = HAND_ADJUST[pose.ordinal()][hand.ordinal()][li];
+            double[] h = sp.handAdjust[pose.ordinal()][hand.ordinal()][li];
             ox += h[0];
             oy += h[1];
             oz += h[2];
@@ -539,35 +564,29 @@ public final class HumanoidRig {
         setupAttackAnimation(e, head, body, rightArm, leftArm);
 
         //crouch / stand pivots
-        // NOTE the head pivot (head.y) is written with += / left untouched, NOT set absolutely: the head cube
-        // rotates about this pivot with the look direction, so the crouch reposition must move the PIVOT, and
-        // head.y arrives already carrying its base (0) + the resolved pose's POSE_ADJUST/tuning py. Setting it
-        // absolutely (as the other, non-look-rotating parts do) would clobber that head-pivot tuning.
+        // Pivots (head.y, body.y, arm.y, leg.y, leg.z) are written with += the crouch DELTA-from-base, never
+        // set absolutely: each arrives already carrying its BASE pivot + the resolved pose's POSE_ADJUST/tuning
+        // (and, for arms, the hand overlay). Setting a pivot absolutely would clobber that tuning -- which is
+        // exactly why the crouch arms could not be lowered via `py`. Base pivots: head y=0, body y=0, arm y=2,
+        // leg y=12, leg z(pz)=0; the crouch deltas below reproduce vanilla's 4.2 / 3.2 / 5.2 / 12.2 / 4.0.
         if (crouching) {
             body.xRot = 0.5;
-            if (!holdingGun) {
-                // Vanilla crouch tilts the arms forward/down; a held gun stays aimed, so skip it for the gun pose.
-                rightArm.xRot += 0.4;
-                leftArm.xRot += 0.4;
-            }
-            rightLeg.z = 4.0;
-            leftLeg.z = 4.0;
-            rightLeg.y = 12.2;
-            leftLeg.y = 12.2;
+            // The gun keeps its two-handed aim, but the vanilla crouch arm tilt still angles it DOWN toward the
+            // chest-held gun (without it the arms sit horizontal at head height); so apply it for the gun too.
+            rightArm.xRot += 0.4;
+            leftArm.xRot += 0.4;
+            rightLeg.z += 4.0;
+            leftLeg.z += 4.0;
+            rightLeg.y += 0.2;   // 12.2 - base 12
+            leftLeg.y += 0.2;
             head.y += 4.2;
-            body.y = 3.2;
-            leftArm.y = 5.2;
-            rightArm.y = 5.2;
+            body.y += 3.2;
+            leftArm.y += 3.2;    // 5.2 - base 2
+            rightArm.y += 3.2;
         } else {
             body.xRot = 0.0;
-            rightLeg.z = 0.0;
-            leftLeg.z = 0.0;
-            rightLeg.y = 12.0;
-            leftLeg.y = 12.0;
-            // head.y unchanged: base 0 + tuned py (no reset here, which would clobber head-pivot tuning).
-            body.y = 0.0;
-            leftArm.y = 2.0;
-            rightArm.y = 2.0;
+            // Standing pivots equal each part's BASE, so they are left at (base + tuned) rather than reset --
+            // a reset would clobber pivot tuning. (leg z=0, leg y=12, body y=0, arm y=2, head y=0 = the bases.)
         }
 
         //idle arm bob (gated on !SPYGLASS)
@@ -956,6 +975,12 @@ public final class HumanoidRig {
      * The six posed OBBs in entity-local space.
      */
     public static final class LocalRig {
+        /**
+         * The six slots in a FIXED order (matching {@link #all()} and {@link LimbType} identity). The single
+         * source of truth for iterating/serialising the rig by position, so a streamed pose can carry the six
+         * boxes without a client-controlled limb tag &mdash; the server assigns each slot's {@link LimbType}.
+         */
+        public static final Slot[] SLOTS = Slot.values();
         public Obb head;
         public Obb torso;
         public Obb leftArm;
@@ -975,6 +1000,48 @@ public final class HumanoidRig {
                 all = a;
             }
             return a;
+        }
+
+        /**
+         * A rig slot: its fixed position and the {@link LimbType} the runtime attributes to it. Used by the
+         * per-tick cache validation and the {@code CLIENT_HINT} pose (de)serialisation.
+         */
+        public enum Slot {
+            HEAD(LimbType.HEAD),
+            TORSO(LimbType.TORSO),
+            LEFT_ARM(LimbType.LEFT_ARM),
+            RIGHT_ARM(LimbType.RIGHT_ARM),
+            LEFT_LEG(LimbType.LEFT_LEG),
+            RIGHT_LEG(LimbType.RIGHT_LEG);
+
+            public final LimbType limb;
+
+            Slot(LimbType limb) {
+                this.limb = limb;
+            }
+
+            public Obb get(LocalRig r) {
+                return switch (this) {
+                    case HEAD -> r.head;
+                    case TORSO -> r.torso;
+                    case LEFT_ARM -> r.leftArm;
+                    case RIGHT_ARM -> r.rightArm;
+                    case LEFT_LEG -> r.leftLeg;
+                    case RIGHT_LEG -> r.rightLeg;
+                };
+            }
+
+            public void set(LocalRig r, Obb o) {
+                switch (this) {
+                    case HEAD -> r.head = o;
+                    case TORSO -> r.torso = o;
+                    case LEFT_ARM -> r.leftArm = o;
+                    case RIGHT_ARM -> r.rightArm = o;
+                    case LEFT_LEG -> r.leftLeg = o;
+                    case RIGHT_LEG -> r.rightLeg = o;
+                }
+                r.all = null; // invalidate the cached array; slots are set before all() at decode
+            }
         }
     }
 

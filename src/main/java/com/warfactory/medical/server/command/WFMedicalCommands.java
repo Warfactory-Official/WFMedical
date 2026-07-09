@@ -20,6 +20,8 @@ import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.damage.HitGeometry;
 import com.warfactory.medical.core.damage.rig.HumanoidRig;
 import com.warfactory.medical.core.damage.rig.Obb;
+import com.warfactory.medical.core.damage.rig.RigSpec;
+import com.warfactory.medical.core.damage.rig.RigSpecIO;
 import com.warfactory.medical.core.damage.rig.RigTuning;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
@@ -296,6 +298,8 @@ public final class WFMedicalCommands {
                                         StringArgumentType.getString(ctx, "pose")))))
                 .then(Commands.literal("export")
                         .executes(ctx -> cmdHitboxExport(ctx.getSource(), null))
+                        .then(Commands.literal("file")
+                                .executes(ctx -> cmdHitboxExportFile(ctx.getSource())))
                         .then(Commands.argument("pose", StringArgumentType.word())
                                 .suggests(HITBOX_POSE_SUGGESTIONS)
                                 .executes(ctx -> cmdHitboxExport(ctx.getSource(),
@@ -812,6 +816,38 @@ public final class WFMedicalCommands {
         }
         String dump = sb.toString();
         src.sendSuccess(() -> Component.literal(dump), false);
+        return 1;
+    }
+
+    /**
+     * Persist the current effective hitbox geometry (base + all folded tuning deltas) to the data file
+     * {@code config/wfmedical_hitbox_rig.json}, apply it live, and clear the now-baked deltas so the boxes are
+     * not doubled. The file reloads automatically on server start / config reload &mdash; no recompile needed.
+     */
+    private static int cmdHitboxExportFile(CommandSourceStack src) {
+        RigSpec spec = RigSpecIO.effectiveSpec();
+        java.nio.file.Path file;
+        try {
+            file = RigSpecIO.write(net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get(), spec);
+        } catch (Exception e) {
+            src.sendFailure(Component.literal("[wfmedical] hitbox export file FAILED: " + e.getMessage()));
+            return 0;
+        }
+        // Apply the written geometry live and clear the now-baked tuning deltas (stance + hand) so part()
+        // does not add them a second time on top of the new baseline.
+        HumanoidRig.setSpec(spec);
+        RigTuning.reset();
+        for (RigTuning.RigPose pose : RigTuning.RigPose.VALUES) {
+            for (RigTuning.HandAction action : RigTuning.HandAction.VALUES) {
+                if (action != RigTuning.HandAction.NONE) {
+                    RigTuning.resetHand(pose, action);
+                }
+            }
+        }
+        final String path = file.toString();
+        src.sendSuccess(() -> Component.literal("[wfmedical] Wrote hitbox geometry to " + path
+                + " and applied it live; tuning deltas cleared (they are the baseline now). Reloads "
+                + "automatically on server start / config reload."), true);
         return 1;
     }
 

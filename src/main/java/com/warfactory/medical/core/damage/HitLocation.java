@@ -8,6 +8,8 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 
+import java.util.List;
+
 /**
  * Picks which {@link LimbType} an incoming hit lands on. When the geometric hit-location path can
  * reconstruct a hit position ({@link HitGeometry}), that decides the limb deterministically; otherwise
@@ -31,6 +33,24 @@ public final class HitLocation {
             warnUntraceable(victim, src, cat);
         }
         return pickWeighted(src, cat, rand);
+    }
+
+    /**
+     * Through-and-through variant of {@link #pick} (R1 penetration): the ordered limbs the hit passed through,
+     * nearest first, so the caller can wound each. Element 0 is the same primary limb {@link #pick} returns.
+     * Deterministic geometry first; falls back to a single weighted-sampler limb when no geometry resolves.
+     * Never empty.
+     */
+    public static List<LimbType> pickPierced(LivingEntity victim, DamageSource src, DamageCategory cat,
+                                             RandomSource rand) {
+        if (victim != null && MedicalConfig.geometricHitLocation()) {
+            List<LimbType> pierced = HitGeometry.classifyHitPierced(victim, src, cat);
+            if (!pierced.isEmpty()) {
+                return pierced;
+            }
+            warnUntraceable(victim, src, cat);
+        }
+        return List.of(pickWeighted(src, cat, rand));
     }
 
     /**
@@ -106,14 +126,16 @@ public final class HitLocation {
                 }
                 return 0.85F;
             case FALL:
-                // Impact damage from falling is absorbed by the legs, then torso.
+                // Impact damage from falling is absorbed by the legs, sometimes the torso (a bad landing). It
+                // never lands on the arms or head, so those are zeroed out — otherwise the weighted roll would
+                // occasionally (~8% arms, ~3% head) blame a fall on a limb that took no impact.
                 if (limb.isLeg()) {
                     return 2.5F;
                 }
                 if (limb == LimbType.TORSO) {
-                    return 1.1F;
+                    return 0.6F;
                 }
-                return 0.4F;
+                return 0.0F;
             case EXPLOSION:
                 // Blasts spread widely; flatten slightly towards the extremities.
                 return limb.isVital() ? 0.9F : 1.2F;

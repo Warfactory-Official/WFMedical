@@ -11,6 +11,7 @@ import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.damage.*;
+import com.warfactory.medical.core.damage.rig.RigCache;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
@@ -252,26 +253,64 @@ public final class MedicalEventHandler {
         TraumaRegistry registry = TraumaRegistry.active();
 
         DamageCategory cat = DamageClassifier.classify(src);
-        LimbType limb = HitLocation.pick(victim, src, cat, rand);
-        ArmorEvaluation.Outcome outcome = ArmorEvaluation.evaluate(victim, limb, cat, amount, rand);
+        // R1 penetration: a traced shot can pass through several limbs (a raised arm then the torso behind it).
+        // The PRIMARY (nearest) limb is identical to the single-limb pick and drives the instant-death check
+        // with the full amount; deeper limbs take a declining share of energy and never instant-kill. With
+        // penetration off this is exactly one limb, so the behaviour is unchanged.
+        List<LimbType> limbs = MedicalConfig.penetrationEnabled()
+                ? HitLocation.pickPierced(victim, src, cat, rand)
+                : List.of(HitLocation.pick(victim, src, cat, rand));
+        if (limbs.isEmpty()) {
+            return new HurtResolution(false, false, ArmorEvaluation.Outcome.FULL);
+        }
 
-        // MAJOR TRAUMA: a non-blocked hit that alone reaches this category's fraction of the FULL healthy bar.
-        boolean majorTrauma = outcome != ArmorEvaluation.Outcome.BLOCKED
+        LimbType primary = limbs.get(0);
+        ArmorEvaluation.Outcome primaryOutcome = ArmorEvaluation.evaluate(victim, primary, cat, amount, rand);
+
+        // MAJOR TRAUMA: a non-blocked PRIMARY hit that alone reaches this category's fraction of the FULL bar.
+        boolean majorTrauma = primaryOutcome != ArmorEvaluation.Outcome.BLOCKED
                 && MedicalConfig.canInstakillOnImpact(cat)
                 && amount >= MedicalConfig.maxHealthPoints() * (float) MedicalConfig.majorTraumaFraction(cat);
         if (majorTrauma) {
-            return new HurtResolution(true, false, outcome);
+            return new HurtResolution(true, false, primaryOutcome);
         }
 
-        List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limb, amount, registry, nowTick, rand);
-        Limb targetLimb = profile.limb(limb);
+        // Apply trauma to every pierced limb: the primary at full energy, each deeper limb at energy *
+        // falloff^i (re-evaluating armor per limb, since a helmet and a chestplate cover different limbs).
+        boolean addedAny = false;
+        double falloff = MedicalConfig.penetrationEnergyFalloff();
+        float energy = amount;
+        for (int i = 0; i < limbs.size(); i++) {
+            LimbType limb = limbs.get(i);
+            ArmorEvaluation.Outcome outcome = (i == 0)
+                    ? primaryOutcome
+                    : ArmorEvaluation.evaluate(victim, limb, cat, energy, rand);
+            addedAny |= applyLimbTrauma(cat, outcome, limb, energy, profile, registry, nowTick, rand);
+            energy = (float) (energy * falloff);
+        }
+        return new HurtResolution(false, addedAny, primaryOutcome);
+    }
+
+    /**
+     * Generate + merge trauma for one (pierced) limb at the given energy, applying depletion effects when
+     * anything lands. Returns whether trauma was added. Extracted so R1 penetration can drive it per limb;
+     * the non-penetration path simply calls it once with the full amount.
+     */
+    private static boolean applyLimbTrauma(DamageCategory cat, ArmorEvaluation.Outcome outcome, LimbType limbType,
+                                           float energy, MedicalProfile profile, TraumaRegistry registry,
+                                           long nowTick, RandomSource rand) {
+        List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limbType, energy, registry, nowTick, rand);
+        Limb targetLimb = profile.limb(limbType);
         targetLimb.rebuildCache();
         float beforeReduction = targetLimb.getCachedHealthReduction();
-        boolean added = mergeTrauma(profile, limb, generated);
+        boolean added = mergeTrauma(profile, limbType, generated);
         if (added) {
-            applyDepletionEffects(targetLimb, limb, beforeReduction, registry, nowTick, rand);
+            // Accumulated minor trauma (scratches / bruises) coalesces into a real major wound before we read
+            // the post-hit reduction, so escalation feeds the depletion / overflow-bleed check below.
+            TraumaEscalation.escalate(targetLimb, limbType, registry, MedicalConfig.maxTraumaPerLimb(), nowTick);
+            applyDepletionEffects(targetLimb, limbType, beforeReduction, registry, nowTick, rand);
         }
-        return new HurtResolution(false, added, outcome);
+        return added;
     }
 
     /**
@@ -457,6 +496,13 @@ public final class MedicalEventHandler {
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             MedicalEngine.onPlayerJoin(player);
+            // Tell the client whether to stream its pose (CLIENT_HINT authority mode).
+            MedicalNetworking.sendHitAuthority(player);
+            // Send the wearer their own worn-tourniquet mask so their third-person / first-person model shows it.
+            IMedicalData data = MedicalCapabilities.get(player);
+            if (data != null) {
+                MedicalNetworking.broadcastTourniquets(player, data.getProfile());
+            }
         }
     }
 
@@ -480,6 +526,7 @@ public final class MedicalEventHandler {
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             MedicalEngine.onPlayerLeave(player);
+            RigCache.clearHint(player.getId());
         }
     }
 
@@ -526,6 +573,9 @@ public final class MedicalEventHandler {
             return;
         }
         MedicalNetworking.sendDownedTo(viewer, target.getId(), data.getProfile().isDowned());
+        // Catch-up: the viewer also needs the target's worn-tourniquet mask to render the worn model.
+        MedicalNetworking.sendTourniquetsTo(viewer, target.getId(),
+                MedicalNetworking.tourniquetMask(data.getProfile()));
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.warfactory.medical.client.effect;
 
 import com.mojang.blaze3d.shaders.AbstractUniform;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.mixin.PostChainAccessor;
@@ -81,7 +82,15 @@ public final class BloodDesaturationEffect {
             event.getGuiGraphics().flush();
             active.process(event.getPartialTick());
             // Rebind the main target so subsequent HUD rendering draws to the right place.
-            mc.getMainRenderTarget().bindWrite(false);
+            var target = mc.getMainRenderTarget();
+            target.bindWrite(false);
+            // PostPass leaves BLEND DISABLED (from the blit pass's blend mode) and never restores the caller's
+            // render state; without this the HUD drawn next -- and translucent world/sky elements next frame --
+            // render wrong (reads as UI + sky corruption while bleeding). Restore GUI-safe defaults.
+            RenderSystem.viewport(0, 0, target.viewWidth, target.viewHeight);
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         } catch (Throwable t) {
             // A shader/GL failure must never crash the game: disable and tear down for the session.
             WFMedical.LOGGER.warn("[{}] Blood desaturation effect failed; disabling for this session",

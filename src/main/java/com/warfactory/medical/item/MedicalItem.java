@@ -1,27 +1,25 @@
 package com.warfactory.medical.item;
 
-import com.warfactory.medical.capability.IMedicalData;
-import com.warfactory.medical.capability.MedicalCapabilities;
-import com.warfactory.medical.core.limb.LimbType;
+import com.warfactory.medical.client.render.MedicalItemRenderer;
 import com.warfactory.medical.core.treatment.Treatment;
-import com.warfactory.medical.server.TreatmentService;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
+import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.level.Level;
+import net.minecraftforge.client.extensions.common.IClientItemExtensions;
+
+import java.util.function.Consumer;
 
 /**
- * A medical item whose use starts a timed "treatment". The actual physiology mutation is server
- * authoritative: only {@link TreatmentService#apply(ServerPlayer, Treatment)} may touch trauma, and the
- * item stack is only consumed when that call reports a change. Clients merely play the use animation and
- * swing; they never create or remove trauma.
+ * A medical item that carries a {@link Treatment}. Right-clicking one no longer uses the vanilla hold-to-use
+ * channel (see {@link #use}); instead the client-side treatment wheel picks a target + limb and sends an
+ * authoritative request. The physiology mutation is server-authoritative
+ * ({@code MedicalActionService} / {@code TreatmentService}); the stack is consumed only when the treatment
+ * actually changes state. Clients never create or remove trauma.
  */
 public class MedicalItem extends Item {
 
@@ -59,28 +57,25 @@ public class MedicalItem extends Item {
 
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
-        ItemStack stack = player.getItemInHand(hand);
-        player.startUsingItem(hand);
-        return InteractionResultHolder.consume(stack);
+        // Right-click handling for medical items is driven entirely by the client-side treatment wheel (see
+        // TreatmentInteractions): it detects the target, opens the limb wheel or auto-applies, and sends the
+        // authoritative MedicalActionPacket. The vanilla hold-to-use channel is intentionally disabled here so
+        // the two never race — returning FAIL means the client sends no use packet and the server never acts.
+        return InteractionResultHolder.fail(player.getItemInHand(hand));
     }
 
+    /**
+     * Route this item through the {@link MedicalItemRenderer} BEWLR so its OBJ model renders (for items whose
+     * baked model is {@code builtin/entity}). Client-only: the consumer runs only on the client, so the
+     * client-only renderer reference is never classloaded on a dedicated server. Covers {@link InjectableItem}.
+     */
     @Override
-    public ItemStack finishUsingItem(ItemStack stack, Level level, LivingEntity entity) {
-        if (!level.isClientSide && entity instanceof ServerPlayer serverPlayer && treatment != null) {
-            // Bias vanilla right-click use toward whatever limb the player selected in the UI, if any.
-            IMedicalData data = MedicalCapabilities.get(serverPlayer);
-            LimbType preferred = data != null ? data.getProfile().getPreferredLimb() : null;
-            boolean applied = TreatmentService.applyTargeted(serverPlayer, treatment, preferred);
-            if (applied) {
-                level.playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
-                        SoundEvents.BOTTLE_EMPTY, SoundSource.PLAYERS, 0.8F, 1.0F);
-                if (!serverPlayer.getAbilities().instabuild) {
-                    stack.shrink(1);
-                }
+    public void initializeClient(Consumer<IClientItemExtensions> consumer) {
+        consumer.accept(new IClientItemExtensions() {
+            @Override
+            public BlockEntityWithoutLevelRenderer getCustomRenderer() {
+                return MedicalItemRenderer.get();
             }
-        } else if (level.isClientSide && entity instanceof Player) {
-            entity.swing(entity.getUsedItemHand());
-        }
-        return stack;
+        });
     }
 }

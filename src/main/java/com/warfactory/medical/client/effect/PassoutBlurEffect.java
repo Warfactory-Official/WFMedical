@@ -1,6 +1,7 @@
 package com.warfactory.medical.client.effect;
 
 import com.mojang.blaze3d.shaders.AbstractUniform;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.mixin.PostChainAccessor;
 import com.warfactory.medical.network.ClientMedicalCache;
@@ -92,7 +93,14 @@ public final class PassoutBlurEffect {
             event.getGuiGraphics().flush();
             active.process(event.getPartialTick());
             // Rebind the main target so subsequent HUD rendering draws to the right place.
-            mc.getMainRenderTarget().bindWrite(false);
+            var mainTarget = mc.getMainRenderTarget();
+            mainTarget.bindWrite(false);
+            // PostPass leaves BLEND DISABLED and never restores the caller's render state; without this the HUD
+            // drawn next -- and translucent world/sky elements next frame -- render wrong. Restore GUI defaults.
+            RenderSystem.viewport(0, 0, mainTarget.viewWidth, mainTarget.viewHeight);
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         } catch (Throwable t) {
             // A shader/GL failure must never crash the game: disable and tear down for the session.
             WFMedical.LOGGER.warn("[{}] Passed-out blur effect failed; disabling for this session",

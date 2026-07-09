@@ -63,6 +63,17 @@ public final class MedicalProfile {
     private transient long activeStartGameTime;
     private transient boolean activeTreatment;
     /**
+     * Entity id of who the ACTIVE treatment is being applied TO ({@code -1} = the actor themself). The timer
+     * lives on the actor (this profile); the physiology mutation on completion lands on this target's profile,
+     * enabling a medic to treat another player / a downed body. Transient, never persisted.
+     */
+    private transient int activeTargetId = -1;
+    /**
+     * Inventory slot the actor's treatment item occupies at start. Re-checked each tick so switching the held
+     * item away mid-treatment cancels it (the "cannot change items while applying" rule). Transient.
+     */
+    private transient int activeSlot = -1;
+    /**
      * Client-provided targeting hint (nullable): the limb the player selected in the UI. Transient.
      */
     private transient LimbType preferredLimb;
@@ -510,14 +521,19 @@ public final class MedicalProfile {
 
     /**
      * Begin tracking a timed treatment. Transient bookkeeping only; physiology mutates on completion.
+     *
+     * @param targetId entity id of who is being treated ({@code -1} = the actor themself)
+     * @param slot     the actor inventory slot holding the treatment item (re-checked to enforce no item swap)
      */
     public void setActiveTreatment(TreatmentAction action, LimbType limb, String itemId,
-                                   int totalTicks, long startGameTime) {
+                                   int totalTicks, long startGameTime, int targetId, int slot) {
         this.activeAction = action;
         this.activeLimb = limb;
         this.activeItemId = itemId == null ? "" : itemId;
         this.activeTotalTicks = totalTicks;
         this.activeStartGameTime = startGameTime;
+        this.activeTargetId = targetId;
+        this.activeSlot = slot;
         this.activeTreatment = true;
     }
 
@@ -528,6 +544,8 @@ public final class MedicalProfile {
         this.activeItemId = "";
         this.activeTotalTicks = 0;
         this.activeStartGameTime = 0L;
+        this.activeTargetId = -1;
+        this.activeSlot = -1;
     }
 
     public TreatmentAction getActiveAction() {
@@ -548,6 +566,20 @@ public final class MedicalProfile {
 
     public long getActiveStartGameTime() {
         return activeStartGameTime;
+    }
+
+    /**
+     * Entity id the active treatment is being applied to ({@code -1} = the actor themself).
+     */
+    public int getActiveTargetId() {
+        return activeTargetId;
+    }
+
+    /**
+     * Actor inventory slot the active treatment item occupies ({@code -1} = none tracked).
+     */
+    public int getActiveSlot() {
+        return activeSlot;
     }
 
     public LimbType getPreferredLimb() {

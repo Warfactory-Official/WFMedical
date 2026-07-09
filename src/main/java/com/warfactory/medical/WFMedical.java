@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.config.MedicalDefinitions;
+import com.warfactory.medical.core.damage.rig.RigSpecIO;
 import com.warfactory.medical.core.damage.rig.RigTuning;
 import com.warfactory.medical.core.substance.SubstanceRegistry;
 import com.warfactory.medical.core.trauma.TraumaRegistry;
@@ -65,6 +66,8 @@ public final class WFMedical {
             RigTuning.ACTIVE = MedicalConfig.hitboxDebug();
             // Seed the live per-stance envelope reach from config so tuning starts from the persisted values.
             RigTuning.seedEnvelope(MedicalConfig.envelopeReachSnapshot());
+            // R2: load the data-driven limb-box geometry override (or reset to built-in defaults if absent).
+            RigSpecIO.reload(FMLPaths.CONFIGDIR.get());
         }
     }
 

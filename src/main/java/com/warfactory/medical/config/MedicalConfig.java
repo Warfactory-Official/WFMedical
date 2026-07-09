@@ -2,6 +2,7 @@ package com.warfactory.medical.config;
 
 import com.warfactory.medical.core.PhysiologyParams;
 import com.warfactory.medical.core.damage.DamageCategory;
+import com.warfactory.medical.core.damage.HitAuthority;
 import com.warfactory.medical.core.damage.HitRegMode;
 import com.warfactory.medical.core.damage.rig.RigTuning;
 import com.warfactory.medical.core.limb.LimbType;
@@ -107,6 +108,18 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.DoubleValue TOURNIQUET_ARM_SWAY;
     private static final ForgeConfigSpec.BooleanValue ADRENALINE_ENABLED;
     private static final ForgeConfigSpec.IntValue ADRENALINE_PAIN_KO_DELAY_TICKS;
+    private static final ForgeConfigSpec.EnumValue<HitAuthority> HIT_AUTHORITY;
+    private static final ForgeConfigSpec.IntValue POSE_STREAM_MIN_INTERVAL_TICKS;
+    private static final ForgeConfigSpec.IntValue POSE_STREAM_MAX_INTERVAL_TICKS;
+    private static final ForgeConfigSpec.IntValue POSE_HINT_MAX_AGE_TICKS;
+    private static final ForgeConfigSpec.DoubleValue POSE_HINT_MARGIN;
+    private static final ForgeConfigSpec.BooleanValue PENETRATION_ENABLED;
+    private static final ForgeConfigSpec.DoubleValue PENETRATION_BUDGET;
+    private static final ForgeConfigSpec.DoubleValue PENETRATION_ENERGY_FALLOFF;
+    private static final ForgeConfigSpec.DoubleValue PEN_RESIST_HEAD;
+    private static final ForgeConfigSpec.DoubleValue PEN_RESIST_TORSO;
+    private static final ForgeConfigSpec.DoubleValue PEN_RESIST_ARM;
+    private static final ForgeConfigSpec.DoubleValue PEN_RESIST_LEG;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -288,8 +301,9 @@ public final class MedicalConfig {
                 .comment("Bare-handed strikes -- set high so punches essentially never one-shot.")
                 .defineInRange("majorTraumaFractionUnarmed", 3.0D, 0.1D, 100.0D);
         MAJOR_TRAUMA_FRACTION_FALL = b
-                .comment("Falls -- above 1.0 so only a catastrophic fall instant-kills; lesser falls injure legs.")
-                .defineInRange("majorTraumaFractionFall", 1.5D, 0.1D, 100.0D);
+                .comment("Falls -- 1.0 means a fall dealing a full health bar (~33 blocks) instant-kills; "
+                        + "shorter falls crush/fracture legs and can bleed you out instead.")
+                .defineInRange("majorTraumaFractionFall", 1.0D, 0.1D, 100.0D);
         b.pop();
         FINISH_DOWNED_ON_HIT = b
                 .comment("If true, any real damage taken while already unconscious/downed finishes the player "
@@ -478,6 +492,69 @@ public final class MedicalConfig {
         ENV_REACH_H = envH;
         ENV_REACH_V = envV;
         b.pop();
+        b.pop();
+
+        b.comment("Who computes the posed limb rig used to classify a player hit. Purely a performance /",
+                        "authority trade -- the medical outcome is identical either way.",
+                        "  SERVER      - the server rebuilds the victim's rig itself (authoritative, deterministic).",
+                        "                Backed by a per-tick cache so repeated hits in one tick cost one rebuild.",
+                        "  CLIENT_HINT - the victim's client streams its own posed rig; the server still runs the ray",
+                        "                test ITSELF (an attacker can never pick the limb) but skips the costly rebuild,",
+                        "                validating the supplied pose against a cheap bound and falling back to a server",
+                        "                rebuild whenever the hint is absent, stale, or implausible. Trades a little",
+                        "                per-player bandwidth for server CPU on very large servers.")
+                .push("authority");
+        HIT_AUTHORITY = b
+                .comment("SERVER (default, authoritative) or CLIENT_HINT (victim streams its pose; server validates).")
+                .defineEnum("hitAuthority", HitAuthority.SERVER);
+        POSE_STREAM_MIN_INTERVAL_TICKS = b
+                .comment("CLIENT_HINT only: the victim's client will not send its pose more often than this many "
+                        + "ticks, even while moving (rate limit). Default 2.")
+                .defineInRange("poseStreamMinIntervalTicks", 2, 1, 40);
+        POSE_STREAM_MAX_INTERVAL_TICKS = b
+                .comment("CLIENT_HINT only: the victim's client resends its pose at least this often even when it "
+                        + "has not changed (heartbeat), so the server's copy never goes stale under poseHintMaxAge"
+                        + "Ticks. Keep below poseHintMaxAgeTicks. Default 10.")
+                .defineInRange("poseStreamMaxIntervalTicks", 10, 1, 200);
+        POSE_HINT_MAX_AGE_TICKS = b
+                .comment("CLIENT_HINT only: the server treats a streamed pose older than this (in ticks) as stale "
+                        + "and rebuilds the rig itself for that hit. Default 30 (1.5s).")
+                .defineInRange("poseHintMaxAgeTicks", 30, 1, 200);
+        POSE_HINT_MARGIN = b
+                .comment("CLIENT_HINT only: slack (blocks) added to the victim's bounding box when validating a "
+                        + "streamed pose. A supplied limb box whose centre falls outside the box+margin (or whose "
+                        + "size is implausible) is rejected and the server rebuilds instead. Guards against a client "
+                        + "shrinking/displacing its own hitboxes. Default 0.6.")
+                .defineInRange("poseHintMargin", 0.6D, 0.0D, 4.0D);
+        b.pop();
+
+        b.comment("PENETRATION (through-and-through): when on, a traced shot can wound EVERY rigged limb box it",
+                        "passes through (e.g. a raised arm AND the torso behind it), not just the nearest. The nearest",
+                        "limb is still the PRIMARY hit (full damage, can be lethal, identical to penetration-off); each",
+                        "further limb the shot exits into takes a declining share of trauma and never instant-kills.",
+                        "Only ray-like sources (bullets, arrows, melee aim) penetrate; explosions / positional hits do",
+                        "not. Off (default) is byte-identical to the single-limb behaviour.")
+                .push("penetration");
+        PENETRATION_ENABLED = b
+                .comment("Master toggle for through-and-through multi-limb wounding.")
+                .define("penetrationEnabled", false);
+        PENETRATION_BUDGET = b
+                .comment("How much limb resistance one shot can punch through. As the ray crosses each limb it spends "
+                        + "that limb's penetrationResist*; once the budget is used up the shot stops and no deeper "
+                        + "limb is wounded. The first (nearest) limb is always hit regardless of budget. Default 1.0.")
+                .defineInRange("penetrationBudget", 1.0D, 0.0D, 10.0D);
+        PENETRATION_ENERGY_FALLOFF = b
+                .comment("Trauma-energy multiplier applied per limb already pierced: limb N gets energy * "
+                        + "falloff^N. 0.5 -> the second limb takes half, the third a quarter, etc. Default 0.5.")
+                .defineInRange("penetrationEnergyFalloff", 0.5D, 0.0D, 1.0D);
+        PEN_RESIST_HEAD = b.comment("Penetration resistance of the HEAD (budget spent passing through it).")
+                .defineInRange("penetrationResistHead", 0.5D, 0.0D, 10.0D);
+        PEN_RESIST_TORSO = b.comment("Penetration resistance of the TORSO (dense -> stops a shot soonest).")
+                .defineInRange("penetrationResistTorso", 0.8D, 0.0D, 10.0D);
+        PEN_RESIST_ARM = b.comment("Penetration resistance of an ARM (thin -> a shot passes through readily).")
+                .defineInRange("penetrationResistArm", 0.25D, 0.0D, 10.0D);
+        PEN_RESIST_LEG = b.comment("Penetration resistance of a LEG.")
+                .defineInRange("penetrationResistLeg", 0.4D, 0.0D, 10.0D);
         b.pop();
 
         SPEC = b.build();
@@ -890,6 +967,75 @@ public final class MedicalConfig {
             a[pose.ordinal() * 2 + 1] = ENV_REACH_V[pose.ordinal()].get();
         }
         return a;
+    }
+
+    /**
+     * SERVER (server rebuilds the rig) or CLIENT_HINT (victim streams its pose; server validates + ray-tests).
+     */
+    public static HitAuthority hitAuthority() {
+        return HIT_AUTHORITY.get();
+    }
+
+    /**
+     * CLIENT_HINT: minimum ticks between pose sends from a victim's client (rate limit).
+     */
+    public static int poseStreamMinIntervalTicks() {
+        return POSE_STREAM_MIN_INTERVAL_TICKS.get();
+    }
+
+    /**
+     * CLIENT_HINT: heartbeat interval (ticks) at which the victim resends its pose even when unchanged.
+     */
+    public static int poseStreamMaxIntervalTicks() {
+        return POSE_STREAM_MAX_INTERVAL_TICKS.get();
+    }
+
+    /**
+     * CLIENT_HINT: age (ticks) past which a streamed pose is stale and the server rebuilds instead.
+     */
+    public static int poseHintMaxAgeTicks() {
+        return POSE_HINT_MAX_AGE_TICKS.get();
+    }
+
+    /**
+     * CLIENT_HINT: bounding-box slack (blocks) when validating a streamed pose.
+     */
+    public static double poseHintMargin() {
+        return POSE_HINT_MARGIN.get();
+    }
+
+    /**
+     * Master toggle for through-and-through multi-limb wounding (R1 penetration passthrough).
+     */
+    public static boolean penetrationEnabled() {
+        return PENETRATION_ENABLED.get();
+    }
+
+    /**
+     * How much total limb resistance one shot can punch through before it stops.
+     */
+    public static double penetrationBudget() {
+        return PENETRATION_BUDGET.get();
+    }
+
+    /**
+     * Trauma-energy multiplier applied per already-pierced limb (limb N gets energy * falloff^N).
+     */
+    public static double penetrationEnergyFalloff() {
+        return PENETRATION_ENERGY_FALLOFF.get();
+    }
+
+    /**
+     * Penetration resistance of a limb: budget spent as the ray passes through it. Torso is densest.
+     */
+    public static double penetrationResistance(LimbType lt) {
+        if (lt == LimbType.HEAD) {
+            return PEN_RESIST_HEAD.get();
+        }
+        if (lt == LimbType.TORSO) {
+            return PEN_RESIST_TORSO.get();
+        }
+        return lt.isLeg() ? PEN_RESIST_LEG.get() : PEN_RESIST_ARM.get();
     }
 
     /**

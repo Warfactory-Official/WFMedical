@@ -43,11 +43,29 @@ public final class TreatmentService {
      * @param limbHint the limb the player selected in the UI (nullable = no preference)
      */
     public static boolean applyTargeted(ServerPlayer player, Treatment treatment, LimbType limbHint) {
-        if (player == null || treatment == null) {
+        if (player == null) {
             return false;
         }
         IMedicalData data = MedicalCapabilities.get(player);
         if (data == null) {
+            return false;
+        }
+        return applyTargeted(data, player.level().getGameTime(), treatment, limbHint);
+    }
+
+    /**
+     * Target-generic core: mutate the medical state behind {@code data} — which may belong to the actor, to
+     * another player, or to a downed/persistent body — using {@code gameTime} for any timed effect. The
+     * {@link #applyTargeted(ServerPlayer, Treatment, LimbType)} overload just resolves the actor's own data and
+     * world time before delegating here, so a medic treating someone else reuses the exact same logic.
+     *
+     * @param data      the target's medical data
+     * @param gameTime  the current world game time (for timed effects such as a clotting boost)
+     * @param treatment the treatment to apply
+     * @param limbHint  the limb the player selected in the UI (nullable = no preference)
+     */
+    public static boolean applyTargeted(IMedicalData data, long gameTime, Treatment treatment, LimbType limbHint) {
+        if (data == null || treatment == null) {
             return false;
         }
         MedicalProfile profile = data.getProfile();
@@ -103,7 +121,7 @@ public final class TreatmentService {
         // raises both the severity a bleed can self-clot at and the speed it clots (handled in the engine).
         if (action == TreatmentAction.BOOST_CLOTTING) {
             float mag = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;
-            long end = player.level().getGameTime() + MedicalConfig.clottingAgentDurationTicks();
+            long end = gameTime + MedicalConfig.clottingAgentDurationTicks();
             float beforeBoost = profile.getClottingBoost();
             long beforeEnd = profile.getClottingBoostEndTick();
             float newBoost = Math.max(beforeBoost, mag);

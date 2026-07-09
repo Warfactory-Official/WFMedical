@@ -1,9 +1,13 @@
 package com.warfactory.medical.network;
 
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.MedicalProfile;
+import com.warfactory.medical.core.damage.HitAuthority;
+import com.warfactory.medical.core.limb.LimbType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
@@ -121,6 +125,94 @@ public final class MedicalNetworking {
                     ctx.get().setPacketHandled(true);
                 })
                 .add();
+
+        // C2S: the victim's own streamed pose (CLIENT_HINT authority). The server validates + ray-tests it.
+        CHANNEL.messageBuilder(PoseStreamPacket.class, 8, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(PoseStreamPacket::encode)
+                .decoder(PoseStreamPacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleServer(ctx.get().getSender());
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
+
+        // S2C: tell a joining client whether to stream its pose (server's authority mode).
+        CHANNEL.messageBuilder(HitAuthorityPacket.class, 9, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(HitAuthorityPacket::encode)
+                .decoder(HitAuthorityPacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleClient();
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
+
+        // S2C: per-entity worn-tourniquet mask, broadcast to trackers so observers render the worn model.
+        CHANNEL.messageBuilder(TourniquetStatePacket.class, 10, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(TourniquetStatePacket::encode)
+                .decoder(TourniquetStatePacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleClient();
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
+
+        // C2S: ask the server for a treatment target's per-limb summaries (medic right-clicked someone else).
+        CHANNEL.messageBuilder(TreatmentTargetRequestPacket.class, 11, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(TreatmentTargetRequestPacket::encode)
+                .decoder(TreatmentTargetRequestPacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleServer(ctx.get().getSender());
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
+
+        // S2C: reply with the target's per-limb summaries so the client can open the limb wheel for them.
+        CHANNEL.messageBuilder(TreatmentTargetInfoPacket.class, 12, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(TreatmentTargetInfoPacket::encode)
+                .decoder(TreatmentTargetInfoPacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleClient();
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
+    }
+
+    /**
+     * The worn-tourniquet limb mask ({@code bit = 1 << LimbType.ordinal()}) for a profile.
+     */
+    public static int tourniquetMask(MedicalProfile profile) {
+        int mask = 0;
+        for (LimbType lt : LimbType.VALUES) {
+            if (profile.limb(lt).hasTourniquet()) {
+                mask |= (1 << lt.ordinal());
+            }
+        }
+        return mask;
+    }
+
+    /**
+     * Broadcast a player's worn-tourniquet mask to every client tracking them AND to the player itself, so
+     * observers (and the wearer's own third-person model) render the worn tourniquets. Call on each apply/remove.
+     */
+    public static void broadcastTourniquets(LivingEntity entity, MedicalProfile profile) {
+        CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> entity),
+                new TourniquetStatePacket(entity.getId(), tourniquetMask(profile)));
+    }
+
+    /**
+     * Send one viewer the CURRENT worn-tourniquet mask of an entity (start-tracking catch-up).
+     */
+    public static void sendTourniquetsTo(ServerPlayer viewer, int entityId, int mask) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> viewer), new TourniquetStatePacket(entityId, mask));
+    }
+
+    /**
+     * Tell a player whether the server wants its client to stream its pose (i.e. whether the authority mode
+     * is {@link HitAuthority#CLIENT_HINT}). Sent on login; a live mode change takes effect on reconnect.
+     */
+    public static void sendHitAuthority(ServerPlayer player) {
+        boolean stream = MedicalConfig.hitAuthority() == HitAuthority.CLIENT_HINT;
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new HitAuthorityPacket(stream));
     }
 
     /**
@@ -159,6 +251,14 @@ public final class MedicalNetworking {
      */
     public static void sendActiveTreatment(ServerPlayer player, ActiveTreatmentPacket packet) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+    }
+
+    /**
+     * Reply to a medic with a treatment target's per-limb summaries (so their client can open the limb wheel
+     * for that target). See {@link TreatmentTargetRequestPacket} / {@link TreatmentTargetInfoPacket}.
+     */
+    public static void sendTargetInfo(ServerPlayer medic, TreatmentTargetInfoPacket packet) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> medic), packet);
     }
 
     /**

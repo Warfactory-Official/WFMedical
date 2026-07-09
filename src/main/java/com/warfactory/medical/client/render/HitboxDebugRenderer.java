@@ -10,6 +10,7 @@ import com.warfactory.medical.core.damage.HitRegMode;
 import com.warfactory.medical.core.damage.MedicalHitReg;
 import com.warfactory.medical.core.damage.rig.HumanoidRig;
 import com.warfactory.medical.core.damage.rig.Obb;
+import com.warfactory.medical.core.damage.rig.RigCache;
 import com.warfactory.medical.core.damage.rig.RigTuning;
 import com.warfactory.medical.core.limb.LimbType;
 import net.minecraft.client.Minecraft;
@@ -151,7 +152,7 @@ public final class HitboxDebugRenderer {
     }
 
     private static void renderRig(Matrix4f mat, Matrix3f nrm, VertexConsumer vc, LivingEntity e, float pt, float alpha) {
-        HumanoidRig.LocalRig rig = HumanoidRig.compute(e);
+        HumanoidRig.LocalRig rig = RigCache.get(e);
         double[] frame = frame(e, pt);
         LimbType hl = RigTuning.ACTIVE ? RigTuning.highlight : null;
         for (Obb obb : rig.all()) {
@@ -165,7 +166,7 @@ public final class HitboxDebugRenderer {
     }
 
     private static void fillRig(Matrix4f mat, VertexConsumer fillVc, LivingEntity e, float pt, float alpha) {
-        HumanoidRig.LocalRig rig = HumanoidRig.compute(e);
+        HumanoidRig.LocalRig rig = RigCache.get(e);
         double[] frame = frame(e, pt);
         LimbType hl = RigTuning.ACTIVE ? RigTuning.highlight : null;
         for (Obb obb : rig.all()) {

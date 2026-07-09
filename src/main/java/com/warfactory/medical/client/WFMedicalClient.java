@@ -3,7 +3,10 @@ package com.warfactory.medical.client;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.client.overlay.ActionProgressOverlay;
 import com.warfactory.medical.client.overlay.HealthBarOverlay;
+import com.warfactory.medical.client.render.TourniquetLayer;
+import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
@@ -27,6 +30,20 @@ public final class WFMedicalClient {
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         MedicalKeyMappings.register(event);
+    }
+
+    /**
+     * Add the worn-tourniquet render layer to every player-skin renderer so applied tourniquets show on the
+     * third-person player model (arm/leg). The first-person arm is handled separately by
+     * {@code TourniquetArmRenderer}.
+     */
+    @SubscribeEvent
+    public static void onAddLayers(EntityRenderersEvent.AddLayers event) {
+        for (String skin : event.getSkins()) {
+            if (event.getSkin(skin) instanceof PlayerRenderer renderer) {
+                renderer.addLayer(new TourniquetLayer(renderer));
+            }
+        }
     }
 
     /**

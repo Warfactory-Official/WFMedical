@@ -7,14 +7,13 @@ import com.warfactory.medical.client.UiText;
 import com.warfactory.medical.client.screen.MedicalUIParts;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.treatment.TreatmentAction;
-import com.warfactory.medical.item.MedicalItem;
 import com.warfactory.medical.network.ActiveTreatmentPacket;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.Entity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.gui.overlay.ForgeGui;
@@ -23,9 +22,10 @@ import net.minecraftforge.client.gui.overlay.IGuiOverlay;
 import java.util.Locale;
 
 /**
- * CLIENT-ONLY HUD overlay showing a labelled progress bar during a medical action. Two sources checked in
- * order: (a) vanilla right-click use channel, (b) server active-treatment packet. Nothing drawn when
- * neither is active; all nullable state is guarded, no throws inside the render hook.
+ * CLIENT-ONLY HUD overlay showing a labelled progress bar during a medical action. Progress is driven
+ * exclusively by the server's {@code ActiveTreatmentPacket} (cached in {@code ClientMedicalCache}).
+ * Nothing drawn when no treatment is active; all nullable state is guarded, no throws inside the render
+ * hook.
  */
 @OnlyIn(Dist.CLIENT)
 public final class ActionProgressOverlay implements IGuiOverlay {
@@ -79,27 +79,31 @@ public final class ActionProgressOverlay implements IGuiOverlay {
             return;
         }
 
-        float progress;
-        String label;
-
-        // (a) Vanilla right-click use channel takes priority.
-        ItemStack useStack = player.getUseItem();
-        if (player.isUsingItem() && useStack.getItem() instanceof MedicalItem medical) {
-            int duration = medical.getUseDuration(useStack);
-            int remaining = player.getUseItemRemainingTicks();
-            progress = duration <= 0 ? 1.0F : 1.0F - (remaining / (float) duration);
-            label = useStack.getHoverName().getString();
-        } else if (ClientMedicalCache.hasActiveTreatment()) {
-            // (b) Server-driven active treatment.
-            ActiveTreatmentPacket a = ClientMedicalCache.activeTreatment();
-            if (a == null || !a.active()) {
-                return;
-            }
-            long elapsed = mc.level.getGameTime() - a.startGameTime();
-            progress = a.totalTicks() <= 0 ? 1.0F : elapsed / (float) a.totalTicks();
-            label = actionLabel(a.action(), a.limb());
-        } else {
+        if (!ClientMedicalCache.hasActiveTreatment()) {
             return;
+        }
+
+        // Server-driven active treatment.
+        ActiveTreatmentPacket a = ClientMedicalCache.activeTreatment();
+        if (a == null || !a.active()) {
+            return;
+        }
+
+        long elapsed = mc.level.getGameTime() - a.startGameTime();
+        float progress = a.totalTicks() <= 0 ? 1.0F : elapsed / (float) a.totalTicks();
+
+        // Prefix label with the target's name when treating another entity (not self).
+        String label;
+        int targetId = a.targetEntityId();
+        if (targetId >= 0) {
+            Entity target = mc.level.getEntity(targetId);
+            if (target != null && target != mc.player) {
+                label = target.getName().getString() + " -> " + actionLabel(a.action(), a.limb());
+            } else {
+                label = actionLabel(a.action(), a.limb());
+            }
+        } else {
+            label = actionLabel(a.action(), a.limb());
         }
 
         if (progress < 0.0F) {
