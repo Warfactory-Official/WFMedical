@@ -6,7 +6,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 /**
  * REQUEST to interrupt the sender's own in-progress treatment, client -> server (the interaction menu's
- * cancel/interrupt button). No payload — it always targets the sender's active treatment. The server validates
+ * cancel/interrupt button). No payload – it always targets the sender's active treatment. The server validates
  * and delegates to {@link MedicalActionService#cancel}; nothing is applied and no item is consumed.
  */
 public record CancelTreatmentPacket() {

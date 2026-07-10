@@ -93,7 +93,7 @@ public final class MedicalUIParts {
     // ------------------------------------------------------------------ actions
 
     /**
-     * Sends MedicalActionPacket to server; server validates and applies — the client never applies it itself.
+     * Sends MedicalActionPacket to server; server validates and applies – the client never applies it itself.
      */
     public static void requestAction(ItemStack medicalItemStack, LimbType limb) {
         if (medicalItemStack == null || medicalItemStack.isEmpty()

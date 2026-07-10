@@ -93,7 +93,7 @@ public final class TraumaGenerator {
                 // A real fall: a crushing impact injury that scales with height (pain + health hit + slowed
                 // legs), plus a leg-fracture chance from ~8 blocks up. A hard landing pushes the limb past its
                 // health cap into an external bleed (bandage-able, else you bleed out), and a big enough drop
-                // instant-kills via the lethality fraction upstream — so falls hurt, break legs, and can kill.
+                // instant-kills via the lethality fraction upstream – so falls hurt, break legs, and can kill.
                 float crush = clampF(0.45F + (e - FALL_IMPACT_ENERGY) * 0.06F, 0.45F, 1.25F);
                 add(out, registry, CRUSH_INJURY, TraumaCategory.CRUSH_INJURY, limb, crush, nowTick);
                 maybeFracture(out, registry, limb, nowTick, rand, fallFractureChance(limb, e));

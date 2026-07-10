@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * Reshapes a downed player's collision box and eye-height on BOTH sides. The standing 0.6x1.8 box is
  * swapped for a low wide 1.2x0.6 box (AABB cannot rotate, so a lying body is approximated). The pose
- * stays STANDING, so getStandingEyeHeight would otherwise return 1.62 — we drop it to near-ground so the
+ * stays STANDING, so getStandingEyeHeight would otherwise return 1.62 – we drop it to near-ground so the
  * first-person camera sits where the lying head is. The medical layer calls refreshDimensions() on every
  * downed enter/exit edge so the cached eye-height updates.
  */

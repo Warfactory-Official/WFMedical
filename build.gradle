@@ -142,13 +142,13 @@ tasks.register('runAll') {
             boolean ready = false
             for (int i = 0; i < 180 && !ready; i++) {
                 if (!server.proc.isAlive()) {
-                    throw new GradleException("Dedicated server exited before it was ready — see ${server.log}")
+                    throw new GradleException("Dedicated server exited before it was ready – see ${server.log}")
                 }
                 ready = server.log.exists() && server.log.text.contains('! For help, type')
                 if (!ready) { Thread.sleep(1000) }
             }
             if (!ready) {
-                throw new GradleException("Server did not report ready within 180s — see ${server.log}")
+                throw new GradleException("Server did not report ready within 180s – see ${server.log}")
             }
             logger.lifecycle('Server is up in offline mode. Launching both isolated clients…')
 
@@ -209,7 +209,7 @@ repositories {
         name = 'SpongePowered'
         url = 'https://repo.spongepowered.org/repository/maven-public/'
     }
-    // CurseForge maven — hosts LDLib (UI framework) and, if ever needed directly, TACZ.
+    // CurseForge maven – hosts LDLib (UI framework) and, if ever needed directly, TACZ.
     maven {
         name = 'CurseMaven'
         url = 'https://cursemaven.com'
@@ -224,10 +224,10 @@ dependencies {
     // Mixin annotation processor (required so @Mixin classes generate the refmap).
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
-    // LDLib — UI framework used for the character sheet, radial menu and HUD overlays.
+    // LDLib – UI framework used for the character sheet, radial menu and HUD overlays.
     implementation fg.deobf("curse.maven:ldlib-626676:7809449")
 
-    // Soft TACZ compat only — no hard dependency. To reference TACZ directly:
+    // Soft TACZ compat only – no hard dependency. To reference TACZ directly:
      compileOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")
     runtimeOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")
 }

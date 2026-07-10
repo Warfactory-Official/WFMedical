@@ -58,9 +58,9 @@ Controls default major/minor status and is used to filter which items can treat 
 
 A `Trauma` has three boolean flags that modify its contribution:
 
-- `treated` — reduces bleeding to 25% of base (bandage applied); does not close the wound.
-- `sutured` — zeroes bleeding completely (wound closed); implies `treated`.
-- `stabilized` — reduces pain to 50% of base (splint applied to a fracture); does not zero it.
+- `treated` – reduces bleeding to 25% of base (bandage applied); does not close the wound.
+- `sutured` – zeroes bleeding completely (wound closed); implies `treated`.
+- `stabilized` – reduces pain to 50% of base (splint applied to a fracture); does not zero it.
 
 ### Per-limb cap
 
@@ -72,8 +72,8 @@ Each limb holds at most `maxTraumaPerLimb` (default 8) distinct `Trauma` objects
 
 Pain is the most layered system. Two aggregates emerge from `Physiology.compute`:
 
-- **perceivedPain** — the highest masked pain across all six limbs. Drives the vignette overlay, aim sway, and the HUD display.
-- **systemicPain** — a weighted sum of masked pain, clamped to [0, 1]. Drives shock (max-health penalty) and unconsciousness.
+- **perceivedPain** – the highest masked pain across all six limbs. Drives the vignette overlay, aim sway, and the HUD display.
+- **systemicPain** – a weighted sum of masked pain, clamped to [0, 1]. Drives shock (max-health penalty) and unconsciousness.
 
 ### Computation pipeline (per-limb)
 
@@ -90,7 +90,7 @@ masked            = local - analgesia                      -- systemic analgesia
 
 ### Pain shares (systemic weight per limb)
 
-Arms carry a deliberately small share so an agonizing arm injury cannot, on its own, cause shock — it hurts but does not incapacitate.
+Arms carry a deliberately small share so an agonizing arm injury cannot, on its own, cause shock – it hurts but does not incapacitate.
 
 | Limb | Config key | Default |
 |---|---|---|
@@ -105,7 +105,7 @@ The shares sum to more than 1.0 by design (0.35 + 0.50 + 2×0.10 + 2×0.20 = 1.4
 
 `painSaturationK` (default 1.0) controls diminishing returns on a single limb. With k=1.0, raw pain of 1.0 → local = 0.5; raw pain of 3.0 → local = 0.75. A smaller k saturates faster (one wound on the same limb dominates quickly); a larger k requires many or worsening wounds to saturate.
 
-> **Under active revision:** The pain model is currently implemented as described. The planned change is to cap each limb's contribution to the systemic pain sum at its `painShare` — the current code already does this correctly — but the per-limb health reduction going into `effectiveMaxHealth` is still summed without a cap (see [architecture note](architecture.md#9-pure-physiology--physiologycompute)).
+> **Under active revision:** The pain model is currently implemented as described. The planned change is to cap each limb's contribution to the systemic pain sum at its `painShare` – the current code already does this correctly – but the per-limb health reduction going into `effectiveMaxHealth` is still summed without a cap (see [architecture note](architecture.md#9-pure-physiology--physiologycompute)).
 
 ### LOCAL anesthetic vs GENERAL analgesia
 
@@ -148,7 +148,7 @@ An untreated bleeding wound whose `severity <= bleedingSelfHealThreshold` (defau
 ### Clotting boost
 
 `BOOST_CLOTTING` items (e.g. hemostatic agent) grant a timed `clottingBoost` (0..1) for `clottingAgentDurationTicks` (default 2400 = 2 min). This raises:
-- Self-clot threshold: `threshold + clottingBoost * clottingBoostThresholdBonus` (default: up to 1.0 at full boost — even severe bleeds close)
+- Self-clot threshold: `threshold + clottingBoost * clottingBoostThresholdBonus` (default: up to 1.0 at full boost – even severe bleeds close)
 - Self-clot rate: `rate * (1 + clottingBoost * clottingBoostRateMultiplier)` (default: up to 11× normal speed)
 
 Combat Stimulant I also applies `clottingBoost = 1.0` for `effectTicks`.
@@ -172,7 +172,7 @@ Fractures use `TraumaCategory.FRACTURE` and `Trauma.isFracture()`. The feature c
 ### Arm fractures
 
 - `Weakness` effect at level `brokenArmMeleeWeaknessLevel` (default 1 = Weakness I) re-applied with 60-tick duration every engine pass while any arm is fractured.
-- Aim sway floor: `brokenArmAimSway` (default 0.9) — forced even when aiming down sights with a bow/crossbow/TACZ gun.
+- Aim sway floor: `brokenArmAimSway` (default 0.9) – forced even when aiming down sights with a bow/crossbow/TACZ gun.
 
 ### Fracture self-healing
 
@@ -197,9 +197,9 @@ Asphyxia is a unified suffocation condition with two distinct causes, sharing th
 |---|---|---|---|
 | Conscious struggle | `asphyxiating = true` | `asphyxiaStruggleTicks` (default 60 = 3s) | Speed × `asphyxiaMoveMultiplier` (default 0.25); sprint/jump blocked; Weakness at `asphyxiaWeaknessAmplifier` (default 1 = Weakness II); air drains at `asphyxiaAirLossPerTick` (12/tick) |
 | Unconscious | `asphyxiaUnconscious = true` | `asphyxiaUnconsciousTicks` (default 200 = 10s) | State forced to `UNCONSCIOUS`; death deadline ticking |
-| Fatal | — | — | `killByAsphyxia` drops health to 0 |
+| Fatal | – | – | `killByAsphyxia` drops health to 0 |
 
-**Recovery:** clearing the cause at any phase recovers cleanly. For drowning: reach the surface. For drug: naloxone injection or waiting for `drugLoad` to decay below `asphyxiaThreshold`. Recovery is immediate — air restores naturally from that point.
+**Recovery:** clearing the cause at any phase recovers cleanly. For drowning: reach the surface. For drug: naloxone injection or waiting for `drugLoad` to decay below `asphyxiaThreshold`. Recovery is immediate – air restores naturally from that point.
 
 The heavy movement, blur shader, and vignette are driven by the `asphyxiating` and `UNCONSCIOUS` state fields in `DerivedStats`, which are synced in `MedicalSyncPacket`.
 
@@ -230,25 +230,25 @@ When `drugLoad >= overdoseLethalThreshold` (and `overdoseLethalEnabled = true`):
 - Health drains at `overdoseLethalDrainPerTick` (default 0.05 HP/tick) while unconscious.
 - When health would cross the 1-HP UNCONSCIOUS pin floor → `enactEngineDeath` fires (state = `DEAD`, health = 0). This makes an untreated severe overdose genuinely fatal.
 
-The beneficial window (stimulant speed, clotting, analgesia) ends at `stimulantEndTick`, but `drugLoad` continues decaying much more slowly — the "crash" / come-down risk window.
+The beneficial window (stimulant speed, clotting, analgesia) ends at `stimulantEndTick`, but `drugLoad` continues decaying much more slowly – the "crash" / come-down risk window.
 
 ### Naloxone (antidote)
 
-On injection: `drugLoad -= reversalAmount` (default 3.0 — enough to drop from severe overdose to zero); overdose unconsciousness and asphyxia end immediately; `painSuppression` drops to 0 (all masked pain returns at once). This is the only counter-play to an active overdose.
+On injection: `drugLoad -= reversalAmount` (default 3.0 – enough to drop from severe overdose to zero); overdose unconsciousness and asphyxia end immediately; `painSuppression` drops to 0 (all masked pain returns at once). This is the only counter-play to an active overdose.
 
 ### Default substances
 
 | id | doseLoad | overdoseThreshold | lethalThreshold | painSuppression | Notes |
 |---|---|---|---|---|---|
 | `morphine` | 0.5 | 1.0 | 1.6 | 0.95 | 2 doses → overdose; ≥3.2 load → lethal |
-| `naloxone` | — | — | — | — | antidote; reversalAmount = 3.0 |
-| `combat_stimulant_i` | 1.4 | 1.6 | 2.6 | — (via stimulant) | stimulantStrength = 0.97, clottingBoost = 1.0, effectTicks = 3600 (3 min) |
+| `naloxone` | – | – | – | – | antidote; reversalAmount = 3.0 |
+| `combat_stimulant_i` | 1.4 | 1.6 | 2.6 | – (via stimulant) | stimulantStrength = 0.97, clottingBoost = 1.0, effectTicks = 3600 (3 min) |
 
 ### Combat Stimulant I
 
 While the stimulant is active (`stimulant > 0`):
-- Analgesia floor = `max(analgesia, stimulant)` — acts as near-total pain immunity.
-- Speed = `max(injured_speed, 1.0 + stimulantSpeedBonus * stimulant)` — overrides injury slowdown and boosts above normal (default +30%).
+- Analgesia floor = `max(analgesia, stimulant)` – acts as near-total pain immunity.
+- Speed = `max(injured_speed, 1.0 + stimulantSpeedBonus * stimulant)` – overrides injury slowdown and boosts above normal (default +30%).
 - Jump penalty cleared (even with broken legs).
 - Clotting boost = 1.0 for the same `effectTicks` window.
 
@@ -275,7 +275,7 @@ This applies equally to live players and Open Persistence logout bodies (which r
 |---|---|---|
 | `BALLISTIC` | 0.9 | A full-health bar's worth of bullet in one hit |
 | `EXPLOSION` | 0.9 | Blast equivalent |
-| `BLUNT` | 1.1 | Slightly above full bar — requires a very heavy impact |
+| `BLUNT` | 1.1 | Slightly above full bar – requires a very heavy impact |
 | `UNARMED` | 3.0 | Effectively impossible to one-punch; punches only bruise |
 | `FALL` | 1.5 | Only a catastrophic fall; lesser falls break legs |
 | DEFAULT (slashing, piercing, generic) | 1.0 | Exactly a full-health bar's worth in one blow |

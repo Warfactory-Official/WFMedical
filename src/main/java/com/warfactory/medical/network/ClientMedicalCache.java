@@ -46,7 +46,7 @@ public final class ClientMedicalCache {
 
     /**
      * Patch the cached baseline with an incremental {@link MedicalDeltaPacket}. No-op when no baseline exists
-     * yet — a full snapshot always precedes deltas, so this only guards the brief pre-first-sync window.
+     * yet – a full snapshot always precedes deltas, so this only guards the brief pre-first-sync window.
      */
     public static void applyDelta(MedicalDeltaPacket delta) {
         MedicalSyncPacket base = snapshot;

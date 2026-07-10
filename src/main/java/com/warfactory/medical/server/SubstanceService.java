@@ -54,21 +54,21 @@ public final class SubstanceService {
         long now = player.level().getGameTime();
 
         if (substance.antidote()) {
-            // Counter-play: reverse the overdose. Drug load drops, the overdose unconsciousness / asphyxia end
-            // immediately, and the pain mask collapses to zero so all the previously-suppressed pain comes rushing back.
             profile.setDrugLoad(Math.max(0.0F, profile.getDrugLoad() - substance.reversalAmount()));
+            // Anti-drugs also flush any active STIMULANT buff (speed / anaesthesia / jump).
+            profile.setStimulant(0.0F);
+            profile.setStimulantEndTick(0L);
+            profile.setPainSuppression(0.0F);
+            boolean sealed = profile.getBlackoutGraceUntil() > 0L || profile.isUnconsciousLatched()
+                    || profile.isOverdoseUnconscious() || profile.isAsphyxiaUnconscious();
+            profile.setBlackoutGraceUntil(0L);
             profile.setOverdoseUntilTick(0L);
             profile.setOverdoseUnconscious(false);
             profile.clearAsphyxia();
-            profile.setPainSuppression(0.0F);
+            profile.setUnconsciousLatched(sealed);
         } else {
-            // Opioid: strong pain immunity + accumulating drug load. Re-dosing to stay pain-free stacks the
-            // load toward the overdose threshold, at which point the player goes under for unconsciousTicks —
-            // unless a heavy (but not yet lethal) overdose instead trips the asphyxia phase first.
             profile.setPainSuppression(Math.max(profile.getPainSuppression(), substance.painSuppression()));
             profile.setDrugLoad(profile.getDrugLoad() + substance.doseLoad());
-            // Timed stimulant / clotting effects (e.g. Combat Stimulant): full strength until now+effectTicks.
-            // The beneficial window ends there while the drug LOAD above lingers much longer (the come-down).
             if (substance.effectTicks() > 0) {
                 long end = now + substance.effectTicks();
                 if (substance.clottingBoost() > 0.0F) {
@@ -91,8 +91,13 @@ public final class SubstanceService {
                     // unless the drug is reversed (naloxone) or decays back below the asphyxia threshold in time.
                     profile.startAsphyxia(now);
                 } else {
-                    profile.setOverdoseUntilTick(now + substance.unconsciousTicks());
-                    profile.setOverdoseUnconscious(true);
+                    int grace = MedicalConfig.blackoutGraceTicks();
+                    if (grace <= 0) {
+                        profile.setOverdoseUnconscious(true);
+                        profile.setUnconsciousLatched(true);
+                    } else if (profile.getBlackoutGraceUntil() <= 0L && !profile.isOverdoseUnconscious()) {
+                        profile.setBlackoutGraceUntil(now + grace);
+                    }
                 }
             }
         }

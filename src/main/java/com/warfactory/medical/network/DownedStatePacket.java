@@ -9,7 +9,7 @@ import net.minecraftforge.network.PacketDistributor;
 
 /**
  * DOWNED-STATE broadcast, server -> client. Tells every tracking client (and the subject itself) that a
- * given player entity has entered or left the "downed" state — passed out from either an opioid overdose
+ * given player entity has entered or left the "downed" state – passed out from either an opioid overdose
  * unconsciousness or a bleed-out unconsciousness (see {@link MedicalProfile#isDowned()}).
  *
  * <p>This is the ONLY channel by which an observer learns a <em>teammate</em> is downed: a player's own

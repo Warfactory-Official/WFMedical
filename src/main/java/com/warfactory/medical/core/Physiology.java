@@ -234,6 +234,14 @@ public final class Physiology {
             state = HealthState.UNCONSCIOUS;
         }
 
+        // Unconscious LATCH: once the engine has put the player under (from ANY cause) it latches this flag,
+        // so a partial recovery – blood restored just above the KO fraction, pain eased, drug decaying – does
+        // NOT instantly snap them back onto their feet. They stay UNCONSCIOUS until the engine's per-recompute
+        // wake roll (gated by the wakeup score) succeeds and clears the latch. Never downgrades DEAD.
+        if (p.isUnconsciousLatched() && state.ordinal() < HealthState.UNCONSCIOUS.ordinal()) {
+            state = HealthState.UNCONSCIOUS;
+        }
+
         // Admin-forced override: honour an operator-pinned state (e.g. /wfmedical unconscious on an uninjured
         // player) that the pure physiology would not itself derive, but never DOWNGRADE a genuinely worse
         // derived condition. This keeps the forced state, its mobility lock and the downed pose stable across
@@ -244,7 +252,7 @@ public final class Physiology {
         }
 
         // Incapacitation (movement 0, sprint blocked, no jump) applies uniformly whenever the player is
-        // UNCONSCIOUS — covering every cause (bleed-out unconsciousness, overdose unconsciousness, admin-forced)
+        // UNCONSCIOUS – covering every cause (bleed-out unconsciousness, overdose unconsciousness, admin-forced)
         // through the single merged state.
         boolean incapacitated = state == HealthState.UNCONSCIOUS;
 
@@ -286,7 +294,7 @@ public final class Physiology {
                     movement = boosted;
                 }
             }
-            // Heavy movement constraint while consciously asphyxiating (below the pain floor) — you can barely
+            // Heavy movement constraint while consciously asphyxiating (below the pain floor) – you can barely
             // move while suffocating. Applied after the boost so suffocation still slows a stimulated player.
             if (asphyxiating) {
                 movement *= cfg.asphyxiaMoveMultiplier();
@@ -312,7 +320,7 @@ public final class Physiology {
                 jumpMultiplier = 1.0F;
             }
         }
-        // Combat stimulant clears any jump penalty (masks the injury — even a broken leg), except while out
+        // Combat stimulant clears any jump penalty (masks the injury – even a broken leg), except while out
         // cold or suffocating.
         if (stimulant > 0.0F && !incapacitated && !asphyxiating && !bothLegsDisabled) {
             jumpMultiplier = 1.0F;

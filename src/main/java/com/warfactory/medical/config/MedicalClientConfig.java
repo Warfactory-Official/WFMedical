@@ -4,7 +4,7 @@ import net.minecraftforge.common.ForgeConfigSpec;
 
 /**
  * CLIENT-side (per-player, never synced) presentation config. Kept separate from the server-authoritative
- * {@link MedicalConfig} so HUD-only preferences — like where the damage-outline silhouette sits — are decided
+ * {@link MedicalConfig} so HUD-only preferences – like where the damage-outline silhouette sits – are decided
  * by each client, not dictated by the server. Registered as {@code ModConfig.Type.CLIENT}.
  */
 public final class MedicalClientConfig {

@@ -169,7 +169,7 @@ public final class PassoutBlurEffect {
     }
 
     /**
-     * Even-indexed passes blur horizontally (1,0); odd vertically (0,1) — separable 2D blur.
+     * Even-indexed passes blur horizontally (1,0); odd vertically (0,1) – separable 2D blur.
      */
     private static void setBlurUniforms(PostChain postChain, float radius) {
         List<PostPass> passes = ((PostChainAccessor) postChain).wfmedical$getPasses();

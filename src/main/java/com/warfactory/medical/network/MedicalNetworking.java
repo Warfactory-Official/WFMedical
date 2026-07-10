@@ -35,7 +35,7 @@ public final class MedicalNetworking {
             PROTOCOL::equals);
     /**
      * The last full snapshot sent to each player, used to diff incremental {@link MedicalDeltaPacket}s. Weak
-     * keys so an entry vanishes once the player's {@link ServerPlayer} is GC'd — a logout/respawn creates a
+     * keys so an entry vanishes once the player's {@link ServerPlayer} is GC'd – a logout/respawn creates a
      * new instance with no entry, forcing a fresh full baseline. Server-thread access only.
      */
     private static final Map<ServerPlayer, MedicalSyncPacket> LAST_SENT = new WeakHashMap<>();
@@ -116,7 +116,7 @@ public final class MedicalNetworking {
                 })
                 .add();
 
-        // S2C: incremental medical update — only the changed components, applied onto the client's baseline.
+        // S2C: incremental medical update – only the changed components, applied onto the client's baseline.
         CHANNEL.messageBuilder(MedicalDeltaPacket.class, 7, NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(MedicalDeltaPacket::encode)
                 .decoder(MedicalDeltaPacket::decode)
@@ -274,7 +274,7 @@ public final class MedicalNetworking {
     /**
      * Broadcast a player's downed (passed-out) state to every client tracking that player AND to the
      * player itself. Called by the engine on each downed edge (enter / exit overdose or bleed-out) so
-     * observers can render — or stop rendering — the downed body pose.
+     * observers can render – or stop rendering – the downed body pose.
      */
     public static void broadcastDowned(ServerPlayer player, boolean downed) {
         CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> player),

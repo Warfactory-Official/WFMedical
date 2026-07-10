@@ -9,9 +9,9 @@ package com.warfactory.medical.core.damage;
  * <i>pose rebuild</i>:</p>
  *
  * <ul>
- *   <li>{@link #SERVER} — the server rebuilds the victim's rig itself via {@code HumanoidRig.compute}
+ *   <li>{@link #SERVER} – the server rebuilds the victim's rig itself via {@code HumanoidRig.compute}
  *       (backed by the per-tick cache). Fully authoritative and deterministic; the default.</li>
- *   <li>{@link #CLIENT_HINT} — the victim's client streams its own posed rig to the server; the server
+ *   <li>{@link #CLIENT_HINT} – the victim's client streams its own posed rig to the server; the server
  *       <b>still runs the ray test itself</b> (so an attacker can never pick the limb) but skips the costly
  *       rebuild, validating the supplied pose against a cheap bound and falling back to {@link #SERVER}
  *       compute whenever the hint is absent, stale, or implausible. The victim only vouches for its own

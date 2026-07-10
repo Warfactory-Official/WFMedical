@@ -28,7 +28,7 @@ public final class MedicalProfile {
     /**
      * ANALGESIA (0..1) from systemic painkillers/opioids: a body-wide subtractive mask applied to every
      * limb's felt pain (small pains vanish, big ones are lessened). Decays over time, never heals the wound.
-     * The LOCAL ANESTHETIC (a single limb) lives per-{@link Limb} instead — that is the local/general split.
+     * The LOCAL ANESTHETIC (a single limb) lives per-{@link Limb} instead – that is the local/general split.
      */
     private float painSuppression;
     /**
@@ -45,7 +45,7 @@ public final class MedicalProfile {
     /**
      * Timed STIMULANT strength (0..1) from a combat stimulant: drives strong anesthesia, a movement-speed boost
      * and a cleared jump penalty. Full strength until {@link #stimulantEndTick}, then off. Persisted. Note the
-     * beneficial effect ends here, but the injected {@link #drugLoad} (overdose risk) lingers LONGER — the crash.
+     * beneficial effect ends here, but the injected {@link #drugLoad} (overdose risk) lingers LONGER – the crash.
      */
     private float stimulant;
     private long stimulantEndTick;
@@ -94,7 +94,7 @@ public final class MedicalProfile {
      */
     private transient boolean overdoseUnconscious;
     /**
-     * Whether the player is in the overdose ASPHYXIA phase — the conscious, pre-unconsciousness respiratory
+     * Whether the player is in the overdose ASPHYXIA phase – the conscious, pre-unconsciousness respiratory
      * depression triggered probabilistically by a heavy overdose. While set, a per-tick engine hook drains the
      * player's air (sped-up drowning) and Physiology reports weakness/no-sprint/blur; when the air is exhausted
      * the player tips into {@link #overdoseUnconscious}. Transient (a live timed state; never persisted).
@@ -131,6 +131,22 @@ public final class MedicalProfile {
      */
     private transient boolean adrenalineExhausted;
 
+    // --- Transient BLACKOUT-GRACE + WAKE-LATCH bookkeeping. A drug/asphyxia blackout no longer lands
+    //     instantly: it starts a short "adrenaline-style" grace (blackoutGraceUntil) during which the player
+    //     stays conscious and can still be saved (antidote / surfacing), then commits. Once unconscious from
+    //     ANY cause the engine LATCHES the state (unconsciousLatched) so improving stats do not snap the player
+    //     back up; only the engine's per-recompute wake roll (gated by the wakeup score) clears it. Both are
+    //     transient live state driven by the engine each tick and are deliberately never persisted.
+    /**
+     * Game tick at which a pending drug/asphyxia blackout commits ({@code 0} = none pending). Transient.
+     */
+    private transient long blackoutGraceUntil;
+    /**
+     * Latched once the player is unconscious from any cause; {@link Physiology} holds the derived UNCONSCIOUS
+     * state while set, and only a successful engine wake roll clears it. Transient, never persisted.
+     */
+    private transient boolean unconsciousLatched;
+
     // --- Transient downed-broadcast bookkeeping. Deliberately NOT written to / read from NBT: it mirrors
     //     the last {@link #isDowned()} value the server broadcast to tracking clients so the engine can
     //     detect edges (enter / exit downed) and push a {@code DownedStatePacket} only on change. Starts
@@ -142,7 +158,7 @@ public final class MedicalProfile {
 
     /**
      * Transient 0..1 "closeness to actual death": how far the bleed-out death timer has run (0 = just went
-     * down / not dying — e.g. an overdose unconsciousness that will recover, 1 = about to die). Derived by the
+     * down / not dying – e.g. an overdose unconsciousness that will recover, 1 = about to die). Derived by the
      * engine each tick and synced so the client overlay can ramp from an extreme vignette (while merely downed)
      * to a full-screen blackout only right before death. Never persisted (a live, engine-driven value).
      */
@@ -231,6 +247,8 @@ public final class MedicalProfile {
         setOverdoseUntilTick(0L);
         setBleedoutSinceTick(-1L);
         clearAsphyxia();
+        setBlackoutGraceUntil(0L);
+        setUnconsciousLatched(false);
         markDirty();
     }
 
@@ -423,6 +441,28 @@ public final class MedicalProfile {
 
     public void setAdrenalineExhausted(boolean value) {
         this.adrenalineExhausted = value;
+    }
+
+    /**
+     * Game tick a pending drug/asphyxia blackout commits ({@code 0} = none pending). Transient, never NBT.
+     */
+    public long getBlackoutGraceUntil() {
+        return blackoutGraceUntil;
+    }
+
+    public void setBlackoutGraceUntil(long tick) {
+        this.blackoutGraceUntil = tick;
+    }
+
+    /**
+     * Whether the unconscious state is latched (held across recomputes until a wake roll clears it). Transient.
+     */
+    public boolean isUnconsciousLatched() {
+        return unconsciousLatched;
+    }
+
+    public void setUnconsciousLatched(boolean value) {
+        this.unconsciousLatched = value;
     }
 
     /**

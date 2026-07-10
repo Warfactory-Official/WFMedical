@@ -54,8 +54,8 @@ public final class TreatmentService {
     }
 
     /**
-     * Target-generic core: mutate the medical state behind {@code data} — which may belong to the actor, to
-     * another player, or to a downed/persistent body — using {@code gameTime} for any timed effect. The
+     * Target-generic core: mutate the medical state behind {@code data} – which may belong to the actor, to
+     * another player, or to a downed/persistent body – using {@code gameTime} for any timed effect. The
      * {@link #applyTargeted(ServerPlayer, Treatment, LimbType)} overload just resolves the actor's own data and
      * world time before delegating here, so a medic treating someone else reuses the exact same logic.
      *
@@ -86,7 +86,7 @@ public final class TreatmentService {
         }
 
         // Generalized: a systemic painkiller / analgesia masks pain across the WHOLE body and ignores any
-        // selected limb (contrast NUMB_LIMB below — a locally-applied anesthetic that must be aimed at a limb).
+        // selected limb (contrast NUMB_LIMB below – a locally-applied anesthetic that must be aimed at a limb).
         if (action == TreatmentAction.REDUCE_PAIN) {
             float mag = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;
             float before = profile.getPainSuppression();
@@ -117,7 +117,7 @@ public final class TreatmentService {
             return true;
         }
 
-        // Hemostatic (BOOST_CLOTTING) boosts whole-body natural clotting for a while — no limb target. It
+        // Hemostatic (BOOST_CLOTTING) boosts whole-body natural clotting for a while – no limb target. It
         // raises both the severity a bleed can self-clot at and the speed it clots (handled in the engine).
         if (action == TreatmentAction.BOOST_CLOTTING) {
             float mag = treatment.magnitude() > 0.0F ? treatment.magnitude() : DEFAULT_HEAL_MAGNITUDE;

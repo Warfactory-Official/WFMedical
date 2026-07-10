@@ -28,7 +28,7 @@ public final class Limb {
     private float localNumbing;
     /**
      * A TOURNIQUET on this limb (arms/legs only). While on, it REDUCES the limb's bleeding output (blood
-     * loss) but does NOT treat the underlying wounds — remove it and full bleeding resumes. One per limb.
+     * loss) but does NOT treat the underlying wounds – remove it and full bleeding resumes. One per limb.
      * Distinct from a bandage, which addresses the wound itself. Persisted.
      */
     private boolean tourniquet;

@@ -32,7 +32,7 @@ import java.util.List;
  * severity (red→green), carrying a mini body silhouette with that limb lit and injury glyphs (bleed / fracture
  * / pain). The slice under the mouse (by angle from centre, outside the deadzone) highlights and grows; a click
  * applies the held treatment to that limb via {@link TreatmentInteractions#sendAction}. Opens with a short
- * sweep/scale animation. Never mutates medical state — it only sends the authoritative request.
+ * sweep/scale animation. Never mutates medical state – it only sends the authoritative request.
  *
  * <p>Slice geometry: slice {@code i} of {@code n} spans the angular sector starting at {@code -PI/2} (straight
  * up) and sweeping clockwise, so item 0 sits at the top exactly like the legacy radial.</p>

@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * CLIENT-ONLY: freezes the local player's view rotation while downed. {@code Entity.turn} is the
  * mouse-look funnel; cancelling it at HEAD stops yRot/xRot advancing, which means no rotation is sent
- * to the server either — so no server-side hook is needed.
+ * to the server either – so no server-side hook is needed.
  */
 @Mixin(Entity.class)
 public abstract class EntityDownedLookMixin {

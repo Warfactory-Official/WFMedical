@@ -109,6 +109,14 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.DoubleValue TOURNIQUET_RECOVERY_CHANCE;
     private static final ForgeConfigSpec.BooleanValue ADRENALINE_ENABLED;
     private static final ForgeConfigSpec.IntValue ADRENALINE_PAIN_KO_DELAY_TICKS;
+    private static final ForgeConfigSpec.IntValue BLACKOUT_GRACE_TICKS;
+    private static final ForgeConfigSpec.DoubleValue WAKE_CHANCE;
+    private static final ForgeConfigSpec.DoubleValue WAKEUP_SCORE_THRESHOLD;
+    private static final ForgeConfigSpec.DoubleValue WAKEUP_BLOOD_WEIGHT;
+    private static final ForgeConfigSpec.DoubleValue WAKEUP_PAIN_WEIGHT;
+    private static final ForgeConfigSpec.DoubleValue WAKEUP_DRUG_WEIGHT;
+    private static final ForgeConfigSpec.DoubleValue WAKEUP_BLEED_WEIGHT;
+    private static final ForgeConfigSpec.DoubleValue WAKEUP_BLEED_REFERENCE;
     private static final ForgeConfigSpec.EnumValue<HitAuthority> HIT_AUTHORITY;
     private static final ForgeConfigSpec.IntValue POSE_STREAM_MIN_INTERVAL_TICKS;
     private static final ForgeConfigSpec.IntValue POSE_STREAM_MAX_INTERVAL_TICKS;
@@ -259,6 +267,55 @@ public final class MedicalConfig {
                         + "(20 ticks = 1 second). If pain drops below that level within the window, adrenaline "
                         + "recharges and the timer resets. Default 120 (6 seconds).")
                 .defineInRange("adrenalinePainKoDelayTicks", 120, 0, 12000);
+        b.pop();
+
+        b.push("unconsciousness");
+        BLACKOUT_GRACE_TICKS = b
+                .comment("Short 'adrenaline-style' grace (ticks) the player stays conscious, resisting, before a "
+                        + "DRUG blackout takes hold (20 ticks = 1 second); also ADDED on top of the asphyxia "
+                        + "struggle window before passing out. Much shorter than the pain adrenaline delay. Once "
+                        + "this grace is running the temporary blackout is SEALED – an antidote no longer PREVENTS "
+                        + "it (it only strips the drug/buffs, prevents death, and speeds the wake-up roll). "
+                        + "Surfacing still ends a drowning episode during the conscious struggle. 0 = black out "
+                        + "immediately. Default 30 (1.5 seconds).")
+                .defineInRange("blackoutGraceTicks", 30, 0, 12000);
+        WAKE_CHANCE = b
+                .comment("Probability (0..1) PER physiology recompute that an unconscious player WAKES UP, rolled "
+                        + "only once their wakeup score has dropped to wakeupScoreThreshold or below. Higher = they "
+                        + "come to sooner (at the default 10-tick update interval, 0.15 averages ~3-4 seconds once "
+                        + "eligible). Default 0.15.")
+                .defineInRange("wakeChance", 0.15D, 0.0D, 1.0D);
+        WAKEUP_SCORE_THRESHOLD = b
+                .comment("An unconscious player may only START rolling wakeChance once their WAKEUP SCORE is at or "
+                        + "below this. The score is a weighted sum of how bad their blood loss, pain, drug load and "
+                        + "active bleeding still are (each normalised 0..1, then multiplied by its weight below); "
+                        + "low = stabilised. Injuries need not fully stop, just be low. A single fully-KO-grade "
+                        + "factor (weight 1) sits at 1.0, so the default 0.5 requires the causes to be well eased. "
+                        + "Default 0.5.")
+                .defineInRange("wakeupScoreThreshold", 0.5D, 0.0D, 40.0D);
+        WAKEUP_BLOOD_WEIGHT = b
+                .comment("Weight of BLOOD LOSS in the wakeup score (blood lost / bloodUnconsciousLossFraction, "
+                        + "clamped 0..1 -> 1.0 at the pass-out loss). Higher = heavy blood loss keeps the player "
+                        + "down longer; this is what stops a still-bleeding-out player from waking. Default 1.0.")
+                .defineInRange("wakeupBloodWeight", 1.0D, 0.0D, 20.0D);
+        WAKEUP_PAIN_WEIGHT = b
+                .comment("Weight of systemic PAIN in the wakeup score (0 below painShockThreshold, 1.0 at "
+                        + "painUnconsciousThreshold). Default 1.0.")
+                .defineInRange("wakeupPainWeight", 1.0D, 0.0D, 20.0D);
+        WAKEUP_DRUG_WEIGHT = b
+                .comment("Weight of DRUG LOAD in the wakeup score (load / overdoseLethalThreshold, clamped 0..1). "
+                        + "Keeps an overdosed player under until the drug wears down. Default 1.0.")
+                .defineInRange("wakeupDrugWeight", 1.0D, 0.0D, 20.0D);
+        WAKEUP_BLEED_WEIGHT = b
+                .comment("Weight of ACTIVE BLEEDING RATE in the wakeup score (rate / wakeupBleedReference, clamped "
+                        + "0..1). Distinct from blood-loss: a player barely bled yet but haemorrhaging fast should "
+                        + "not wake. Default 1.0.")
+                .defineInRange("wakeupBleedWeight", 1.0D, 0.0D, 20.0D);
+        WAKEUP_BLEED_REFERENCE = b
+                .comment("Bleeding rate (ml/tick) treated as a 'full' (1.0) bleed contribution to the wakeup "
+                        + "score; the actual aggregate bleeding is divided by this and clamped to 1. Lower = even "
+                        + "light bleeding keeps the player down. Default 2.0.")
+                .defineInRange("wakeupBleedReference", 2.0D, 0.01D, 1000.0D);
         b.pop();
 
         b.push("features");
@@ -710,6 +767,50 @@ public final class MedicalConfig {
 
     public static int adrenalinePainKoDelayTicks() {
         return ADRENALINE_PAIN_KO_DELAY_TICKS.get();
+    }
+
+    /**
+     * Short adrenaline-style grace (ticks) before a drug/asphyxia blackout commits (0 = instant).
+     */
+    public static int blackoutGraceTicks() {
+        return BLACKOUT_GRACE_TICKS.get();
+    }
+
+    /**
+     * Per-recompute probability (0..1) an eligible (wakeup-score-low) unconscious player wakes up.
+     */
+    public static double wakeChance() {
+        return WAKE_CHANCE.get();
+    }
+
+    /**
+     * Wakeup score at/below which an unconscious player becomes eligible to roll {@link #wakeChance()}.
+     */
+    public static double wakeupScoreThreshold() {
+        return WAKEUP_SCORE_THRESHOLD.get();
+    }
+
+    public static double wakeupBloodWeight() {
+        return WAKEUP_BLOOD_WEIGHT.get();
+    }
+
+    public static double wakeupPainWeight() {
+        return WAKEUP_PAIN_WEIGHT.get();
+    }
+
+    public static double wakeupDrugWeight() {
+        return WAKEUP_DRUG_WEIGHT.get();
+    }
+
+    public static double wakeupBleedWeight() {
+        return WAKEUP_BLEED_WEIGHT.get();
+    }
+
+    /**
+     * Bleeding rate (ml/tick) that maps to a full (1.0) bleed contribution in the wakeup score.
+     */
+    public static double wakeupBleedReference() {
+        return WAKEUP_BLEED_REFERENCE.get();
     }
 
     public static double bloodMovementPenaltyLossFraction() {

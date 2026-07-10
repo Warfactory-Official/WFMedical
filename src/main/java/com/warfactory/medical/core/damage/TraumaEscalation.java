@@ -14,7 +14,7 @@ import java.util.function.Predicate;
  * "Death by a thousand cuts": accumulated MINOR trauma on a limb coalesces into a real MAJOR wound, so chip
  * damage is never free. Once the stacked minor severity of a family crosses {@link #ESCALATE_THRESHOLD} the
  * scratches/bruises are consumed and merged into a single major injury that bleeds and will not simply heal
- * off — many scratches become a proper laceration, repeated blunt bruising becomes internal bleeding.
+ * off – many scratches become a proper laceration, repeated blunt bruising becomes internal bleeding.
  *
  * <p>Run once after each new hit's trauma is merged (see {@code MedicalEventHandler.applyLimbTrauma}); it only
  * ever reads the limb's own trauma list, so it composes cleanly with the per-hit generation + depletion.</p>

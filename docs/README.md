@@ -1,4 +1,4 @@
-# WFMedical — Developer & Designer Reference
+# WFMedical – Developer & Designer Reference
 
 WFMedical is a Forge 1.20.1 mod that replaces vanilla health with a per-body-part medical trauma system. Incoming damage is classified by type and hit location, translated into persistent wound objects on one of six body parts, and periodically recalculated into derived stats that vanilla health and movement attributes track. Players can self-treat or be treated by others using medical items; the system is tunable via a COMMON config and a data-driven TOML definitions file.
 
@@ -15,7 +15,7 @@ HEALTHY → CRITICAL → UNCONSCIOUS → DEAD
 | `UNCONSCIOUS` | KO score ≥ 1.0, overdose, or asphyxia pass-out | Movement locked, 1-HP pin, actions disabled |
 | `DEAD` | Blood loss past `bloodDeathLossFraction`, major-trauma instant-kill, lethal overdose drain, or asphyxia deadline | health set to 0, vanilla death pipeline |
 
-Ordinal order `HEALTHY < CRITICAL < UNCONSCIOUS < DEAD` is load-bearing — it governs severity comparisons for admin-forced state overrides and is the NBT serialization contract.
+Ordinal order `HEALTHY < CRITICAL < UNCONSCIOUS < DEAD` is load-bearing – it governs severity comparisons for admin-forced state overrides and is the NBT serialization contract.
 
 There is no `lethalBlowsEnabled` toggle. Instant death from a single hit is **intrinsic**: a hit the medical armor did not fully block whose raw damage reaches `majorTraumaFraction(category) × maxHealthPoints` kills on impact, regardless of current health (see [mechanics](mechanics.md#death-vs-unconsciousness)).
 

@@ -383,7 +383,7 @@ public final class MedicalEventHandler {
 
     /**
      * Finalizes medical bookkeeping on death: mark DEAD, clear downed/overdose/bleed-out markers, cancel
-     * treatment, broadcast downed=false, and restore the standing hitbox. Never cancels the event — any
+     * treatment, broadcast downed=false, and restore the standing hitbox. Never cancels the event – any
      * cause (kill-on-impact, bleed-out timer, lethal overdose, /kill, void) goes straight through.
      */
     @SubscribeEvent

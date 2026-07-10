@@ -13,7 +13,7 @@ import net.minecraftforge.fml.common.Mod;
 /**
  * CLIENT-ONLY: lays a downed player face-up on the ground (UNCONSCIOUS from any cause). Transform order:
  * nudge up (GROUND_LIFT), tip backward 90° on X (LAY_DEGREES), small fixed yaw (STABLE_YAW). Y-axis
- * setupRotations only spins the flat body in the compass plane — does NOT flip face/back — so supine is
+ * setupRotations only spins the flat body in the compass plane – does NOT flip face/back – so supine is
  * stable regardless of facing. Per-limb sprawl is NOT applied here (setupAnim would clobber it); it lives
  * in HumanoidModelMixin at TAIL of setupAnim. {@link #applied} guards the pop so the pose stack is never
  * left unbalanced even when onRenderPre throws after pushing.

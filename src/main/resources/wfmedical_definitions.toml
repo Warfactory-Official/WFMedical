@@ -269,7 +269,7 @@ bloodRestoreMl = 1000.0
 useDurationTicks = 120
 removesTrauma = false
 
-# Painkillers: GENERAL numbing — masks perceived pain across the whole body without healing injuries.
+# Painkillers: GENERAL numbing – masks perceived pain across the whole body without healing injuries.
 [[treatment]]
 item = "wfmedical:painkillers"
 action = "REDUCE_PAIN"
@@ -379,7 +379,7 @@ bloodRestoreMl = 0.0
 # Combat Stimulant I: heavily risky, high-dose stimulant. For effectTicks (3 min) it grants near-total
 # anesthesia (stimulantStrength), a big speed boost + cleared jump penalty, and UNNATURAL clotting
 # (clottingBoost = 1.0). The high doseLoad leaves a drug load whose come-down OUTLASTS the effect window,
-# and a second dose stacks past the overdose/lethal line — the risk. Not an opioid, but drug load is still
+# and a second dose stacks past the overdose/lethal line – the risk. Not an opioid, but drug load is still
 # reversible with naloxone.
 [[substance]]
 id = "combat_stimulant_i"

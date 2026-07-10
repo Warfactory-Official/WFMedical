@@ -20,7 +20,7 @@ import com.warfactory.medical.core.limb.LimbType;
  * {@link #deltas()} readers (the server hit thread and the client render thread) always see a fully-built
  * snapshot without locking; the (rare) command-thread mutators are {@code synchronized} to serialise writes.
  * In single-player these statics are shared between the integrated server and the client, so a command nudge
- * moves both the actual hit boxes and the debug overlay at once — the intended tuning loop.</p>
+ * moves both the actual hit boxes and the debug overlay at once – the intended tuning loop.</p>
  */
 public final class RigTuning {
 
@@ -79,7 +79,7 @@ public final class RigTuning {
 
     /**
      * What the hands are doing, an arms-only tuning overlay layered ON TOP of the stance. {@link #NONE} is the
-     * relaxed base (no overlay — the arms sit at their stance position); the rest raise/reposition the arms
+     * relaxed base (no overlay – the arms sit at their stance position); the rest raise/reposition the arms
      * (bow draw, TACZ gun hold/ADS, shield block) and each carries its own per-stance arm adjustment. Resolved
      * from the victim's held items by {@code HumanoidRig.resolveHandAction}.
      */
@@ -115,7 +115,7 @@ public final class RigTuning {
 
     /**
      * Per-pose/limb/field additive deltas, flat: {@code deltas[base(pose,limb) + field.ordinal()]} (model
-     * units). Copy-on-write — mutators publish a fresh array so {@link #deltas()} readers never see a torn
+     * units). Copy-on-write – mutators publish a fresh array so {@link #deltas()} readers never see a torn
      * state.
      */
     private static volatile double[] deltas = new double[RigPose.VALUES.length * PER_POSE];
@@ -129,7 +129,7 @@ public final class RigTuning {
     }
 
     /**
-     * The live delta snapshot; index with {@link #base}/{@link #index}. Read-only for callers — never mutate
+     * The live delta snapshot; index with {@link #base}/{@link #index}. Read-only for callers – never mutate
      * the returned array (mutators replace it wholesale).
      */
     public static double[] deltas() {

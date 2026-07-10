@@ -10,9 +10,9 @@ import net.minecraftforge.common.capabilities.AutoRegisterCapability;
  *
  * <p>Two independent "dirty" concepts are tracked:</p>
  * <ul>
- *     <li>{@link #isDirty()} — the underlying {@link MedicalProfile} has un-recomputed physiology
+ *     <li>{@link #isDirty()} – the underlying {@link MedicalProfile} has un-recomputed physiology
  *     (trauma/blood changed); consumed by the scheduled server physiology pass.</li>
- *     <li>{@link #needsSync()} — the authoritative state has advanced ({@link #getRevision()} moved
+ *     <li>{@link #needsSync()} – the authoritative state has advanced ({@link #getRevision()} moved
  *     past {@link #getLastSyncedRevision()}) and the client copy is stale; consumed by networking.</li>
  * </ul>
  */

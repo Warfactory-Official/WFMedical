@@ -17,7 +17,7 @@ import java.util.Random;
 
 /**
  * CLIENT-ONLY: adds per-limb sprawl to a downed player's rendered body. MUST inject at TAIL of
- * setupAnim because the animator overwrites rotations by value each frame — anything written earlier
+ * setupAnim because the animator overwrites rotations by value each frame – anything written earlier
  * is clobbered. The outer cosmetic layer copies base-part rotations after super.setupAnim, so it
  * follows the sprawl automatically. Random is seeded with entity ID for stable per-player offsets.
  */

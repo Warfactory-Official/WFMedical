@@ -14,7 +14,7 @@ import net.minecraft.network.FriendlyByteBuf;
  * <p>Sent as a fresh baseline on login / respawn (and whenever the client has no prior snapshot); once a
  * baseline exists the engine sends the smaller {@link MedicalDeltaPacket} carrying only the changed
  * components. The per-component (de)serialization is SHARED with that delta via the
- * {@link #writeStats}/{@link #readStats}/{@link #writeLimb}/{@link #readLimb} helpers — keep write and read
+ * {@link #writeStats}/{@link #readStats}/{@link #writeLimb}/{@link #readLimb} helpers – keep write and read
  * in lockstep, as the field order is the wire contract.</p>
  */
 public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double bloodMl, double maxBloodMl,

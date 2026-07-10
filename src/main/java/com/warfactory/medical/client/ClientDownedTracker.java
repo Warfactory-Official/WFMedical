@@ -52,7 +52,7 @@ public final class ClientDownedTracker {
 
     /**
      * True if the server flagged this entity id as downed, OR (for the local player) if the synced
-     * snapshot says it is unconscious — so the local effect gate stays consistent before the broadcast.
+     * snapshot says it is unconscious – so the local effect gate stays consistent before the broadcast.
      */
     public static boolean isDowned(int entityId) {
         synchronized (LOCK) {
@@ -94,7 +94,7 @@ public final class ClientDownedTracker {
 
         /**
          * On a death/respawn (or dimension change) the LOCAL player entity keeps its network id, so a downed
-         * flag set before death would survive onto the fresh body — rendering the respawned player twisted
+         * flag set before death would survive onto the fresh body – rendering the respawned player twisted
          * (laid-out pose), with the rotated hitbox and a locked look. Clear that id on the clone edge so the
          * respawned body is upright and interactive. Other players' flags are untouched; the subject re-learns
          * its own state from the resync/broadcast that follows a respawn.

@@ -127,7 +127,7 @@ public final class HitLocation {
                 return 0.85F;
             case FALL:
                 // Impact damage from falling is absorbed by the legs, sometimes the torso (a bad landing). It
-                // never lands on the arms or head, so those are zeroed out — otherwise the weighted roll would
+                // never lands on the arms or head, so those are zeroed out – otherwise the weighted roll would
                 // occasionally (~8% arms, ~3% head) blame a fall on a limb that took no impact.
                 if (limb.isLeg()) {
                     return 2.5F;

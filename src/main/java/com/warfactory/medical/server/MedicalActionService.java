@@ -31,7 +31,7 @@ import net.minecraftforge.registries.ForgeRegistries;
  * only mutated on completion via {@link TreatmentService#applyTargeted}; independent of the vanilla
  * right-click channel (now disabled on the item) so the two never double-apply.
  *
- * <p>A treatment has an ACTOR (always the {@link ServerPlayer} performing it — the timer, interruption and
+ * <p>A treatment has an ACTOR (always the {@link ServerPlayer} performing it – the timer, interruption and
  * item-consumption live on them) and a TARGET (self by default, or another player / downed body the medic
  * right-clicked). The completion mutation lands on the target's profile.</p>
  */
@@ -195,7 +195,7 @@ public final class MedicalActionService {
             return;
         }
 
-        // Resolve the target again — it may have logged out / moved out of reach mid-treatment.
+        // Resolve the target again – it may have logged out / moved out of reach mid-treatment.
         int targetId = actorProfile.getActiveTargetId();
         LivingEntity target;
         IMedicalData targetData;

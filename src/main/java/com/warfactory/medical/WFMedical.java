@@ -51,7 +51,7 @@ public final class WFMedical {
         context.registerConfig(ModConfig.Type.CLIENT, MedicalClientConfig.SPEC);
 
         // Mod-bus lifecycle listeners. NOTE: the medical capability registers itself lazily through the
-        // CapabilityManager.get(CapabilityToken) call in MedicalCapabilities (as Forge 1.20.1 requires) —
+        // CapabilityManager.get(CapabilityToken) call in MedicalCapabilities (as Forge 1.20.1 requires) –
         // do NOT also call RegisterCapabilitiesEvent.register() for it, that double-registers and crashes.
         modBus.addListener(this::onCommonSetup);
         // Mirror the hitboxDebug flag into the rig-tuning hot-path switch on load and every config reload.

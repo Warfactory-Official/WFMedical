@@ -74,14 +74,14 @@ public final class SubstanceRegistry {
     /**
      * The bundled Combat Stimulant I injectable (safety-net default). A heavily risky, high-dose stimulant:
      * near-total anesthesia, a big speed boost + cleared jump penalty, and unnatural blood clotting for 3
-     * minutes — but a single dose leaves a large drug load whose come-down outlasts the effect, and a second
+     * minutes – but a single dose leaves a large drug load whose come-down outlasts the effect, and a second
      * dose overdoses hard (past the lethal line).
      */
     public static Substance defaultCombatStimulant() {
         return new Substance(
                 "combat_stimulant_i", COMBAT_STIMULANT_ITEM_ID,
                 0.0F,    // painSuppression (anesthesia comes from the stimulant strength below)
-                1.4F,    // doseLoad (HIGH — a single dose sits just under the lethal line; a second is fatal)
+                1.4F,    // doseLoad (HIGH – a single dose sits just under the lethal line; a second is fatal)
                 1.6F,    // overdoseThreshold
                 200,     // unconsciousTicks (if it does overdose)
                 2.6F,    // lethalThreshold
@@ -89,7 +89,7 @@ public final class SubstanceRegistry {
                 0.0F,    // reversalAmount
                 40,      // useDurationTicks
                 0.0D,    // bloodRestoreMl
-                1.0F,    // clottingBoost (unnatural — even severe bleeds clot)
+                1.0F,    // clottingBoost (unnatural – even severe bleeds clot)
                 0.97F,   // stimulantStrength (very insusceptible to pain + speed + jump clear)
                 3600);   // effectTicks (3 minutes)
     }

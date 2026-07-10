@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Shared predicate for "is this limb damaged" — the single criterion that decides which limbs appear in the
+ * Shared predicate for "is this limb damaged" – the single criterion that decides which limbs appear in the
  * treatment wheel. Deliberately independent of what the held item can actually treat: a limb shows up while it
  * is anything other than perfectly healthy (reduced health, active bleeding, felt pain, or an unstabilized
  * fracture), even if the current item cannot address that particular injury.

@@ -21,7 +21,7 @@ import net.minecraftforge.fml.common.Mod;
 /**
  * CLIENT-ONLY HUD overlay: when the local player takes damage, a limb-health-coloured silhouette of their body
  * flashes onto the screen, then holds and eases out. Damage is detected from the vanilla {@code hurtTime} rising
- * edge (any hit — combat, fall, fire...). Each limb is tinted by its current synced health (red→green via
+ * edge (any hit – combat, fall, fire...). Each limb is tinted by its current synced health (red→green via
  * {@link MedicalUIParts#limbColor}), so the outline "accounts for the current damage state" and keeps updating
  * while it is visible. Position, scale and enablement come from the per-client {@link MedicalClientConfig}.
  */

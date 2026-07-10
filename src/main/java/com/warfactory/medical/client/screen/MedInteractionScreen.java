@@ -46,9 +46,9 @@ import java.util.function.Supplier;
  * stacked grids that both re-key on the selected limb and on state changes:
  *
  * <ul>
- *     <li><b>EXAMINATION</b> — a grid of the selected limb's wounds as solid colour squares, each with a tooltip
+ *     <li><b>EXAMINATION</b> – a grid of the selected limb's wounds as solid colour squares, each with a tooltip
  *         describing the injury and which treatments address it;</li>
- *     <li><b>TREATMENT</b> — a grid of radial-menu-styled icon buttons, one per available medical item, applied
+ *     <li><b>TREATMENT</b> – a grid of radial-menu-styled icon buttons, one per available medical item, applied
  *         to the selected limb. When the selected (arm/leg) limb wears a tourniquet, a RED tourniquet button
  *         takes the first cell and REMOVES it instead (and the normal apply button is hidden).</li>
  * </ul>

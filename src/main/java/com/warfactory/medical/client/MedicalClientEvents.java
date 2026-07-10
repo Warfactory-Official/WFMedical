@@ -106,7 +106,7 @@ public final class MedicalClientEvents {
 
     /**
      * Safety net for the vanilla DeathScreen respawn button. DeathScreen re-enables buttons only on the
-     * EXACT tick its counter reaches 20 — missed on window resize or skipped screen tick, leaving buttons
+     * EXACT tick its counter reaches 20 – missed on window resize or skipped screen tick, leaving buttons
      * disabled forever. Once the screen has been open >25 ticks with every button still disabled, force
      * them all active. Skips if any button is already active, so it never clobbers a just-clicked button.
      */
@@ -153,7 +153,7 @@ public final class MedicalClientEvents {
     }
 
     /**
-     * Hide the first-person hand(s) while both arms are drained/disabled — the player physically can't raise
+     * Hide the first-person hand(s) while both arms are drained/disabled – the player physically can't raise
      * them. Cancelling {@link RenderHandEvent} suppresses the held-item + arm render for that frame.
      */
     @SubscribeEvent

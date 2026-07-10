@@ -45,7 +45,7 @@ public record ActiveTreatmentPacket(boolean active, TreatmentAction action, Limb
     }
 
     /**
-     * The targeted limb (nullable even while active — an auto-pick treatment carries no limb).
+     * The targeted limb (nullable even while active – an auto-pick treatment carries no limb).
      */
     @Override
     public LimbType limb() {

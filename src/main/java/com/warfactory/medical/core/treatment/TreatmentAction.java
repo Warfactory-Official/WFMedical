@@ -10,19 +10,19 @@ public enum TreatmentAction {
     STABILIZE_FRACTURE(false),
     RESTORE_BLOOD(true),
     /**
-     * Systemic painkiller / analgesia — masks pain across the WHOLE body (no limb target).
+     * Systemic painkiller / analgesia – masks pain across the WHOLE body (no limb target).
      */
     REDUCE_PAIN(true),
     /**
-     * Local anesthetic — numbs a SINGLE selected limb (must be aimed at a limb).
+     * Local anesthetic – numbs a SINGLE selected limb (must be aimed at a limb).
      */
     NUMB_LIMB(false),
     /**
-     * Hemostatic — boosts whole-body natural blood clotting for a while (no limb target).
+     * Hemostatic – boosts whole-body natural blood clotting for a while (no limb target).
      */
     BOOST_CLOTTING(true),
     /**
-     * Tourniquet — a removable per-limb constrictor (arm/leg only); slows the limb's bleeding without treating the wound.
+     * Tourniquet – a removable per-limb constrictor (arm/leg only); slows the limb's bleeding without treating the wound.
      */
     APPLY_TOURNIQUET(false),
     HEAL_TRAUMA(false),

@@ -119,12 +119,26 @@ public final class MedicalEngine {
         // (2b) Minor-trauma regeneration + untreated-major slow worsening + treated-major healing.
         advanceTrauma(profile, interval);
 
-        // (2b.5) Injectable-drug state: overdose-unconsciousness timer, slow drug-load decay, severe-overdose health drain.
+        // (2b.5) Injectable-drug state: pending-blackout grace commit, slow drug-load decay, severe-overdose health drain.
         advanceSubstances(player, profile, nowTick, interval);
+
+        // (2b.6) Wake roll: an unconscious player who has been LATCHED (put under on a prior pass) rolls each
+        // recompute to come to, but only once their wakeup score has fallen low enough (stabilised) and no
+        // fatal process is still running. On success this clears the latch + cause markers and marks the
+        // profile dirty, so the recompute below stands them back up this same pass.
+        attemptWake(player, profile);
 
         // (3) Recompute derived stats only when something is dirty (rebuilds only dirty limb caches).
         boolean wasDirty = profile.isDirty();
         DerivedStats stats = wasDirty ? profile.recompute(params) : profile.cached();
+
+        // (3.1) Latch the unconscious state the moment the player is down, from ANY cause (bleed-out, pain,
+        // overdose, asphyxia), so a partial recovery does not instantly wake them – only the roll above does.
+        // An admin-FORCED unconscious is left unlatched so the operator keeps direct control of it.
+        if (stats.state() == HealthState.UNCONSCIOUS && profile.getForcedState() == null
+                && !profile.isUnconsciousLatched()) {
+            profile.setUnconsciousLatched(true);
+        }
 
         // (3.5) Adrenaline: hold off a PURELY pain-driven knockout for a grace period. When pain reaches
         // knockout level (stats.painKoPending), start / hold the timer while keeping the player conscious; once
@@ -157,7 +171,7 @@ public final class MedicalEngine {
             player.setHealth(0.0F);
         }
 
-        // (4) Reconcile the vanilla body with the derived snapshot — only when the snapshot actually
+        // (4) Reconcile the vanilla body with the derived snapshot – only when the snapshot actually
         // changed (wasDirty). When nothing changed the attribute modifiers are already correct, so we skip
         // the remove/re-add churn on MAX_HEALTH / MOVEMENT_SPEED for a stable-but-injured player.
         if (wasDirty) {
@@ -231,23 +245,28 @@ public final class MedicalEngine {
         // sustains the unconsciousness past the fixed timer. Without this, the drain stopped when the timed
         // window elapsed (guarded by isOverdoseUnconscious), so a single dose-stack could never exhaust health
         // before waking; now the player stays unconscious and keeps draining until the load decays back below
-        // the lethal threshold or an antidote reverses it — making an untreated severe overdose actually fatal.
+        // the lethal threshold or an antidote reverses it – making an untreated severe overdose actually fatal.
         boolean severeOverdose = MedicalConfig.overdoseLethalEnabled()
                 && MedicalConfig.overdoseLethalThreshold() > 0.0D
                 && profile.getDrugLoad() >= MedicalConfig.overdoseLethalThreshold();
 
-        long until = profile.getOverdoseUntilTick();
-        boolean timerUnconscious = until > 0L && nowTick < until;
-        boolean shouldBeUnconscious = timerUnconscious || severeOverdose;
-        if (shouldBeUnconscious != profile.isOverdoseUnconscious()) {
-            profile.setOverdoseUnconscious(shouldBeUnconscious);
-            profile.markDirty();
-        }
-        // The timer elapsed and no severe overdose is holding the player under: they wake. Clear the timer and
-        // mark dirty so mobility is restored + re-synced. A severe overdose defers this until the load decays.
-        if (until > 0L && nowTick >= until && !severeOverdose) {
-            profile.setOverdoseUntilTick(0L);
-            profile.markDirty();
+        // Pending DRUG blackout: while the short grace runs the player stays conscious (woozy); once it elapses
+        // – the player couldn't shake it off – the overdose unconsciousness COMMITS and latches. Waking is then
+        // handled uniformly by the engine's wake roll (gated by the wakeup score), NOT a fixed timer, so an
+        // overdose sleeps off as the drug decays; a severe (lethal) overdose stays under + draining because its
+        // drug load keeps the wakeup score pinned high. An antidote cancels the grace/latch outright.
+        long grace = profile.getBlackoutGraceUntil();
+        if (grace > 0L) {
+            if (nowTick >= grace) {
+                profile.setBlackoutGraceUntil(0L);
+                profile.setOverdoseUnconscious(true);
+                profile.setUnconsciousLatched(true);
+                profile.markDirty();
+            } else {
+                // Still fighting it: brief wooziness (nausea + a stumble) as the drug drags them under.
+                player.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 80, 0, true, false, false));
+                player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 30, 1, true, false, true));
+            }
         }
 
         // Slow drug-load decay over time (setDrugLoad marks the profile dirty when it actually changes).
@@ -259,7 +278,7 @@ public final class MedicalEngine {
 
         // Severe overdose: respiratory-depression drain while overdose-unconscious (guarded by the lethal
         // threshold, so it never runs for a stable, non-overdosed player, but keeps running for the whole time
-        // the load stays lethal — not just the fixed timer window).
+        // the load stays lethal – not just the fixed timer window).
         //
         // CRITICAL post-merge interaction: an overdose now raises the state to UNCONSCIOUS, and MedicalEffects
         // pins an UNCONSCIOUS player's health to >= 1 (so a bleed-out / non-lethal overdose stays alive at ~1).
@@ -267,7 +286,7 @@ public final class MedicalEngine {
         // kill. So the drain descends VISIBLY while it stays above the 1-HP pin floor, and the tick on which it
         // would cross that floor is treated as the fatal tick: we transition to DEAD (via the forced-state
         // override so THIS pass's recompute yields DEAD and MedicalEffects stops pinning / early-returns),
-        // clear the overdose + bleed-out markers and drop health to 0 — mirroring the bleed-out timer death so
+        // clear the overdose + bleed-out markers and drop health to 0 – mirroring the bleed-out timer death so
         // the vanilla death pipeline resolves the rest.
         if (severeOverdose && profile.isOverdoseUnconscious() && profile.getState() != HealthState.DEAD) {
             float drain = (float) (MedicalConfig.overdoseLethalDrainPerTick() * interval);
@@ -286,12 +305,103 @@ public final class MedicalEngine {
     }
 
     /**
+     * Roll to wake a LATCHED unconscious player. Only fires once they were already shown unconscious on a
+     * prior pass (never the same pass they drop), no fatal process is still running (severe overdose drain,
+     * active asphyxia), they are not so wrecked that trauma alone would re-collapse them
+     * ({@code effectiveMaxHealth <= 0}), and their {@link #wakeupScore} has fallen to the configured
+     * threshold. On success the latch + all cause markers clear and the profile is marked dirty, so the
+     * caller's recompute this pass derives a conscious state. Uses the player's server RandomSource.
+     */
+    private static void attemptWake(ServerPlayer player, MedicalProfile profile) {
+        if (!profile.isUnconsciousLatched()) {
+            return;
+        }
+        // Only a player already SHOWN unconscious (cached snapshot) rolls – never the very pass they went down.
+        if (profile.cached().state() != HealthState.UNCONSCIOUS) {
+            return;
+        }
+        // A still-running fatal process must resolve first (die, or have the cause cleared) before any wake.
+        boolean severeOverdose = MedicalConfig.overdoseLethalEnabled()
+                && MedicalConfig.overdoseLethalThreshold() > 0.0D
+                && profile.getDrugLoad() >= MedicalConfig.overdoseLethalThreshold();
+        if (severeOverdose || profile.isAsphyxiaUnconscious()) {
+            return;
+        }
+        DerivedStats stats = profile.cached();
+        // Too physically wrecked to stand (trauma alone zeroes the life pool -> would re-collapse): stay down.
+        if (stats.effectiveMaxHealth() <= 0.0F) {
+            return;
+        }
+        if (wakeupScore(profile, stats) > MedicalConfig.wakeupScoreThreshold()) {
+            return;
+        }
+        if (player.getRandom().nextFloat() < (float) MedicalConfig.wakeChance()) {
+            wakeUp(profile);
+        }
+    }
+
+    /**
+     * Clear every unconscious cause marker + the latch so the next recompute stands the player back up, and
+     * recharge the adrenaline grace so a fresh collapse gets its delay again. Marks the profile dirty.
+     */
+    private static void wakeUp(MedicalProfile profile) {
+        profile.setUnconsciousLatched(false);
+        profile.setOverdoseUnconscious(false);
+        profile.setOverdoseUntilTick(0L);
+        profile.setBlackoutGraceUntil(0L);
+        profile.clearAsphyxia();
+        profile.setPainKoSince(0L);
+        profile.setAdrenalineExhausted(false);
+        profile.markDirty();
+    }
+
+    /**
+     * Aggregate "reasons to stay under" as a single tunable score: a weighted sum of how bad blood loss,
+     * systemic pain, drug load and active bleeding still are (each normalised to 0..1, where 1.0 is a
+     * fully-knockout-grade factor). Low = stabilised. Weights, the reference bleeding rate and the eligibility
+     * threshold are all config-driven so the recovery curve can be tuned without touching code. Public so the
+     * {@code /wfmedical status} debug dump can surface it.
+     */
+    public static double wakeupScore(MedicalProfile profile, DerivedStats stats) {
+        double maxBlood = profile.getMaxBloodMl();
+        double lossFraction = maxBlood <= 0.0D ? 0.0D : 1.0D - (profile.getBloodMl() / maxBlood);
+        if (lossFraction < 0.0D) {
+            lossFraction = 0.0D;
+        }
+        double bloodUnc = MedicalConfig.bloodUnconsciousLossFraction();
+        double bloodScore = bloodUnc <= 0.0D ? 0.0D : clamp01(lossFraction / bloodUnc);
+
+        float painShock = MedicalConfig.painShockThreshold();
+        float painUnc = MedicalConfig.painUnconsciousThreshold();
+        double painScore = 0.0D;
+        float painSpan = painUnc - painShock;
+        if (painSpan > 0.0F && stats.systemicPain() > painShock) {
+            painScore = clamp01((stats.systemicPain() - painShock) / painSpan);
+        }
+
+        double lethal = MedicalConfig.overdoseLethalThreshold();
+        double drugScore = lethal <= 0.0D ? 0.0D : clamp01(profile.getDrugLoad() / lethal);
+
+        double bleedRef = MedicalConfig.wakeupBleedReference();
+        double bleedScore = bleedRef <= 0.0D ? 0.0D : clamp01(stats.totalBleeding() / bleedRef);
+
+        return MedicalConfig.wakeupBloodWeight() * bloodScore
+                + MedicalConfig.wakeupPainWeight() * painScore
+                + MedicalConfig.wakeupDrugWeight() * drugScore
+                + MedicalConfig.wakeupBleedWeight() * bleedScore;
+    }
+
+    private static double clamp01(double v) {
+        return v < 0.0D ? 0.0D : (v > 1.0D ? 1.0D : v);
+    }
+
+    /**
      * Per-tick breathing / ASPHYXIA advance, driven from {@link com.warfactory.medical.event.MedicalEventHandler}'s
      * player tick (NOT the throttled engine cadence) so it responds immediately and reliably overrides vanilla's
      * air handling. Asphyxia is NOT physical trauma; it is its own condition with two interchangeable causes:
      * <ul>
-     *   <li>DROWNING — underwater with the breath gone (routed here instead of vanilla drowning damage);</li>
-     *   <li>DRUG — a heavy opioid overdose (respiratory depression), started probabilistically on injection.</li>
+     *   <li>DROWNING – underwater with the breath gone (routed here instead of vanilla drowning damage);</li>
+     *   <li>DRUG – a heavy opioid overdose (respiratory depression), started probabilistically on injection.</li>
      * </ul>
      * Lifecycle: a conscious STRUGGLE window (heavily slowed, blurred, no sprint/jump), then PASS OUT with a
      * death deadline; the player DIES unless the cause is cleared first (reach the surface / reverse or decay the
@@ -334,9 +444,11 @@ public final class MedicalEngine {
         if (profile.isAsphyxiaUnconscious()) {
             player.setAirSupply(0); // hold at 0 so vanilla never deals its own drowning damage in the meantime
             if (!causeActive) {
+                // Cause cleared in time: drop the FATAL asphyxia markers but stay LATCHED unconscious, so the
+                // player comes to groggily via the wake roll rather than snapping awake the instant they surface.
                 profile.clearAsphyxia();
                 profile.markDirty();
-                resync(player); // wakes back up; air recovers naturally
+                resync(player); // air recovers naturally; consciousness returns via the wake roll
                 return;
             }
             if (now >= profile.getAsphyxiaDeadlineTick()) {
@@ -359,11 +471,14 @@ public final class MedicalEngine {
             // Drain the air bar for feedback, then hold it at 0 so vanilla never applies drowning damage.
             int air = player.getAirSupply();
             player.setAirSupply(air > 0 ? Math.max(0, air - MedicalConfig.asphyxiaAirLossPerTick()) : 0);
-            // Struggle window elapsed -> pass out; a death deadline starts ticking.
-            if (now - profile.getAsphyxiaSince() >= MedicalConfig.asphyxiaStruggleTicks()) {
+            // Struggle window (+ the short adrenaline-style blackout grace) elapsed -> pass out; a death
+            // deadline starts ticking, and the unconscious state is latched so recovery goes through the roll.
+            if (now - profile.getAsphyxiaSince()
+                    >= MedicalConfig.asphyxiaStruggleTicks() + MedicalConfig.blackoutGraceTicks()) {
                 player.setAirSupply(0);
                 profile.setAsphyxiating(false);
                 profile.setAsphyxiaUnconscious(true);
+                profile.setUnconsciousLatched(true);
                 profile.setAsphyxiaDeadlineTick(now + MedicalConfig.asphyxiaUnconsciousTicks());
                 profile.markDirty();
                 resync(player);
@@ -413,6 +528,7 @@ public final class MedicalEngine {
         // decay the load and run the overdose-unconsciousness timer instead of fast-path skipping the player.
         // Also keep ticking while any localized numbing is decaying, or an adrenaline pain-KO timer is running.
         if (profile.getDrugLoad() > 0.0F || profile.isOverdoseUnconscious() || profile.getOverdoseUntilTick() > 0L
+                || profile.isUnconsciousLatched() || profile.getBlackoutGraceUntil() > 0L
                 || profile.anyLocalNumbing() || profile.getPainKoSince() > 0L || profile.isAdrenalineExhausted()
                 || profile.isAsphyxiating() || profile.isAsphyxiaUnconscious()
                 || profile.getStimulant() > 0.0F || profile.getClottingBoost() > 0.0F) {
@@ -566,8 +682,8 @@ public final class MedicalEngine {
      * instantly instead of waiting for the next physiology pass.
      *
      * <p>Recomputes the derived stats, applies them to the vanilla body ({@code allowRaise=true}, so a
-     * pristine player is set EXACTLY to the derived current health — e.g. 30/30 rather than the stale
-     * vanilla 20/30 — and a freshly-injured one is clamped straight to its lower derived health) unless the
+     * pristine player is set EXACTLY to the derived current health – e.g. 30/30 rather than the stale
+     * vanilla 20/30 – and a freshly-injured one is clamped straight to its lower derived health) unless the
      * player is creative/spectator-immune, bumps the revision, pushes a full snapshot, and finally
      * edge-reconciles the downed broadcast so trackers start/stop rendering the downed pose to match.</p>
      *

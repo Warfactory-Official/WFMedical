@@ -1045,6 +1045,8 @@ public final class WFMedicalCommands {
             profile.setOverdoseUnconscious(false);
             profile.setOverdoseUntilTick(0L);
             profile.clearAsphyxia();
+            profile.setBlackoutGraceUntil(0L);
+            profile.setUnconsciousLatched(false);
             profile.setBleedoutSinceTick(-1L);
             profile.setForcedState(null);
             profile.setState(HealthState.HEALTHY);
@@ -1085,6 +1087,8 @@ public final class WFMedicalCommands {
             profile.setOverdoseUnconscious(false);
             profile.setOverdoseUntilTick(0L);
             profile.clearAsphyxia();
+            profile.setBlackoutGraceUntil(0L);
+            profile.setUnconsciousLatched(false);
             profile.setBleedoutSinceTick(-1L);
             profile.setForcedState(null);
             profile.setState(HealthState.DEAD);
@@ -1120,6 +1124,8 @@ public final class WFMedicalCommands {
             profile.setOverdoseUnconscious(false);
             profile.setOverdoseUntilTick(0L);
             profile.clearAsphyxia();
+            profile.setBlackoutGraceUntil(0L);
+            profile.setUnconsciousLatched(false); // release the wake latch so the revive is not re-derived UNCONSCIOUS
             profile.setDrugLoad(0.0F); // otherwise a severe overdose would immediately re-knock-out on the next pass
             // Evacuate the life-threatening trauma that drives effectiveMaxHealth to 0 (major wounds only;
             // minor scratches are left in place so this stays a revive, not a full heal).
@@ -1267,6 +1273,8 @@ public final class WFMedicalCommands {
             if (mode == DrugMode.CLEAR) {
                 profile.setOverdoseUnconscious(false);
                 profile.setOverdoseUntilTick(0L);
+                profile.setBlackoutGraceUntil(0L);
+                profile.setUnconsciousLatched(false);
             } else {
                 double lethal = MedicalConfig.overdoseLethalThreshold();
                 if (lethal > 0.0D && profile.getDrugLoad() >= lethal) {
@@ -1305,14 +1313,14 @@ public final class WFMedicalCommands {
 
     /**
      * Force the unified {@link HealthState#UNCONSCIOUS} state via one of its two internal causes:
-     * no-arg = bleed-out cause (admin-forced override + death timer runs); ticks arg = overdose cause
-     * (wake timer runs, player recovers after {@code ticks}).
+     * no-arg = bleed-out cause (admin-forced override, held until cleared); any {@code ticks} arg = overdose
+     * cause – the player is latched unconscious and comes to on their own via the engine's wake roll once
+     * their wakeup score is low (the {@code ticks} value is legacy and no longer sets a fixed wake time).
      */
     private static int cmdUnconscious(CommandSourceStack src, Collection<ServerPlayer> targets, int ticks) {
         boolean timed = ticks >= 1;
         int n = forEach(src, targets, (s, p, data, profile) -> {
             if (timed) {
-                profile.setOverdoseUntilTick(p.level().getGameTime() + ticks);
                 profile.setOverdoseUnconscious(true);
             } else {
                 profile.setForcedState(HealthState.UNCONSCIOUS);
@@ -1324,7 +1332,7 @@ public final class WFMedicalCommands {
             return true;
         });
         src.sendSuccess(() -> Component.literal("[wfmedical] Rendered " + n + " player(s) unconscious"
-                + (timed ? " for " + ticks + " tick(s) (overdose wake timer)." : " (bleed-out death timer).")), true);
+                + (timed ? " (overdose cause; comes to via the wake roll once stable)." : " (bleed-out death timer).")), true);
         return n;
     }
 
@@ -1366,6 +1374,10 @@ public final class WFMedicalCommands {
         }
         final HealthState target = state;
         int n = forEach(src, targets, (s, p, data, profile) -> {
+            // An authoritative /state overrides the wake latch (an UNCONSCIOUS target re-pins via forcedState
+            // below, which the engine leaves unlatched so the operator keeps control).
+            profile.setUnconsciousLatched(false);
+            profile.setBlackoutGraceUntil(0L);
             // Pin a non-HEALTHY target through the forced-state override so the resync's recompute cannot
             // clobber it back to the physiology-derived state; HEALTHY clears any prior override so the
             // player returns to their real derived condition.
@@ -1576,7 +1588,6 @@ public final class WFMedicalCommands {
      */
     private static String buildDump(ServerPlayer p, MedicalProfile profile, DerivedStats stats) {
         long now = p.level().getGameTime();
-        long remaining = profile.getOverdoseUntilTick() > 0L ? Math.max(0L, profile.getOverdoseUntilTick() - now) : 0L;
         StringBuilder sb = new StringBuilder();
         sb.append("=== wfmedical: ").append(name(p)).append(" ===");
         sb.append("\n health(derived): ").append(fmt(stats.effectiveCurrentHealth()))
@@ -1594,25 +1605,31 @@ public final class WFMedicalCommands {
                 .append("  since=").append(profile.getPainKoSince() > 0L ? (now - profile.getPainKoSince()) + "t" : "-");
         sb.append("\n state: ").append(profile.getState())
                 .append("  isDowned: ").append(profile.isDowned());
-        // Unified unconsciousness line: one externally-visible UNCONSCIOUS state, with an internal cause hint
-        // (overdose => wake timer; bleed-out => death timer) so the debug dump still distinguishes them.
+        // Unified unconsciousness line: one externally-visible UNCONSCIOUS state, with an internal cause hint.
+        // A latched player comes to via the wake ROLL once their wakeup score falls to the threshold; asphyxia
+        // keeps a hard death timer while the cause is active.
         if (profile.getState() == HealthState.UNCONSCIOUS) {
+            double wake = MedicalEngine.wakeupScore(profile, stats);
+            double thr = MedicalConfig.wakeupScoreThreshold();
+            String wakeInfo = "  wakeupScore=" + fmt(wake) + "/" + fmt(thr)
+                    + (wake <= thr ? " (rolling " + fmt(MedicalConfig.wakeChance()) + " per recompute)" : " (too high to wake)")
+                    + "  latched=" + profile.isUnconsciousLatched();
             if (profile.isAsphyxiaUnconscious()) {
                 long dieIn = Math.max(0L, profile.getAsphyxiaDeadlineTick() - now);
                 sb.append("\n unconscious: cause=asphyxia  death in ").append(dieIn).append("t (unless cause cleared)");
             } else if (profile.isOverdoseUnconscious()) {
-                sb.append("\n unconscious: cause=overdose  wake in ").append(remaining).append("t");
+                sb.append("\n unconscious: cause=overdose").append(wakeInfo);
             } else {
-                long since = profile.getBleedoutSinceTick();
-                long deathIn = since >= 0L
-                        ? Math.max(0L, MedicalConfig.bleedoutTicks() - (now - since))
-                        : -1L;
-                sb.append("\n unconscious: cause=bleed-out  death in ")
-                        .append(deathIn >= 0L ? (deathIn + "t") : "(timer not started)");
+                sb.append("\n unconscious: cause=bleed-out").append(wakeInfo);
             }
+        } else if (profile.getBlackoutGraceUntil() > 0L) {
+            // Conscious, resisting: the short blackout grace before a drug KO commits.
+            sb.append("\n blackout grace: ").append(Math.max(0L, profile.getBlackoutGraceUntil() - now))
+                    .append("t until KO (sealed – antidote no longer prevents it)");
         } else if (profile.isAsphyxiating()) {
             // Conscious asphyxia struggle (drowning or drug respiratory depression); passes out then kills.
-            long outIn = Math.max(0L, (profile.getAsphyxiaSince() + MedicalConfig.asphyxiaStruggleTicks()) - now);
+            long outIn = Math.max(0L, (profile.getAsphyxiaSince()
+                    + MedicalConfig.asphyxiaStruggleTicks() + MedicalConfig.blackoutGraceTicks()) - now);
             sb.append("\n asphyxia: struggling  air ").append(p.getAirSupply()).append(" / ")
                     .append(p.getMaxAirSupply()).append("  passout in ").append(outIn).append("t");
         }

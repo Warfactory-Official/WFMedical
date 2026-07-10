@@ -1,6 +1,6 @@
 # Configuration Reference
 
-## `MedicalConfig` — COMMON config (`wfmedical-common.toml`)
+## `MedicalConfig` – COMMON config (`wfmedical-common.toml`)
 
 Registered via `MedicalConfig.register(ModLoadingContext)` during mod construction. All values are server-authoritative; the client uses the synced snapshot from `MedicalSyncPacket`.
 
@@ -57,8 +57,8 @@ Registered via `MedicalConfig.register(ModLoadingContext)` during mod constructi
 | `lethality.majorTraumaFractionBallistic` | `0.9` | Instant-kill fraction for `BALLISTIC`. |
 | `lethality.majorTraumaFractionExplosion` | `0.9` | Instant-kill fraction for `EXPLOSION`. |
 | `lethality.majorTraumaFractionBlunt` | `1.1` | Instant-kill fraction for `BLUNT` (requires a hit heavier than full health). |
-| `lethality.majorTraumaFractionUnarmed` | `3.0` | Instant-kill fraction for `UNARMED` — effectively disabled. |
-| `lethality.majorTraumaFractionFall` | `1.5` | Instant-kill fraction for `FALL` — only catastrophic falls. |
+| `lethality.majorTraumaFractionUnarmed` | `3.0` | Instant-kill fraction for `UNARMED` – effectively disabled. |
+| `lethality.majorTraumaFractionFall` | `1.5` | Instant-kill fraction for `FALL` – only catastrophic falls. |
 | `finishDownedOnHit` | `true` | If true, any real damage to an already UNCONSCIOUS player kills them. |
 | `maxTraumaPerLimb` | `8` | Hard cap on distinct trauma objects per limb; excess is merged. |
 | `legFractureSpeedMultiplier` | `0.40` | Multiplicative speed penalty applied per fractured leg. |
@@ -112,7 +112,7 @@ Registered via `MedicalConfig.register(ModLoadingContext)` during mod constructi
 
 ---
 
-## `wfmedical_definitions.toml` — data-driven definitions
+## `wfmedical_definitions.toml` – data-driven definitions
 
 This file is copied into the Forge config directory on first launch and parsed by `MedicalDefinitions`. Editing the config-directory copy customizes injuries and medical items without code changes. The file is parsed by NightConfig's TOML parser. Unknown keys are silently ignored; missing keys fall back to coded defaults.
 
@@ -124,7 +124,7 @@ One table per injury type. Fields:
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `id` | string | — | Unique id (also the NBT key). |
+| `id` | string | – | Unique id (also the NBT key). |
 | `category` | string | `"BRUISE"` | `TraumaCategory` name. |
 | `major` | bool | category default | If true, reduces effective max-health while active. |
 | `severityContribution` | float | `1.0` | Base severity when created. |
@@ -145,8 +145,8 @@ One table per medical item. Fields:
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `item` | string | — | Item registry name (e.g. `"wfmedical:bandage"`). |
-| `action` | string | — | `TreatmentAction` name. |
+| `item` | string | – | Item registry name (e.g. `"wfmedical:bandage"`). |
+| `action` | string | – | `TreatmentAction` name. |
 | `categories` | string[] | `[]` | `TraumaCategory` names this item may act on. Empty = any category. |
 | `magnitude` | float | `0.0` | Generic strength parameter (bleeding reduction fraction, heal amount, etc.). |
 | `bloodRestoreMl` | float | `0.0` | ml of blood restored as a secondary effect. |
@@ -159,8 +159,8 @@ One table per injectable substance. Fields:
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `id` | string | — | Unique substance id. |
-| `item` | string | — | Item registry name. |
+| `id` | string | – | Unique substance id. |
+| `item` | string | – | Item registry name. |
 | `painSuppression` | float | `0.0` | Systemic analgesia mask (0..1) applied on injection. |
 | `doseLoad` | float | `0.0` | Drug load added per injection. |
 | `overdoseThreshold` | float | `1.0` | Drug load at which overdose unconsciousness triggers. |

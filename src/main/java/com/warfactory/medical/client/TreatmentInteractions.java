@@ -99,7 +99,7 @@ public final class TreatmentInteractions {
             return;
         }
         if (item instanceof InjectableItem) {
-            // Systemic self-injection — no target choice, no wheel.
+            // Systemic self-injection – no target choice, no wheel.
             sendAction(itemId, null, -1);
             return;
         }
@@ -184,7 +184,7 @@ public final class TreatmentInteractions {
     }
 
     /**
-     * Any player, or (with the compat toggle) an Open-Persistence logout body — both carry a medical profile.
+     * Any player, or (with the compat toggle) an Open-Persistence logout body – both carry a medical profile.
      */
     private static boolean isTargetable(LivingEntity entity) {
         return entity instanceof Player

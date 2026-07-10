@@ -60,7 +60,7 @@ public class MedicalItem extends Item {
         // Right-click handling for medical items is driven entirely by the client-side treatment wheel (see
         // TreatmentInteractions): it detects the target, opens the limb wheel or auto-applies, and sends the
         // authoritative MedicalActionPacket. The vanilla hold-to-use channel is intentionally disabled here so
-        // the two never race — returning FAIL means the client sends no use packet and the server never acts.
+        // the two never race – returning FAIL means the client sends no use packet and the server never acts.
         return InteractionResultHolder.fail(player.getItemInHand(hand));
     }
 
