@@ -18,10 +18,6 @@ import net.minecraft.server.level.ServerPlayer;
 public final class TreatmentService {
 
     private static final float DEFAULT_HEAL_MAGNITUDE = 0.25F;
-    /**
-     * Score bonus applied to a trauma sitting on the UI-selected limb so the hint wins over severity.
-     */
-    private static final float LIMB_HINT_BONUS = 1000.0F;
 
     private TreatmentService() {
     }
@@ -216,15 +212,18 @@ public final class TreatmentService {
 
     /**
      * Choose the best trauma for this action: category must be applicable and the trauma must respond to
-     * the action; then score by action-specific priority plus severity. When {@code limbHint} is non-null,
-     * trauma on that limb gets a large bonus so a UI-selected limb is strongly preferred (a matching wound
-     * always outranks a non-matching one, ties within the limb still break on the usual priority/severity).
+     * the action; then score by action-specific priority plus severity. When {@code limbHint} is non-null it
+     * is a HARD filter: only trauma on that limb qualifies, so an explicit UI limb click never silently
+     * cross-heals a wound on a different limb (the caller reports "no effect" instead).
      */
     private static Trauma pickTarget(MedicalProfile profile, Treatment treatment, TreatmentAction action,
                                      LimbType limbHint) {
         Trauma best = null;
         float bestScore = Float.NEGATIVE_INFINITY;
         for (LimbType lt : LimbType.VALUES) {
+            if (limbHint != null && lt != limbHint) {
+                continue;
+            }
             Limb limb = profile.limb(lt);
             java.util.List<Trauma> traumas = limb.getTraumas();
             for (int i = 0; i < traumas.size(); i++) {
@@ -236,9 +235,6 @@ public final class TreatmentService {
                     continue;
                 }
                 float score = priority(action, t) + t.getSeverity();
-                if (limbHint != null && t.getLimb() == limbHint) {
-                    score += LIMB_HINT_BONUS;
-                }
                 if (score > bestScore) {
                     bestScore = score;
                     best = t;
@@ -246,6 +242,49 @@ public final class TreatmentService {
             }
         }
         return best;
+    }
+
+    /**
+     * Whether {@code treatment} can actually change anything on {@code limbType} right now – the
+     * treatment-aware refinement of {@link com.warfactory.medical.core.limb.LimbStatus#isDamaged}. Used to
+     * build the per-limb treatable mask sent to the limb wheel so it only offers limbs the held item can
+     * affect (a limb hurt only by the regenerating minor-damage pool, or hurt in a way this item does not
+     * address, is excluded). Reads cached limb aggregates, so recompute a dirty profile first.
+     */
+    public static boolean canTreatLimb(MedicalProfile profile, Treatment treatment, LimbType limbType) {
+        if (profile == null || treatment == null || limbType == null) {
+            return false;
+        }
+        TreatmentAction action = treatment.action();
+        if (action.isGlobal()) {
+            return true; // whole-body effect; the limb pick is irrelevant
+        }
+        Limb limb = profile.limb(limbType);
+        if (action == TreatmentAction.NUMB_LIMB) {
+            return limb.getCachedPain() > 0.0F;
+        }
+        if (action == TreatmentAction.APPLY_TOURNIQUET) {
+            return (limbType.isArm() || limbType.isLeg()) && !limb.hasTourniquet();
+        }
+        for (Trauma t : limb.getTraumas()) {
+            if (treatment.appliesTo(t.getType().getCategory()) && t.getType().respondsTo(action)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Per-limb {@link #canTreatLimb} results packed as a bitmask ({@code bit = 1 << LimbType.ordinal()}).
+     */
+    public static int treatableMask(MedicalProfile profile, Treatment treatment) {
+        int mask = 0;
+        for (LimbType lt : LimbType.VALUES) {
+            if (canTreatLimb(profile, treatment, lt)) {
+                mask |= (1 << lt.ordinal());
+            }
+        }
+        return mask;
     }
 
     /**

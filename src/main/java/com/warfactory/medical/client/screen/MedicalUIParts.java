@@ -83,11 +83,12 @@ public final class MedicalUIParts {
     }
 
     /**
-     * Updates client-local highlight AND sends SetTargetLimbPacket so the server biases treatments.
+     * Updates the client-local highlight. Purely presentational: every treatment request carries its limb
+     * explicitly, so no server-side hint is needed (the old SetTargetLimbPacket hint was write-only dead
+     * state and has been removed).
      */
     public static void selectLimb(LimbType limb) {
         ClientMedicalCache.setSelectedLimb(limb);
-        MedicalNetworking.sendToServer(new SetTargetLimbPacket(limb));
     }
 
     // ------------------------------------------------------------------ actions
@@ -107,11 +108,23 @@ public final class MedicalUIParts {
         MedicalNetworking.sendToServer(new MedicalActionPacket(id, limb));
     }
 
+    /**
+     * Ask the server to remove the tourniquet worn on the local player's {@code limb}.
+     */
     public static void requestRemoveTourniquet(LimbType limb) {
+        requestRemoveTourniquet(limb, -1);
+    }
+
+    /**
+     * Ask the server to remove the tourniquet worn on {@code limb} of entity {@code targetEntityId}
+     * ({@code -1} = the local player). The server validates reach and rolls the item-recovery chance for the
+     * remover.
+     */
+    public static void requestRemoveTourniquet(LimbType limb, int targetEntityId) {
         if (limb == null) {
             return;
         }
-        MedicalNetworking.sendToServer(new RemoveTourniquetPacket(limb));
+        MedicalNetworking.sendToServer(new RemoveTourniquetPacket(limb, targetEntityId));
     }
 
     /**

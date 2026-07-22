@@ -73,10 +73,6 @@ public final class MedicalProfile {
      * item away mid-treatment cancels it (the "cannot change items while applying" rule). Transient.
      */
     private transient int activeSlot = -1;
-    /**
-     * Client-provided targeting hint (nullable): the limb the player selected in the UI. Transient.
-     */
-    private transient LimbType preferredLimb;
 
     // --- Transient overdose-unconsciousness tracking. These are the INTERNAL "overdose" CAUSE markers of the
     //     single externally-visible UNCONSCIOUS state (as opposed to a bleed-out unconsciousness, marked by
@@ -620,14 +616,6 @@ public final class MedicalProfile {
      */
     public int getActiveSlot() {
         return activeSlot;
-    }
-
-    public LimbType getPreferredLimb() {
-        return preferredLimb;
-    }
-
-    public void setPreferredLimb(LimbType limb) {
-        this.preferredLimb = limb;
     }
 
     public CompoundTag save() {

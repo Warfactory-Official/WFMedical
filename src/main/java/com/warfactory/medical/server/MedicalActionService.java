@@ -17,7 +17,9 @@ import com.warfactory.medical.network.ActiveTreatmentPacket;
 import com.warfactory.medical.network.MedicalNetworking;
 import com.warfactory.medical.network.MedicalSyncPacket;
 import com.warfactory.medical.network.TreatmentTargetInfoPacket;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -103,6 +105,10 @@ public final class MedicalActionService {
             if (targetData == null) {
                 return false;
             }
+            if (isBeingTreatedByAnother(actor, target)) {
+                actor.displayClientMessage(Component.translatable("gui.wfmedical.treat.busy"), true);
+                return false;
+            }
         }
 
         // Tourniquet is applied INSTANTLY (not a timed treatment): toggle it onto the selected appendage.
@@ -136,35 +142,50 @@ public final class MedicalActionService {
     }
 
     /**
-     * Reply to a medic who right-clicked ANOTHER entity with a localized treatment: gather that target's
-     * per-limb summaries (after a fresh recompute) and send them back so the client can open the limb wheel.
-     * Validates the actor's hands, item and reach; no state is mutated.
+     * Reply to a medic who right-clicked with a localized treatment: gather the target's per-limb summaries
+     * ({@code targetId = -1} = the requester themself) plus the per-limb treatable mask for the requested
+     * item, and send them back so the client can open the limb wheel. Validates the actor's hands, item and
+     * reach.
+     *
+     * <p>A dirty profile is brought current through the full engine-equivalent path
+     * ({@link MedicalEngine#resync} / {@link #syncTarget}) rather than a bare {@code recompute}: recompute
+     * alone clears the dirty flag the engine keys its own effects-apply + client sync off, so a bare call
+     * here could silently eat the target's pending physiology update.</p>
      */
     public static void requestTargetInfo(ServerPlayer actor, int targetId, ResourceLocation itemId) {
-        if (actor == null || itemId == null || targetId < 0) {
+        if (actor == null || itemId == null) {
             return;
         }
         if (MedicalState.isHandsDisabled(actor)) {
             return;
         }
         Item item = ForgeRegistries.ITEMS.getValue(itemId);
-        if (!(item instanceof MedicalItem) || findItemSlot(actor, item) < 0) {
+        if (!(item instanceof MedicalItem medical) || findItemSlot(actor, item) < 0) {
             return;
         }
-        LivingEntity target = resolveOtherTarget(actor, targetId);
-        if (target == null) {
+        LivingEntity target;
+        IMedicalData data;
+        if (targetId < 0 || targetId == actor.getId()) {
+            target = actor;
+            data = MedicalCapabilities.get(actor);
+        } else {
+            target = resolveOtherTarget(actor, targetId);
+            data = target == null ? null : medicalDataOf(target);
+        }
+        if (target == null || data == null) {
             return;
         }
-        IMedicalData data = medicalDataOf(target);
-        if (data == null) {
-            return;
-        }
-        // A live player is engine-ticked, but a downed/persistent body's cached aggregates may be stale, so
-        // recompute before snapshotting to guarantee the wheel reflects the target's current injuries.
+        // Bring a stale profile current WITHOUT eating its dirty flag: a live player gets a full engine
+        // re-sync (recompute + body effects + client sync), a downed/persistent body a recompute + re-stamp.
         MedicalProfile profile = data.getProfile();
-        profile.recompute(MedicalConfig.toPhysiologyParams());
+        if (profile.isDirty()) {
+            syncTarget(target, data);
+        }
         MedicalSyncPacket snap = MedicalSyncPacket.fromProfile(profile);
-        MedicalNetworking.sendTargetInfo(actor, new TreatmentTargetInfoPacket(target.getId(), itemId, snap.limbs()));
+        int mask = TreatmentService.treatableMask(profile, medical.getTreatment());
+        int replyTargetId = (target == actor) ? -1 : target.getId();
+        MedicalNetworking.sendTargetInfo(actor,
+                new TreatmentTargetInfoPacket(replyTargetId, itemId, snap.limbs(), mask));
     }
 
     /**
@@ -228,6 +249,11 @@ public final class MedicalActionService {
             if (target != actor) {
                 syncTarget(target, targetData);
             }
+            actor.displayClientMessage(Component.translatable("gui.wfmedical.treat.applied"), true);
+        } else {
+            // The channel ran its full duration but changed nothing (no matching wound on the chosen limb,
+            // state already handled, ...). Say so – a silent no-op reads as "healing is broken".
+            actor.displayClientMessage(Component.translatable("gui.wfmedical.treat.no_effect"), true);
         }
 
         actorProfile.clearActiveTreatment();
@@ -288,28 +314,43 @@ public final class MedicalActionService {
     }
 
     /**
-     * Remove the tourniquet from {@code limb} on the requesting player (UI-driven, no item consumed); no-op if
-     * none present. Self-only: the remove-tourniquet UI acts on the player's own worn tourniquets.
+     * Remove the tourniquet from {@code limb} on {@code targetId} ({@code -1} = the requesting player
+     * themself); UI-driven, no item consumed to perform it; no-op if none present. A medic may remove a
+     * tourniquet they (or anyone) applied to another player / downed body within reach – required because an
+     * unconscious patient cannot operate their own removal UI. The recovery roll returns the tourniquet item
+     * to the REMOVER.
      */
-    public static boolean removeTourniquet(ServerPlayer player, LimbType limb) {
-        if (player == null || limb == null) {
+    public static boolean removeTourniquet(ServerPlayer actor, LimbType limb, int targetId) {
+        if (actor == null || limb == null) {
             return false;
         }
-        IMedicalData data = MedicalCapabilities.get(player);
-        if (data == null) {
+        LivingEntity target;
+        IMedicalData data;
+        if (targetId < 0 || targetId == actor.getId()) {
+            target = actor;
+            data = MedicalCapabilities.get(actor);
+        } else {
+            // Removing someone else's tourniquet needs working hands and reach, exactly like treating them.
+            if (MedicalState.isHandsDisabled(actor)) {
+                return false;
+            }
+            target = resolveOtherTarget(actor, targetId);
+            data = target == null ? null : medicalDataOf(target);
+        }
+        if (target == null || data == null) {
             return false;
         }
         MedicalProfile profile = data.getProfile();
-        Limb target = profile.limb(limb);
-        if (!target.hasTourniquet()) {
+        Limb targetLimb = profile.limb(limb);
+        if (!targetLimb.hasTourniquet()) {
             return false;
         }
-        target.setTourniquet(false);
+        targetLimb.setTourniquet(false);
         profile.markDirty();
         data.bumpRevision();
-        MedicalEngine.resync(player);
-        MedicalNetworking.broadcastTourniquets(player, profile);
-        recoverTourniquet(player);
+        syncTarget(target, data);
+        MedicalNetworking.broadcastTourniquets(target, profile);
+        recoverTourniquet(actor);
         return true;
     }
 
@@ -346,6 +387,31 @@ public final class MedicalActionService {
             DerivedStats stats = data.getProfile().recompute(MedicalConfig.toPhysiologyParams());
             MedicalEffects.applyToBody(target, stats);
         }
+    }
+
+    /**
+     * Whether any OTHER online player is already channelling a treatment on {@code target}. Blocks a second
+     * medic from double-treating (both would consume items; the later completion usually no-ops).
+     */
+    private static boolean isBeingTreatedByAnother(ServerPlayer actor, LivingEntity target) {
+        MinecraftServer server = actor.getServer();
+        if (server == null) {
+            return false;
+        }
+        for (ServerPlayer other : server.getPlayerList().getPlayers()) {
+            if (other == actor) {
+                continue;
+            }
+            IMedicalData otherData = MedicalCapabilities.get(other);
+            if (otherData == null) {
+                continue;
+            }
+            MedicalProfile otherProfile = otherData.getProfile();
+            if (otherProfile.hasActiveTreatment() && otherProfile.getActiveTargetId() == target.getId()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

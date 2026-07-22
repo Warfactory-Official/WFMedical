@@ -3,12 +3,12 @@ package com.warfactory.medical.client;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.api.MedicalState;
 import com.warfactory.medical.client.screen.LimbWheelScreen;
-import com.warfactory.medical.client.screen.MedicalUIParts;
 import com.warfactory.medical.compat.OpenPersistenceCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.limb.LimbStatus;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.treatment.Treatment;
+import com.warfactory.medical.core.treatment.TreatmentAction;
 import com.warfactory.medical.item.InjectableItem;
 import com.warfactory.medical.item.MedicalItem;
 import com.warfactory.medical.network.ClientMedicalCache;
@@ -23,18 +23,19 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
-
-import java.util.List;
 
 /**
  * CLIENT-ONLY driver for the right-click treatment flow that replaces the old hold-to-use channel.
@@ -48,6 +49,12 @@ import java.util.List;
  */
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class TreatmentInteractions {
+
+    /**
+     * Reach (blocks) of the fallback medical-target pick ray, between vanilla's ~3-block entity pick and the
+     * server's 6-block treatment validation.
+     */
+    private static final double TARGET_PICK_REACH = 4.5D;
 
     /**
      * Hotbar slot locked for the duration of the active treatment ({@code -1} = nothing locked).
@@ -90,7 +97,9 @@ public final class TreatmentInteractions {
 
     /**
      * Branch on the item and target: injectables are self-only systemic; global treatments apply immediately;
-     * localized treatments open the wheel / auto-select using the target's damaged limbs.
+     * localized treatments ask the server for the target's injuries + the per-limb treatable mask (for self
+     * AND other targets – the mask needs the authoritative trauma list either way), then open the wheel /
+     * auto-select in {@link #onTargetInfo}.
      */
     private static void beginTreatment(Minecraft mc, LocalPlayer player, ItemStack held) {
         Item item = held.getItem();
@@ -113,18 +122,14 @@ public final class TreatmentInteractions {
             sendAction(itemId, null, targetId);
             return;
         }
-        // Localized: needs a damaged limb.
-        if (targetId < 0) {
-            proceedLocalized(targetId, itemId, MedicalUIParts.limbSummaries());
-        } else {
-            // We don't have the target's injuries client-side; ask the server, continue in onTargetInfo().
-            MedicalNetworking.sendToServer(new TreatmentTargetRequestPacket(targetId, itemId));
-        }
+        // Localized: the client's own LimbSummary cache can't tell WHICH limbs this item can actually treat
+        // (minor-damage pools have no trauma), so always ask the server; continue in onTargetInfo().
+        MedicalNetworking.sendToServer(new TreatmentTargetRequestPacket(targetId, itemId));
     }
 
     /**
-     * Server reply with a non-self target's limb summaries (client thread). Re-checks the medic still holds the
-     * item, then opens the wheel / auto-selects for that target.
+     * Server reply with a target's limb summaries + treatable mask (client thread; {@code targetEntityId = -1}
+     * = self). Re-checks the medic still holds the item, then opens the wheel / auto-selects for that target.
      */
     public static void onTargetInfo(TreatmentTargetInfoPacket packet) {
         Minecraft mc = Minecraft.getInstance();
@@ -136,27 +141,55 @@ public final class TreatmentInteractions {
         if (!(item instanceof MedicalItem) || !holdsAnywhere(player, item)) {
             return;
         }
-        proceedLocalized(packet.targetEntityId(), packet.itemId(), packet.limbs());
+        proceedLocalized(packet.targetEntityId(), packet.itemId(), packet.limbs(), packet.treatableMask());
     }
 
     /**
-     * Given a target's limb summaries: nothing damaged → notify; one damaged limb → auto-apply; more → wheel.
+     * Given a target's limb summaries and the item's treatable mask: build the offered slices – damaged limbs
+     * the item can treat, plus (when holding a tourniquet) limbs already wearing one, offered as REMOVE
+     * slices. Nothing offerable → notify; exactly one apply slice → auto-apply; more → wheel.
      */
-    private static void proceedLocalized(int targetId, ResourceLocation itemId, LimbSummary[] limbs) {
+    private static void proceedLocalized(int targetId, ResourceLocation itemId, LimbSummary[] limbs,
+                                         int treatableMask) {
         Minecraft mc = Minecraft.getInstance();
-        List<LimbType> damaged = LimbStatus.damaged(limbs);
-        if (damaged.isEmpty()) {
-            if (mc.player != null) {
-                mc.player.displayClientMessage(
-                        Component.translatable("gui.wfmedical.treat.no_injuries"), true);
+        LocalPlayer player = mc.player;
+        if (player == null || limbs == null) {
+            return;
+        }
+        Item item = ForgeRegistries.ITEMS.getValue(itemId);
+        boolean tourniquetHeld = item instanceof MedicalItem medical
+                && medical.getTreatment() != null
+                && medical.getTreatment().action() == TreatmentAction.APPLY_TOURNIQUET;
+        int trackerId = targetId < 0 ? player.getId() : targetId;
+
+        int applyMask = 0;
+        int removeMask = 0;
+        for (LimbSummary s : limbs) {
+            if (s == null) {
+                continue;
             }
+            int bit = 1 << s.limb().ordinal();
+            if (tourniquetHeld && ClientTourniquetTracker.has(trackerId, s.limb().ordinal())) {
+                removeMask |= bit; // worn limb: the slice removes instead of double-applying
+                continue;
+            }
+            if (LimbStatus.isDamaged(s) && (treatableMask & bit) != 0) {
+                applyMask |= bit;
+            }
+        }
+
+        if (applyMask == 0 && removeMask == 0) {
+            String key = LimbStatus.damaged(limbs).isEmpty()
+                    ? "gui.wfmedical.treat.no_injuries"
+                    : "gui.wfmedical.treat.no_treatable";
+            player.displayClientMessage(Component.translatable(key), true);
             return;
         }
-        if (damaged.size() == 1) {
-            sendAction(itemId, damaged.get(0), targetId);
+        if (removeMask == 0 && Integer.bitCount(applyMask) == 1) {
+            sendAction(itemId, LimbType.VALUES[Integer.numberOfTrailingZeros(applyMask)], targetId);
             return;
         }
-        mc.setScreen(new LimbWheelScreen(targetId, itemId, limbs));
+        mc.setScreen(new LimbWheelScreen(targetId, itemId, limbs, applyMask | removeMask, removeMask));
     }
 
     /**
@@ -172,12 +205,26 @@ public final class TreatmentInteractions {
     }
 
     /**
-     * The entity id to treat: another targetable {@link LivingEntity} under the crosshair, else {@code -1} (self).
+     * The entity id to treat: another targetable {@link LivingEntity} under the crosshair, else {@code -1}
+     * (self). Vanilla's crosshair pick ({@code mc.hitResult}) stops at ~3 blocks for entities while the
+     * server accepts treatment out to 6, so when it misses we run our own slightly longer ray – downed
+     * bodies lie low and are easy to under-reach otherwise. The ray goes through
+     * {@link ProjectileUtil#getEntityHitResult}, so it inherits the envelope hit-registration boxes.
      */
     private static int pickTargetId(Minecraft mc, LocalPlayer player) {
         HitResult hr = mc.hitResult;
         if (hr instanceof EntityHitResult ehr
                 && ehr.getEntity() instanceof LivingEntity le && le != player && isTargetable(le)) {
+            return le.getId();
+        }
+        Vec3 eye = player.getEyePosition();
+        Vec3 view = player.getViewVector(1.0F);
+        Vec3 end = eye.add(view.scale(TARGET_PICK_REACH));
+        AABB sweep = player.getBoundingBox().expandTowards(view.scale(TARGET_PICK_REACH)).inflate(1.0D);
+        EntityHitResult ray = ProjectileUtil.getEntityHitResult(player, eye, end, sweep,
+                e -> e != player && e instanceof LivingEntity le && isTargetable(le),
+                TARGET_PICK_REACH * TARGET_PICK_REACH);
+        if (ray != null && ray.getEntity() instanceof LivingEntity le) {
             return le.getId();
         }
         return -1;

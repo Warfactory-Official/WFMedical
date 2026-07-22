@@ -21,13 +21,13 @@ import java.util.WeakHashMap;
  *
  * <p>S2C packets carry authoritative state ({@link MedicalSyncPacket} full baseline +
  * {@link MedicalDeltaPacket} incremental updates, {@link ActiveTreatmentPacket} action-progress). C2S packets
- * are pure REQUESTS ({@link MedicalActionPacket} start-a-treatment, {@link SetTargetLimbPacket}
- * set-target-hint, {@link RemoveTourniquetPacket} remove-tourniquet): clients never create or remove trauma,
- * the server validates every request before acting.</p>
+ * are pure REQUESTS ({@link MedicalActionPacket} start-a-treatment, {@link RemoveTourniquetPacket}
+ * remove-tourniquet): clients never create or remove trauma, the server validates every request before
+ * acting.</p>
  */
 public final class MedicalNetworking {
 
-    private static final String PROTOCOL = "1";
+    private static final String PROTOCOL = "2";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(WFMedical.MOD_ID, "main"),
             () -> PROTOCOL,
@@ -75,15 +75,8 @@ public final class MedicalNetworking {
                 })
                 .add();
 
-        // C2S: set the player's targeting hint.
-        CHANNEL.messageBuilder(SetTargetLimbPacket.class, 3, NetworkDirection.PLAY_TO_SERVER)
-                .encoder(SetTargetLimbPacket::encode)
-                .decoder(SetTargetLimbPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleServer(ctx.get().getSender());
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
+        // (packet id 3 retired: SetTargetLimbPacket carried a write-only "preferred limb" hint nothing on
+        // the server ever read; every treatment request now names its limb explicitly.)
 
         // S2C: active-treatment progress state for the client overlay.
         CHANNEL.messageBuilder(ActiveTreatmentPacket.class, 4, NetworkDirection.PLAY_TO_CLIENT)
@@ -292,7 +285,7 @@ public final class MedicalNetworking {
 
     /**
      * Send a client-originated request packet to the server. Used by the client UI for
-     * {@link MedicalActionPacket} and {@link SetTargetLimbPacket}; the server validates every request.
+     * {@link MedicalActionPacket} and {@link RemoveTourniquetPacket}; the server validates every request.
      */
     public static void sendToServer(Object packet) {
         CHANNEL.sendToServer(packet);

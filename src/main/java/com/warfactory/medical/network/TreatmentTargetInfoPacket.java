@@ -8,11 +8,14 @@ import net.minecraftforge.fml.DistExecutor;
 
 /**
  * REPLY to a {@link TreatmentTargetRequestPacket}, server -> client. Carries a treatment target's per-limb
- * summaries so the requesting medic's client can build the limb wheel for THAT target (only its damaged limbs
- * are shown, and a lone damaged limb auto-selects). Presentation only; the authoritative apply still happens
- * later via {@link MedicalActionPacket}, which the server re-validates.
+ * summaries so the requesting medic's client can build the limb wheel for THAT target ({@code -1} = the
+ * requester themself), plus a per-limb {@code treatableMask}
+ * ({@code bit = 1 << LimbType.ordinal()}) of the limbs the requested item can actually affect, so the wheel
+ * never offers a limb the treatment would silently no-op on. Presentation only; the authoritative apply
+ * still happens later via {@link MedicalActionPacket}, which the server re-validates.
  */
-public record TreatmentTargetInfoPacket(int targetEntityId, ResourceLocation itemId, LimbSummary[] limbs) {
+public record TreatmentTargetInfoPacket(int targetEntityId, ResourceLocation itemId, LimbSummary[] limbs,
+                                        int treatableMask) {
 
     public static TreatmentTargetInfoPacket decode(FriendlyByteBuf buf) {
         int targetEntityId = buf.readVarInt();
@@ -22,7 +25,8 @@ public record TreatmentTargetInfoPacket(int targetEntityId, ResourceLocation ite
         for (int i = 0; i < count; i++) {
             limbs[i] = MedicalSyncPacket.readLimb(buf);
         }
-        return new TreatmentTargetInfoPacket(targetEntityId, itemId, limbs);
+        int treatableMask = buf.readVarInt();
+        return new TreatmentTargetInfoPacket(targetEntityId, itemId, limbs, treatableMask);
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -32,6 +36,7 @@ public record TreatmentTargetInfoPacket(int targetEntityId, ResourceLocation ite
         for (LimbSummary s : limbs) {
             MedicalSyncPacket.writeLimb(buf, s);
         }
+        buf.writeVarInt(treatableMask);
     }
 
     /**

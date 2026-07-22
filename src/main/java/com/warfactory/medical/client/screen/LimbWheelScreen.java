@@ -7,7 +7,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.warfactory.medical.client.TreatmentInteractions;
-import com.warfactory.medical.core.limb.LimbStatus;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.network.MedicalSyncPacket.LimbSummary;
 import net.minecraft.Util;
@@ -51,6 +50,10 @@ public final class LimbWheelScreen extends Screen {
     private static final int SLICE_BG_HOVER = 0xE0232C37;
     private static final int RIM_HOVER = 0xD0FFE070;
     private static final int HUB_BG = 0xE00E1116;
+    /**
+     * Red tint for a remove-tourniquet slice (matches the interaction sheet's red remove button face).
+     */
+    private static final int TQ_REMOVE_TINT = 0xFFB02020;
 
     private final int targetEntityId;
     private final ResourceLocation itemId;
@@ -60,10 +63,18 @@ public final class LimbWheelScreen extends Screen {
     private long openStart;
     private int hovered = -1;
 
-    private record Entry(LimbType limb, LimbSummary summary) {
+    private record Entry(LimbType limb, LimbSummary summary, boolean removeTourniquet) {
     }
 
-    public LimbWheelScreen(int targetEntityId, ResourceLocation itemId, LimbSummary[] limbs) {
+    /**
+     * @param showMask   bitmask ({@code 1 << LimbType.ordinal()}) of the limbs to offer as slices – the
+     *                   caller ({@code TreatmentInteractions.proceedLocalized}) has already intersected
+     *                   damaged with what the held item can treat, so the wheel itself no longer filters
+     * @param removeMask subset of {@code showMask} whose limbs already wear a tourniquet while a tourniquet
+     *                   item is held; those slices REMOVE it instead of applying the item
+     */
+    public LimbWheelScreen(int targetEntityId, ResourceLocation itemId, LimbSummary[] limbs,
+                           int showMask, int removeMask) {
         super(Component.translatable("gui.wfmedical.wheel.title"));
         this.targetEntityId = targetEntityId;
         this.itemId = itemId;
@@ -71,8 +82,12 @@ public final class LimbWheelScreen extends Screen {
         this.itemIcon = item == null ? ItemStack.EMPTY : new ItemStack(item);
         if (limbs != null) {
             for (LimbSummary s : limbs) {
-                if (LimbStatus.isDamaged(s)) {
-                    entries.add(new Entry(s.limb(), s));
+                if (s == null) {
+                    continue;
+                }
+                int bit = 1 << s.limb().ordinal();
+                if ((showMask & bit) != 0) {
+                    entries.add(new Entry(s.limb(), s, (removeMask & bit) != 0));
                 }
             }
         }
@@ -114,7 +129,11 @@ public final class LimbWheelScreen extends Screen {
             float rOut = (R_OUT + (hot ? HOVER_GROW : 0.0F)) * open;
 
             fillSector(g, cx, cy, rIn, rOut, a0, a1, hot ? SLICE_BG_HOVER : SLICE_BG);
-            int tint = withAlpha(MedicalUIParts.limbColor(e.summary.healthPercent()), hot ? 0.55F : 0.32F);
+            // Remove-tourniquet slices are flat red (mirrors the interaction sheet's red remove button);
+            // apply slices tint by the limb's severity.
+            int tint = e.removeTourniquet()
+                    ? withAlpha(TQ_REMOVE_TINT, hot ? 0.65F : 0.42F)
+                    : withAlpha(MedicalUIParts.limbColor(e.summary.healthPercent()), hot ? 0.55F : 0.32F);
             fillSector(g, cx, cy, rIn, rOut, a0, a1, tint);
             if (hot) {
                 fillSector(g, cx, cy, rOut - 2.5F, rOut, a0, a1, RIM_HOVER);
@@ -232,8 +251,13 @@ public final class LimbWheelScreen extends Screen {
             Entry e = entries.get(hovered);
             g.drawCenteredString(this.font, MedicalUIParts.limbName(e.limb), icx, icy + 6,
                     MedicalUIParts.limbColor(e.summary.healthPercent()));
-            int pct = Math.round(e.summary.healthPercent() * 100.0F);
-            g.drawCenteredString(this.font, Component.literal("HP " + pct + "%"), icx, icy + 16, 0xFFCCCCCC);
+            if (e.removeTourniquet()) {
+                g.drawCenteredString(this.font, Component.translatable("gui.wfmedical.tourniquet.remove"),
+                        icx, icy + 16, TQ_REMOVE_TINT);
+            } else {
+                int pct = Math.round(e.summary.healthPercent() * 100.0F);
+                g.drawCenteredString(this.font, Component.literal("HP " + pct + "%"), icx, icy + 16, 0xFFCCCCCC);
+            }
         } else {
             g.drawCenteredString(this.font, Component.translatable("gui.wfmedical.wheel.select"),
                     icx, icy + 10, 0xFFAAAAAA);
@@ -253,12 +277,21 @@ public final class LimbWheelScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        if (button != 0) {
+            onClose(); // any non-left button just dismisses the wheel
+            return true;
+        }
         float cx = this.width / 2.0F;
         float cy = this.height / 2.0F;
         int n = entries.size();
         int idx = pickHovered(mx, my, cx, cy, n == 0 ? 1.0F : Mth.TWO_PI / n, n);
         if (idx >= 0) {
-            TreatmentInteractions.sendAction(itemId, entries.get(idx).limb(), targetEntityId);
+            Entry e = entries.get(idx);
+            if (e.removeTourniquet()) {
+                MedicalUIParts.requestRemoveTourniquet(e.limb(), targetEntityId);
+            } else {
+                TreatmentInteractions.sendAction(itemId, e.limb(), targetEntityId);
+            }
         }
         onClose();
         return true;
