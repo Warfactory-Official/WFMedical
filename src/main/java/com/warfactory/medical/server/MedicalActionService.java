@@ -16,6 +16,7 @@ import com.warfactory.medical.item.ModItems;
 import com.warfactory.medical.network.ActiveTreatmentPacket;
 import com.warfactory.medical.network.MedicalNetworking;
 import com.warfactory.medical.network.MedicalSyncPacket;
+import com.warfactory.medical.network.TargetSheetInfoPacket;
 import com.warfactory.medical.network.TreatmentTargetInfoPacket;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -186,6 +187,38 @@ public final class MedicalActionService {
         int replyTargetId = (target == actor) ? -1 : target.getId();
         MedicalNetworking.sendTargetInfo(actor,
                 new TreatmentTargetInfoPacket(replyTargetId, itemId, snap.limbs(), mask));
+    }
+
+    /**
+     * Reply to a medic who opened the interaction sheet aimed at ANOTHER entity: gather the target's FULL
+     * medical snapshot (all limbs + vitals) plus its worn-tourniquet mask and send them back so the client can
+     * open / refresh the sheet bound to that target. Validates the actor's hands and reach; self is never
+     * routed here (the client opens its own sheet from the local cache).
+     *
+     * <p>Like {@link #requestTargetInfo}, a dirty profile is brought current through {@link #syncTarget} rather
+     * than a bare {@code recompute}, so this examine never eats the target's pending physiology update.</p>
+     */
+    public static void requestTargetSheet(ServerPlayer actor, int targetId) {
+        if (actor == null || targetId < 0 || targetId == actor.getId()) {
+            return;
+        }
+        if (MedicalState.isHandsDisabled(actor)) {
+            return;
+        }
+        LivingEntity target = resolveOtherTarget(actor, targetId);
+        if (target == null) {
+            return;
+        }
+        IMedicalData data = medicalDataOf(target);
+        if (data == null) {
+            return;
+        }
+        MedicalProfile profile = data.getProfile();
+        if (profile.isDirty()) {
+            syncTarget(target, data);
+        }
+        MedicalNetworking.sendTargetSheet(actor, new TargetSheetInfoPacket(
+                target.getId(), MedicalSyncPacket.fromProfile(profile), MedicalNetworking.tourniquetMask(profile)));
     }
 
     /**

@@ -22,6 +22,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * Shared CLIENT-ONLY widget builders and helpers for {@link CharacterSheetUI} and {@link RadialMenuUI}.
@@ -94,9 +95,18 @@ public final class MedicalUIParts {
     // ------------------------------------------------------------------ actions
 
     /**
-     * Sends MedicalActionPacket to server; server validates and applies – the client never applies it itself.
+     * Sends MedicalActionPacket to server for the LOCAL player; server validates and applies.
      */
     public static void requestAction(ItemStack medicalItemStack, LimbType limb) {
+        requestAction(medicalItemStack, limb, -1);
+    }
+
+    /**
+     * Sends MedicalActionPacket to server targeting {@code targetEntityId} ({@code -1} = the local player);
+     * the server validates reach + capability and applies – the client never applies it itself. Used by the
+     * interaction sheet both for self-treatment and (F4) for treating a teammate the sheet is bound to.
+     */
+    public static void requestAction(ItemStack medicalItemStack, LimbType limb, int targetEntityId) {
         if (medicalItemStack == null || medicalItemStack.isEmpty()
                 || !(medicalItemStack.getItem() instanceof MedicalItem)) {
             return;
@@ -105,7 +115,7 @@ public final class MedicalUIParts {
         if (id == null) {
             return;
         }
-        MedicalNetworking.sendToServer(new MedicalActionPacket(id, limb));
+        MedicalNetworking.sendToServer(new MedicalActionPacket(id, limb, targetEntityId));
     }
 
     /**
@@ -243,6 +253,16 @@ public final class MedicalUIParts {
      * {@link #bodyDiagram} grid.
      */
     public static void addLimbTile(WidgetGroup group, LimbType limb, int tx, int ty, int tw, int th) {
+        addLimbTile(group, limb, tx, ty, tw, th, MedicalUIParts::limbSummary);
+    }
+
+    /**
+     * As {@link #addLimbTile(WidgetGroup, LimbType, int, int, int, int)} but the live limb summary is pulled
+     * from {@code source} instead of the local player's synced cache. The interaction sheet (F4) passes a
+     * target-aware source so the same tiles can render/examine a teammate's limbs, not just the local player's.
+     */
+    public static void addLimbTile(WidgetGroup group, LimbType limb, int tx, int ty, int tw, int th,
+                                   Function<LimbType, LimbSummary> source) {
         if (tw <= 0 || th <= 0) {
             return;
         }
@@ -250,7 +270,7 @@ public final class MedicalUIParts {
         // Live color fill (drawn first, behind).
         ImageWidget fill = new ImageWidget(tx, ty, tw, th,
                 () ->
-                        new ColorRectTexture(limbColor(limbSummary(limb).healthPercent())));
+                        new ColorRectTexture(limbColor(source.apply(limb).healthPercent())));
         fill.setClientSideWidget();
         group.addWidget(fill);
 
@@ -269,16 +289,24 @@ public final class MedicalUIParts {
             @Override
             public void updateScreen() {
                 super.updateScreen();
-                setHoverTooltips(limbTooltip(limb));
+                setHoverTooltips(limbTooltip(limb, source));
             }
         };
-        click.setHoverTooltips(limbTooltip(limb));
+        click.setHoverTooltips(limbTooltip(limb, source));
         click.setClientSideWidget();
         group.addWidget(click);
     }
 
     public static List<Component> limbTooltip(LimbType limb) {
-        LimbSummary s = limbSummary(limb);
+        return limbTooltip(limb, MedicalUIParts::limbSummary);
+    }
+
+    /**
+     * Limb tooltip built from a supplied summary source (see {@link #addLimbTile}); the no-source overload
+     * reads the local player's synced cache.
+     */
+    public static List<Component> limbTooltip(LimbType limb, Function<LimbType, LimbSummary> source) {
+        LimbSummary s = source.apply(limb);
         List<Component> lines = new ArrayList<>(4);
         lines.add(limbName(limb));
         lines.add(Component.translatable("gui.wfmedical.health")

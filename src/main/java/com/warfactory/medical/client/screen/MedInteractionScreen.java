@@ -20,6 +20,7 @@ import com.warfactory.medical.client.ClientTourniquetTracker;
 import com.warfactory.medical.client.UiText;
 import com.warfactory.medical.client.overlay.ActionProgressOverlay;
 import com.warfactory.medical.core.DerivedStats;
+import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.treatment.TreatmentAction;
 import com.warfactory.medical.item.MedicalItem;
@@ -27,9 +28,11 @@ import com.warfactory.medical.item.ModItems;
 import com.warfactory.medical.network.ClientMedicalCache;
 import com.warfactory.medical.network.MedicalSyncPacket;
 import com.warfactory.medical.network.MedicalSyncPacket.LimbSummary;
+import com.warfactory.medical.network.TargetSheetInfoPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
@@ -110,17 +113,104 @@ public final class MedInteractionScreen {
     private static final int OVERVIEW_Y = 22;
     private static final int OVERVIEW_LINE_H = 12;
 
+    // ------------------------------------------------------------------ target binding (F4: treat others)
+    /**
+     * Entity id of the patient this sheet is bound to ({@code -1} = the local player / self). While bound to a
+     * teammate the sheet reads {@link #targetSnapshot} instead of the local {@link ClientMedicalCache}, and every
+     * treatment / tourniquet request threads this id so the server applies it to that patient.
+     */
+    private static volatile int targetId = -1;
+    /**
+     * Latest server-supplied snapshot of the bound target ({@code null} for self / not yet received). Refreshed
+     * by {@link #onTargetSheetInfo} and by the periodic re-request the client tick loop fires while the sheet is
+     * open, so treating a teammate visibly updates their readout.
+     */
+    private static volatile MedicalSyncPacket targetSnapshot;
+    /**
+     * Target id of a sheet-open the medic explicitly asked for (open-sheet key pressed while aiming at a
+     * teammate) whose snapshot reply has not arrived yet; {@code -1} = none. Gates {@link #onTargetSheetInfo}
+     * so ONLY a fresh open request pops the screen: the periodic poll-refresh reply that keeps an OPEN sheet
+     * current must never resurrect a sheet the medic already closed.
+     */
+    private static volatile int pendingOpenTarget = -1;
+
     private MedInteractionScreen() {
     }
 
     /**
-     * Build, wire and open the interaction screen.
+     * Record that the medic asked to open the sheet for {@code targetEntityId}; the matching snapshot reply is
+     * then allowed to open the screen. Called by the open-sheet key handler just before it sends the request.
+     */
+    public static void markPendingOpen(int targetEntityId) {
+        pendingOpenTarget = targetEntityId;
+    }
+
+    /**
+     * The entity id this sheet is currently bound to ({@code -1} = self). Used by the client tick loop to
+     * poll-refresh and to detect the sheet closing.
+     */
+    public static int targetId() {
+        return targetId;
+    }
+
+    /**
+     * Unbind from a target (called when the target sheet closes) so later self UIs read the local cache again.
+     */
+    public static void clearTarget() {
+        targetId = -1;
+        targetSnapshot = null;
+        pendingOpenTarget = -1;
+    }
+
+    /**
+     * Server reply carrying a teammate's full snapshot: store it and mirror their tourniquet mask, then either
+     * refresh the already-open sheet, open a freshly-requested one, or (for a poll reply that raced the sheet
+     * closing) do nothing.
+     */
+    public static void onTargetSheetInfo(TargetSheetInfoPacket packet) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) {
+            return;
+        }
+        int id = packet.targetEntityId();
+        targetSnapshot = packet.snapshot();
+        ClientTourniquetTracker.set(id, packet.tourniquetMask());
+        // Already bound to this target -> a live refresh; the widgets re-read targetSnapshot, nothing to open.
+        // (targetId is cleared the instant the sheet closes, so a matching id means the sheet is still up.)
+        if (targetId == id) {
+            return;
+        }
+        // Not bound -> only OPEN in response to a fresh open request (the key handler marked it pending). A poll
+        // refresh reply that arrives after the medic closed the sheet has no pending mark and is dropped here, so
+        // it never resurrects the dismissed screen.
+        if (id != pendingOpenTarget) {
+            return;
+        }
+        open(id);
+    }
+
+    /**
+     * Build, wire and open the interaction screen for the LOCAL player.
      */
     public static void open() {
+        open(-1);
+    }
+
+    /**
+     * Build, wire and open the interaction screen bound to {@code targetEntityId} ({@code -1} = the local
+     * player). A teammate target sources all readouts from {@link #targetSnapshot} and threads the id through
+     * every treatment / tourniquet request.
+     */
+    public static void open(int targetEntityId) {
         Minecraft mc = Minecraft.getInstance();
         Player player = mc.player;
         if (player == null) {
             return;
+        }
+        targetId = targetEntityId;
+        pendingOpenTarget = -1; // consumed: the screen is opening now
+        if (targetEntityId < 0) {
+            targetSnapshot = null;
         }
 
         WidgetGroup root = new WidgetGroup(0, 0, ROOT_W, ROOT_H);
@@ -140,12 +230,71 @@ public final class MedInteractionScreen {
         ClientUIOpener.openClientUI(ui);
     }
 
+    // ------------------------------------------------------------------ data source (self cache / bound target)
+
+    /**
+     * The snapshot every readout in this sheet reads: the bound target's ({@link #targetSnapshot}) when treating
+     * a teammate, else the local player's synced {@link ClientMedicalCache}. May be {@code null} before the first
+     * sync (callers fall back to healthy defaults).
+     */
+    private static MedicalSyncPacket sheetSnapshot() {
+        return targetId < 0 ? ClientMedicalCache.get() : targetSnapshot;
+    }
+
+    /**
+     * Per-limb summary for the bound subject; a healthy default when no snapshot exists yet.
+     */
+    private static LimbSummary sheetLimb(LimbType limb) {
+        MedicalSyncPacket snap = sheetSnapshot();
+        if (snap != null && snap.limbs() != null) {
+            for (LimbSummary s : snap.limbs()) {
+                if (s != null && s.limb() == limb) {
+                    return s;
+                }
+            }
+        }
+        return new LimbSummary(limb, 1.0F, 0.0F, 0.0F, false);
+    }
+
+    private static DerivedStats sheetStats() {
+        MedicalSyncPacket snap = sheetSnapshot();
+        return snap == null ? DerivedStats.healthy() : snap.stats();
+    }
+
+    private static HealthState sheetState() {
+        MedicalSyncPacket snap = sheetSnapshot();
+        return snap == null ? HealthState.HEALTHY : snap.state();
+    }
+
+    /**
+     * The entity id to read tourniquet state / mirror for the bound subject (local player id for self).
+     */
+    private static int subjectId() {
+        Player player = Minecraft.getInstance().player;
+        return targetId < 0 ? (player == null ? -1 : player.getId()) : targetId;
+    }
+
+    /**
+     * Display name of the bound target (falls back to a generic label if the entity is out of client view).
+     */
+    private static Component targetName() {
+        Minecraft mc = Minecraft.getInstance();
+        Entity e = mc.level == null ? null : mc.level.getEntity(targetId);
+        return e != null ? e.getName() : Component.translatable("gui.wfmedical.wheel.target");
+    }
+
     // ------------------------------------------------------------------ headers
 
     private static void addHeaders(WidgetGroup root) {
         root.addWidget(new LabelWidget(LEFT_X, 5, "EXAMINATION"));
         root.addWidget(new LabelWidget(LEFT_X, TREAT_LABEL_Y, "TREATMENT"));
-        root.addWidget(new LabelWidget(208, 5, "STATUS"));
+        // The STATUS column header doubles as the patient banner: it names (in amber) the teammate being
+        // treated, or reads "STATUS" for the local player.
+        LabelWidget statusHeader = new LabelWidget(208, 5, targetId < 0 ? "STATUS" : targetName().getString());
+        if (targetId >= 0) {
+            statusHeader.setColor(0xFFE0A020);
+        }
+        root.addWidget(statusHeader);
         root.addWidget(new LabelWidget(340, 5, "OVERVIEW"));
     }
 
@@ -157,7 +306,8 @@ public final class MedInteractionScreen {
      */
     private static void addBodyDiagram(WidgetGroup root) {
         for (LimbTile tile : BODY_TILES) {
-            MedicalUIParts.addLimbTile(root, tile.limb(), tile.x(), tile.y(), tile.w(), tile.h());
+            MedicalUIParts.addLimbTile(root, tile.limb(), tile.x(), tile.y(), tile.w(), tile.h(),
+                    MedInteractionScreen::sheetLimb);
         }
     }
 
@@ -176,8 +326,8 @@ public final class MedInteractionScreen {
         if (limb == null) {
             return "none";
         }
-        LimbSummary s = MedicalUIParts.limbSummary(limb);
-        return limb + "|" + s.healthPercent() + "|" + s.bleeding() + "|" + s.pain() + "|" + s.fracture();
+        LimbSummary s = sheetLimb(limb);
+        return targetId + "|" + limb + "|" + s.healthPercent() + "|" + s.bleeding() + "|" + s.pain() + "|" + s.fracture();
     }
 
     /**
@@ -189,7 +339,7 @@ public final class MedInteractionScreen {
             group.addWidget(new LabelWidget(0, 8, Component.translatable("gui.wfmedical.wound.no_limb").getString()));
             return;
         }
-        LimbSummary s = MedicalUIParts.limbSummary(limb);
+        LimbSummary s = sheetLimb(limb);
         int col = 0;
         for (Wound wound : Wound.VALUES) {
             if (!wound.present(s)) {
@@ -221,7 +371,7 @@ public final class MedInteractionScreen {
     private static Object treatmentSignature() {
         LimbType limb = MedicalUIParts.selectedLimb();
         StringBuilder sb = new StringBuilder();
-        sb.append(ClientMedicalCache.hasActiveTreatment()).append('|')
+        sb.append(targetId).append('|').append(ClientMedicalCache.hasActiveTreatment()).append('|')
                 .append(limb).append('|').append(tourniquetApplied(limb)).append('|');
         for (ItemStack stack : MedicalUIParts.availableMedicalItems()) {
             sb.append(stack.getItem().getDescriptionId()).append(',');
@@ -290,7 +440,7 @@ public final class MedInteractionScreen {
                 new ColorRectTexture(GRID_BG_COLOR).setRadius(GRID_RADIUS),
                 new ItemStackTexture(stack));
         ButtonWidget button = new ButtonWidget(x, y, GRID_CELL, GRID_CELL, face,
-                (ClickData cd) -> MedicalUIParts.requestAction(stack, MedicalUIParts.selectedLimb()));
+                (ClickData cd) -> MedicalUIParts.requestAction(stack, MedicalUIParts.selectedLimb(), targetId));
         button.setHoverTexture(new ColorBorderTexture(2, GRID_HOVER_COLOR).setRadius(GRID_RADIUS));
         button.setHoverTooltips(stack.getTooltipLines(Minecraft.getInstance().player, TooltipFlag.Default.NORMAL));
         group.addWidget(button);
@@ -305,7 +455,7 @@ public final class MedInteractionScreen {
                 new ColorRectTexture(TQ_REMOVE_BG_COLOR).setRadius(GRID_RADIUS),
                 new ItemStackTexture(new ItemStack(ModItems.TOURNIQUET.get())));
         ButtonWidget button = new ButtonWidget(x, y, GRID_CELL, GRID_CELL, face,
-                (ClickData cd) -> MedicalUIParts.requestRemoveTourniquet(MedicalUIParts.selectedLimb()));
+                (ClickData cd) -> MedicalUIParts.requestRemoveTourniquet(MedicalUIParts.selectedLimb(), targetId));
         button.setHoverTexture(new ColorBorderTexture(2, GRID_HOVER_COLOR).setRadius(GRID_RADIUS));
         button.setHoverTooltips(List.of(Component.translatable("gui.wfmedical.tourniquet.remove")));
         group.addWidget(button);
@@ -318,8 +468,8 @@ public final class MedInteractionScreen {
         if (limb == null || !(limb.isArm() || limb.isLeg())) {
             return false;
         }
-        Player player = Minecraft.getInstance().player;
-        return player != null && ClientTourniquetTracker.has(player.getId(), limb.ordinal());
+        int id = subjectId();
+        return id >= 0 && ClientTourniquetTracker.has(id, limb.ordinal());
     }
 
     private static boolean isTourniquetItem(ItemStack stack) {
@@ -364,9 +514,9 @@ public final class MedInteractionScreen {
     private static String statusText() {
         LimbType limb = MedicalUIParts.selectedLimb();
         if (limb == null) {
-            return MedicalUIParts.stateName(ClientMedicalCache.state()).getString();
+            return MedicalUIParts.stateName(sheetState()).getString();
         }
-        LimbSummary s = MedicalUIParts.limbSummary(limb);
+        LimbSummary s = sheetLimb(limb);
         String line = MedicalUIParts.limbName(limb).getString()
                 + "  " + Math.round(s.healthPercent() * 100.0F) + "%";
         if (s.fracture()) {
@@ -378,9 +528,9 @@ public final class MedInteractionScreen {
     private static int statusColor() {
         LimbType limb = MedicalUIParts.selectedLimb();
         if (limb == null) {
-            return MedicalUIParts.stateColor(ClientMedicalCache.state());
+            return MedicalUIParts.stateColor(sheetState());
         }
-        return MedicalUIParts.limbColor(MedicalUIParts.limbSummary(limb).healthPercent());
+        return MedicalUIParts.limbColor(sheetLimb(limb).healthPercent());
     }
 
     // ------------------------------------------------------------------ OVERVIEW
@@ -392,12 +542,19 @@ public final class MedInteractionScreen {
         int y = OVERVIEW_Y;
         Player player = Minecraft.getInstance().player;
 
-        addLine(root, y, () ->
-                "Health: " + Math.round(player.getHealth()) + "/" + Math.round(player.getMaxHealth()));
+        addLine(root, y, () -> {
+            // Self reads the live vanilla body; a teammate has no local handle, so read the derived health from
+            // the synced target snapshot instead.
+            if (targetId < 0) {
+                return "Health: " + Math.round(player.getHealth()) + "/" + Math.round(player.getMaxHealth());
+            }
+            DerivedStats st = sheetStats();
+            return "Health: " + Math.round(st.effectiveCurrentHealth()) + "/" + Math.round(st.effectiveMaxHealth());
+        });
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () -> {
-            MedicalSyncPacket snap = ClientMedicalCache.get();
+            MedicalSyncPacket snap = sheetSnapshot();
             double blood = snap == null ? 0.0 : snap.bloodMl();
             double maxBlood = snap == null ? 0.0 : snap.maxBloodMl();
             return "Blood: " + Math.round(blood) + "/" + Math.round(maxBlood) + " ml";
@@ -405,31 +562,31 @@ public final class MedInteractionScreen {
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () ->
-                UiText.escape("Pain: " + Math.round(MedicalUIParts.stats().totalPain() * 100.0F) + "%"));
+                UiText.escape("Pain: " + Math.round(sheetStats().totalPain() * 100.0F) + "%"));
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () ->
-                "Bleeding: " + fmt((float) MedicalUIParts.stats().totalBleeding()) + " ml/s");
+                "Bleeding: " + fmt((float) sheetStats().totalBleeding()) + " ml/s");
         y += OVERVIEW_LINE_H;
 
         // State line, recolored live by health state.
         LabelWidget stateLine = new LabelWidget(OVERVIEW_X, y, () ->
-                "State: " + MedicalUIParts.stateName(ClientMedicalCache.state()).getString()) {
+                "State: " + MedicalUIParts.stateName(sheetState()).getString()) {
             @Override
             public void updateScreen() {
                 super.updateScreen();
-                setColor(MedicalUIParts.stateColor(ClientMedicalCache.state()));
+                setColor(MedicalUIParts.stateColor(sheetState()));
             }
         };
         root.addWidget(stateLine);
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () ->
-                UiText.escape("Movement: " + Math.round(MedicalUIParts.stats().movementMultiplier() * 100.0F) + "%"));
+                UiText.escape("Movement: " + Math.round(sheetStats().movementMultiplier() * 100.0F) + "%"));
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () -> {
-            DerivedStats st = MedicalUIParts.stats();
+            DerivedStats st = sheetStats();
             if (st.anyLegFracture() && st.anyArmFracture()) {
                 return "Fractures: arm + leg";
             }

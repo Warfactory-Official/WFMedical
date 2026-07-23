@@ -211,6 +211,17 @@ public final class TreatmentInteractions {
      * bodies lie low and are easy to under-reach otherwise. The ray goes through
      * {@link ProjectileUtil#getEntityHitResult}, so it inherits the envelope hit-registration boxes.
      */
+    /**
+     * The entity id the local player is aiming at for a medical interaction ({@code -1} = self / nothing
+     * targetable). Public so the open-sheet key can bind the interaction sheet to the same aimed-at target the
+     * right-click wheel would treat. Safe no-op ({@code -1}) with no local player.
+     */
+    public static int pickTargetEntityId() {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer player = mc.player;
+        return player == null ? -1 : pickTargetId(mc, player);
+    }
+
     private static int pickTargetId(Minecraft mc, LocalPlayer player) {
         HitResult hr = mc.hitResult;
         if (hr instanceof EntityHitResult ehr

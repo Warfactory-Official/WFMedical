@@ -1,5 +1,6 @@
 package com.warfactory.medical.client;
 
+import com.lowdragmc.lowdraglib.gui.modular.ModularUIGuiContainer;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.api.MedicalState;
 import com.warfactory.medical.client.render.HitboxDebugRenderer;
@@ -8,6 +9,8 @@ import com.warfactory.medical.client.screen.RadialMenuUI;
 import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.compat.tacz.TaczPoseCaptureClient;
 import com.warfactory.medical.network.ClientMedicalCache;
+import com.warfactory.medical.network.MedicalNetworking;
+import com.warfactory.medical.network.TargetSheetRequestPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.events.GuiEventListener;
@@ -39,6 +42,13 @@ public final class MedicalClientEvents {
      */
     private static int deathScreenTicks;
 
+    /**
+     * How often (client ticks) the open interaction sheet re-requests the bound teammate's snapshot so their
+     * readout follows treatments applied to them.
+     */
+    private static final int TARGET_SHEET_POLL_TICKS = 10;
+    private static int targetSheetPoll;
+
     private MedicalClientEvents() {
     }
 
@@ -52,6 +62,9 @@ public final class MedicalClientEvents {
         }
         Minecraft mc = Minecraft.getInstance();
         keepRespawnButtonUsable(mc);
+        // Keep a teammate-bound interaction sheet current (and unbind it when it closes) – this must run even
+        // while the sheet screen is open, so it sits before the "screen open" early-out below.
+        pollTargetSheet(mc);
         if (mc.player == null || mc.screen != null) {
             // Still drain any queued clicks so they don't fire the moment a screen closes.
             drain(MedicalKeyMappings.OPEN_SHEET);
@@ -65,7 +78,15 @@ public final class MedicalClientEvents {
             return;
         }
         while (MedicalKeyMappings.OPEN_SHEET.consumeClick()) {
-            MedInteractionScreen.open();
+            // Aiming at a teammate / downed body opens the sheet FOR them (F4): ask the server for their full
+            // snapshot and open on its reply. Aiming at nothing opens the local player's own sheet immediately.
+            int targetId = TreatmentInteractions.pickTargetEntityId();
+            if (targetId >= 0) {
+                MedInteractionScreen.markPendingOpen(targetId); // allow this request's reply to open the sheet
+                MedicalNetworking.sendToServer(new TargetSheetRequestPacket(targetId));
+            } else {
+                MedInteractionScreen.open();
+            }
         }
         while (MedicalKeyMappings.OPEN_RADIAL.consumeClick()) {
             RadialMenuUI.open();
@@ -117,6 +138,28 @@ public final class MedicalClientEvents {
     private static void drain(net.minecraft.client.KeyMapping key) {
         while (key.consumeClick()) {
             // discard
+        }
+    }
+
+    /**
+     * While the interaction sheet is bound to a teammate, re-request that teammate's snapshot every
+     * {@link #TARGET_SHEET_POLL_TICKS} ticks so treatments applied to them show up live; unbind the moment the
+     * sheet is no longer open (Esc / a different screen / disconnect) so later self-UIs read the local cache.
+     */
+    private static void pollTargetSheet(Minecraft mc) {
+        int tid = MedInteractionScreen.targetId();
+        if (tid < 0) {
+            targetSheetPoll = 0;
+            return;
+        }
+        if (mc.player == null || !(mc.screen instanceof ModularUIGuiContainer)) {
+            MedInteractionScreen.clearTarget();
+            targetSheetPoll = 0;
+            return;
+        }
+        if (++targetSheetPoll >= TARGET_SHEET_POLL_TICKS) {
+            targetSheetPoll = 0;
+            MedicalNetworking.sendToServer(new TargetSheetRequestPacket(tid));
         }
     }
 
@@ -186,6 +229,7 @@ public final class MedicalClientEvents {
     @SubscribeEvent
     public static void onLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientMedicalCache.clear();
+        MedInteractionScreen.clearTarget();
     }
 
 

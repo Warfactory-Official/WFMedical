@@ -6,12 +6,13 @@ correct (do not re-suspect it), and lists the concrete defects found, ranked, ea
 scenario and a suggested fix. All paths are relative to the repo root; line numbers are from
 commit `1d4b914` (pre-fix).
 
-## Resolution status (2026-07-19)
+## Resolution status (2026-07-19, updated 2026-07-23)
 
-Findings **F1, F2, F3 and most of F5 are FIXED** in the working tree (each finding below carries a
-✅ note describing the implemented change). **F4 remains open by design** — it needs a product
-decision from the project owner. Compile-verified (`./gradlew compileJava`); the in-game scenarios in
-§3 still need a 2-client manual pass. Notable implementation choices:
+Findings **F1, F2, F3, F4 and most of F5 are FIXED** in the working tree (each finding below carries a
+✅ note describing the implemented change). F1–F3 + F5 landed in commit `40e36c1`; **F4 was built on
+2026-07-23** after the project owner opted in (open-sheet key now examines/treats the aimed-at teammate —
+see the F4 note). Compile-verified (`./gradlew compileJava`); the in-game scenarios in §3 still need a
+2-client manual pass. Notable implementation choices:
 
 - The **self** localized flow now also round-trips through `TreatmentTargetRequestPacket`
   (`targetEntityId = -1`), because only the server can compute the per-limb treatable mask (the
@@ -183,9 +184,26 @@ sheet while aiming at a teammate to examine/treat them", it requires: an entity-
 `ClientMedicalCache`, and threading `targetId` through `requestAction`/`requestRemoveTourniquet`.
 Check with the project owner before building this — the wheel may be the only intended other-player GUI.
 
-> ⏸ **OPEN — deliberate.** This is a product decision, not a defect; nothing implemented. If built,
-> `requestRemoveTourniquet(limb, targetId)` and the `TreatmentTargetRequestPacket` self/other plumbing
-> added by the F1–F3 fixes are ready to reuse.
+> ✅ **BUILT (2026-07-23).** The project owner opted in. Pressing the open-sheet key (`OPEN_SHEET`, default
+> `H`) while aiming at another player / downed body now opens the EXAMINATION / TREATMENT sheet bound to
+> THAT target; aiming at nothing opens the local player's own sheet as before. Implementation:
+> - New packet pair `TargetSheetRequestPacket` (id 14, C2S) / `TargetSheetInfoPacket` (id 15, S2C):
+>   `MedicalActionService.requestTargetSheet` validates hands + reach (and brings a dirty profile current via
+>   `syncTarget`, so this examine never eats a pending physiology update — same guard as F2), then replies with
+>   the target's FULL `MedicalSyncPacket` snapshot + worn-tourniquet mask (the sheet needs all limbs + vitals,
+>   not the item-specific mask `TreatmentTargetRequestPacket` returns). Channel `PROTOCOL` bumped `"2"` → `"3"`.
+> - `MedInteractionScreen` gained a static `targetId` (`-1` = self) + `targetSnapshot`; all readouts route
+>   through `sheetSnapshot()`/`sheetLimb()`/`sheetStats()`/`sheetState()` (self cache vs target snapshot), the
+>   body tiles use a new `MedicalUIParts.addLimbTile(..., Function<LimbType,LimbSummary>)` source overload, and
+>   every treatment / tourniquet button threads `targetId` (`requestAction(stack, limb, targetId)`,
+>   `requestRemoveTourniquet(limb, targetId)`). The STATUS header doubles as an amber patient-name banner.
+> - Live refresh: while the sheet is bound to a teammate the client re-requests their snapshot every 10 ticks
+>   (`MedicalClientEvents.pollTargetSheet`), which also unbinds on close. A `pendingOpenTarget` gate makes only
+>   an EXPLICIT open request pop the screen, so an in-flight poll reply can never re-open a sheet the medic just
+>   closed.
+>
+> The medic's own timed-treatment bookkeeping (progress bar, item lock) is unchanged — it still keys off
+> `ClientMedicalCache.hasActiveTreatment()` (the actor's profile), which is correct when treating others.
 
 ### F5 — Minor issues (fix opportunistically)
 

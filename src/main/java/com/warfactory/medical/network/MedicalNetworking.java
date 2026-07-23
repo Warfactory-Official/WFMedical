@@ -27,7 +27,7 @@ import java.util.WeakHashMap;
  */
 public final class MedicalNetworking {
 
-    private static final String PROTOCOL = "2";
+    private static final String PROTOCOL = "3";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(WFMedical.MOD_ID, "main"),
             () -> PROTOCOL,
@@ -178,6 +178,27 @@ public final class MedicalNetworking {
                     ctx.get().setPacketHandled(true);
                 })
                 .add();
+
+        // C2S: ask the server for a full medical snapshot of another entity so the medic can open the
+        // interaction sheet FOR that target (open-sheet key aimed at a teammate / downed body).
+        CHANNEL.messageBuilder(TargetSheetRequestPacket.class, 14, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(TargetSheetRequestPacket::encode)
+                .decoder(TargetSheetRequestPacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleServer(ctx.get().getSender());
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
+
+        // S2C: reply with a target's full snapshot so the client can open / refresh the interaction sheet for them.
+        CHANNEL.messageBuilder(TargetSheetInfoPacket.class, 15, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(TargetSheetInfoPacket::encode)
+                .decoder(TargetSheetInfoPacket::decode)
+                .consumerMainThread((packet, ctx) -> {
+                    packet.handleClient();
+                    ctx.get().setPacketHandled(true);
+                })
+                .add();
     }
 
     /**
@@ -262,6 +283,14 @@ public final class MedicalNetworking {
      * for that target). See {@link TreatmentTargetRequestPacket} / {@link TreatmentTargetInfoPacket}.
      */
     public static void sendTargetInfo(ServerPlayer medic, TreatmentTargetInfoPacket packet) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> medic), packet);
+    }
+
+    /**
+     * Reply to a medic with a treatment target's FULL medical snapshot (so their client can open the
+     * interaction sheet for that target). See {@link TargetSheetRequestPacket} / {@link TargetSheetInfoPacket}.
+     */
+    public static void sendTargetSheet(ServerPlayer medic, TargetSheetInfoPacket packet) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> medic), packet);
     }
 
