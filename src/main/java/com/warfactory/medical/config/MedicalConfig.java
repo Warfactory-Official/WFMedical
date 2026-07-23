@@ -122,6 +122,8 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.IntValue POSE_STREAM_MAX_INTERVAL_TICKS;
     private static final ForgeConfigSpec.IntValue POSE_HINT_MAX_AGE_TICKS;
     private static final ForgeConfigSpec.DoubleValue POSE_HINT_MARGIN;
+    private static final ForgeConfigSpec.BooleanValue ANIMATED_HITBOXES;
+    private static final ForgeConfigSpec.DoubleValue POSE_STREAM_CHANGE_EPSILON;
     private static final ForgeConfigSpec.BooleanValue PENETRATION_ENABLED;
     private static final ForgeConfigSpec.DoubleValue PENETRATION_BUDGET;
     private static final ForgeConfigSpec.DoubleValue PENETRATION_ENERGY_FALLOFF;
@@ -589,6 +591,22 @@ public final class MedicalConfig {
                         + "size is implausible) is rejected and the server rebuilds instead. Guards against a client "
                         + "shrinking/displacing its own hitboxes. Default 0.6.")
                 .defineInRange("poseHintMargin", 0.6D, 0.0D, 4.0D);
+        ANIMATED_HITBOXES = b
+                .comment("Animation-aware hitboxes (PlayerAnimator compat). When ON, a player's limb hitboxes track",
+                        "played animations for HIT REGISTRATION -- not just the client visual. PlayerAnimator applies",
+                        "animations client-side only, so the animated pose reaches the server via the SAME validated",
+                        "pose-stream path as CLIENT_HINT: the victim streams its own posed rig, the server still runs",
+                        "the ray test ITSELF and validates the pose (an attacker can never pick the limb). This turns",
+                        "on pose streaming even under SERVER authority, so it carries the same client-trust caveat as",
+                        "CLIENT_HINT. OFF (default): animations are a client-side visual only; hits use the server's",
+                        "vanilla-pose rebuild. PlayerAnimator itself is NOT required on the server.")
+                .define("animatedHitboxes", false);
+        POSE_STREAM_CHANGE_EPSILON = b
+                .comment("Client-pose streaming sensitivity: the victim resends its pose once any limb-box scalar",
+                        "(position or orientation) drifts more than this many blocks from the last sent pose. Lower =",
+                        "small rotations reach the server sooner (finer tracking) for a little more bandwidth; higher =",
+                        "coarser, small movements ignored. Default 0.0002.")
+                .defineInRange("poseStreamChangeEpsilon", 2.0e-4D, 0.0D, 1.0D);
         b.pop();
 
         b.comment("PENETRATION (through-and-through): when on, a traced shot can wound EVERY rigged limb box it",
@@ -1116,6 +1134,31 @@ public final class MedicalConfig {
      */
     public static double poseHintMargin() {
         return POSE_HINT_MARGIN.get();
+    }
+
+    /**
+     * Animation-aware hitboxes (PlayerAnimator compat): when true, players stream their animated pose so the
+     * server classifies hits against it (same validated path as CLIENT_HINT). See {@link #useClientPose()}.
+     */
+    public static boolean animatedHitboxes() {
+        return ANIMATED_HITBOXES.get();
+    }
+
+    /**
+     * Client-pose streaming resend threshold (blocks): a pose is resent once any limb-box scalar drifts past
+     * this from the last sent pose. Smaller catches finer rotations at the cost of more updates.
+     */
+    public static double poseStreamChangeEpsilon() {
+        return POSE_STREAM_CHANGE_EPSILON.get();
+    }
+
+    /**
+     * Whether the server should classify hits against the victim's client-streamed pose: true under either
+     * {@link HitAuthority#CLIENT_HINT} authority or the {@link #animatedHitboxes()} toggle. Both use the same
+     * validated pose-stream mechanism (the server still runs the ray test), so they share one gate here.
+     */
+    public static boolean useClientPose() {
+        return hitAuthority() == HitAuthority.CLIENT_HINT || animatedHitboxes();
     }
 
     /**

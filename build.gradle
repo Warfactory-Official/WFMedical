@@ -43,6 +43,10 @@ minecraft {
 
         client {
             property 'forge.enabledGameTestNamespaces', mod_id
+            // Developer-only: unlocks the WF Medical screen-effect debug key binds (toggle all effects / verbose
+            // logging). Set only on dev client runs; shipped clients never get it, so players cannot access it.
+            // Inherited by client1/client2 via `parent minecraft.runs.client`.
+            property 'wfmedical.debug', 'true'
         }
 
 
@@ -226,6 +230,10 @@ dependencies {
 
     // LDLib – UI framework used for the character sheet, radial menu and HUD overlays.
     implementation fg.deobf("curse.maven:ldlib-626676:7809449")
+
+    // PlayerAnimator (KosmX) – player animation library. The limb hitbox rig reads its animated bone
+    // transforms so hitboxes track played animations instead of only the vanilla pose.
+    implementation fg.deobf("curse.maven:playeranimator-658587:4587214")
 
     // Soft TACZ compat only – no hard dependency. To reference TACZ directly:
      compileOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")

@@ -103,6 +103,10 @@ public final class PainVignetteOverlay implements IGuiOverlay {
 
     @Override
     public void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenW, int screenH) {
+        // Debug master gate for WF Medical screen effects (toggle with MedicalKeyMappings.TOGGLE_SCREEN_FX).
+        if (!com.warfactory.medical.client.MedicalDebug.screenEffectsEnabled()) {
+            return;
+        }
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null || mc.options == null) {

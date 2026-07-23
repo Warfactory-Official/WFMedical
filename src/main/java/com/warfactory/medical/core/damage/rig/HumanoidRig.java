@@ -127,6 +127,33 @@ public final class HumanoidRig {
     }
 
     /**
+     * Client-settable hook that overrides a posed bone from an external animation system (PlayerAnimator).
+     * Declared here in common code so the dedicated server never class-loads the client-only animation
+     * library; the client registers an implementation via {@link #setAnimSampler} at setup. Given a bone's
+     * vanilla-replicated transform, it returns the animated {@code {x, y, z, xRot, yRot, zRot}} (pivot in
+     * model units, Euler in radians, matching {@code ModelPart}) or {@code null} to leave it unchanged.
+     */
+    @FunctionalInterface
+    public interface AnimSampler {
+        double[] sample(LivingEntity entity, String bone,
+                        double x, double y, double z, double xRot, double yRot, double zRot);
+    }
+
+    /**
+     * The active animation override hook. {@code null} on the server and whenever no animation library is
+     * present; volatile so the render/tick thread and any future off-thread build read a consistent value.
+     */
+    private static volatile AnimSampler animSampler;
+
+    /**
+     * Register (or clear, with {@code null}) the animation override hook. Called client-side from setup only
+     * when PlayerAnimator is loaded, so the server never references the client animation types.
+     */
+    public static void setAnimSampler(AnimSampler sampler) {
+        animSampler = sampler;
+    }
+
+    /**
      * The STANDING base spec for a limb ({@code {ox,oy,oz,sx,sy,sz,px,py,pz}}, model units). Returns a copy;
      * for the debug {@code hitbox show/export} commands. Reads the ACTIVE spec (override file or defaults).
      */
@@ -296,6 +323,11 @@ public final class HumanoidRig {
         Part leftArm = part(LimbType.LEFT_ARM, pose, hand);
 
         setupAnim(victim, head, body, rightArm, leftArm, rightLeg, leftLeg);
+        // Overlay an external animation (PlayerAnimator) onto the just-posed bones, so the OBBs built below
+        // track played animations instead of only the vanilla pose. Client-only hook: a no-op on the server
+        // and when no animation library is present. Applied here, after the vanilla replica and before
+        // toObb, because the bones now hold the exact ModelPart-convention transform the animator expects.
+        applyAnimationOverride(victim, head, body, rightArm, leftArm, rightLeg, leftLeg);
 
         double pad = MedicalConfig.limbBoxPadding();
         LocalRig rig = new LocalRig();
@@ -313,6 +345,38 @@ public final class HumanoidRig {
             applyPoseTilt(victim, rig);
         }
         return rig;
+    }
+
+    /**
+     * Overlay the registered {@link AnimSampler} (PlayerAnimator on the client) onto the six posed bones.
+     * Bone names match PlayerAnimator's player parts ({@code head, torso, rightArm, leftArm, rightLeg,
+     * leftLeg}); each bone the animation does not touch is returned unchanged and left as the vanilla pose.
+     * No-op when no sampler is registered (server side, or PlayerAnimator absent).
+     */
+    private static void applyAnimationOverride(LivingEntity e, Part head, Part body, Part rightArm,
+                                               Part leftArm, Part rightLeg, Part leftLeg) {
+        AnimSampler sampler = animSampler;
+        if (sampler == null) {
+            return;
+        }
+        overrideBone(sampler, e, "head", head);
+        overrideBone(sampler, e, "torso", body);
+        overrideBone(sampler, e, "rightArm", rightArm);
+        overrideBone(sampler, e, "leftArm", leftArm);
+        overrideBone(sampler, e, "rightLeg", rightLeg);
+        overrideBone(sampler, e, "leftLeg", leftLeg);
+    }
+
+    private static void overrideBone(AnimSampler sampler, LivingEntity e, String bone, Part p) {
+        double[] r = sampler.sample(e, bone, p.x, p.y, p.z, p.xRot, p.yRot, p.zRot);
+        if (r != null && r.length == 6) {
+            p.x = r[0];
+            p.y = r[1];
+            p.z = r[2];
+            p.xRot = r[3];
+            p.yRot = r[4];
+            p.zRot = r[5];
+        }
     }
 
     /**

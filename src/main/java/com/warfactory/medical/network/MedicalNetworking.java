@@ -210,11 +210,12 @@ public final class MedicalNetworking {
     }
 
     /**
-     * Tell a player whether the server wants its client to stream its pose (i.e. whether the authority mode
-     * is {@link HitAuthority#CLIENT_HINT}). Sent on login; a live mode change takes effect on reconnect.
+     * Tell a player whether the server wants its client to stream its pose &mdash; true under
+     * {@link HitAuthority#CLIENT_HINT} authority OR the {@code animatedHitboxes} toggle (see
+     * {@link MedicalConfig#useClientPose()}). Sent on login; a live mode change takes effect on reconnect.
      */
     public static void sendHitAuthority(ServerPlayer player) {
-        boolean stream = MedicalConfig.hitAuthority() == HitAuthority.CLIENT_HINT;
+        boolean stream = MedicalConfig.useClientPose();
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new HitAuthorityPacket(stream));
     }
 

@@ -42,7 +42,7 @@ public final class RigCache {
      * {@link HitAuthority#CLIENT_HINT} when one is available, else the per-tick cache (a server rebuild).
      */
     public static HumanoidRig.LocalRig resolve(LivingEntity victim) {
-        if (!victim.level().isClientSide && MedicalConfig.hitAuthority() == HitAuthority.CLIENT_HINT) {
+        if (!victim.level().isClientSide && MedicalConfig.useClientPose()) {
             HumanoidRig.LocalRig hinted = validHint(victim);
             if (hinted != null) {
                 return hinted;

@@ -42,3 +42,13 @@ mandatory = false
 versionRange = "*"
 ordering = "AFTER"
 side = "BOTH"
+
+# PlayerAnimator (KosmX) – OPTIONAL, CLIENT-side. When present the limb hitbox rig reads its animated
+# bone transforms so hitboxes track played animations (see PlayerAnimHitbox). Load AFTER it so its
+# client API is available; absent, hitboxes fall back to the vanilla pose.
+[[dependencies.${ mod_id }]]
+modId = "playeranimator"
+mandatory = false
+versionRange = "*"
+ordering = "AFTER"
+side = "CLIENT"

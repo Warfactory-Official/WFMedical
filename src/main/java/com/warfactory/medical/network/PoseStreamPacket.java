@@ -65,10 +65,10 @@ public record PoseStreamPacket(HumanoidRig.LocalRig rig) {
 
     /**
      * Server-thread handler: record the sender's own streamed pose, but only while the server actually wants
-     * hints (ignore any unsolicited pose under {@link HitAuthority#SERVER}).
+     * hints (ignore any unsolicited pose when neither CLIENT_HINT authority nor animatedHitboxes is on).
      */
     public void handleServer(ServerPlayer sender) {
-        if (sender == null || MedicalConfig.hitAuthority() != HitAuthority.CLIENT_HINT) {
+        if (sender == null || !MedicalConfig.useClientPose()) {
             return;
         }
         RigCache.submitHint(sender.getId(), rig, sender.level().getGameTime());

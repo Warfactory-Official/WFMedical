@@ -3,6 +3,7 @@ package com.warfactory.medical.client.effect;
 import com.mojang.blaze3d.shaders.AbstractUniform;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.client.MedicalDebug;
 import com.warfactory.medical.mixin.PostChainAccessor;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
@@ -61,6 +62,11 @@ public final class PassoutBlurEffect {
     @SubscribeEvent
     public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
         if (disabled) {
+            return;
+        }
+        // Debug master gate: when off, skip and bleed the fade back to zero. Toggle with TOGGLE_SCREEN_FX.
+        if (!MedicalDebug.screenEffectsEnabled()) {
+            fade = 0.0F;
             return;
         }
         Minecraft mc = Minecraft.getInstance();

@@ -3,6 +3,7 @@ package com.warfactory.medical.client.effect;
 import com.mojang.blaze3d.shaders.AbstractUniform;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.client.MedicalDebug;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.mixin.PostChainAccessor;
 import com.warfactory.medical.network.ClientMedicalCache;
@@ -49,6 +50,10 @@ public final class BloodDesaturationEffect {
      * Set once on unrecoverable failure; blocks all further processing for the session.
      */
     private static boolean disabled;
+    /**
+     * Frame counter used to throttle verbose debug logging (see {@link MedicalDebug#verbose()}).
+     */
+    private static long logFrame;
 
     private BloodDesaturationEffect() {
     }
@@ -61,6 +66,12 @@ public final class BloodDesaturationEffect {
         if (disabled) {
             return;
         }
+        // Debug master gate: when off, skip entirely so the untouched vanilla frame (incl. the underwater
+        // blue overlay) is visible for A/B comparison. Toggle with MedicalKeyMappings.TOGGLE_SCREEN_FX.
+        if (!MedicalDebug.screenEffectsEnabled()) {
+            return;
+        }
+
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null || mc.level == null || player.isSpectator() || player.isCreative()) {
@@ -81,6 +92,13 @@ public final class BloodDesaturationEffect {
             setSaturationUniform(active, saturation);
             // Flush any pending GUI batch so the chain reads a complete frame.
             event.getGuiGraphics().flush();
+
+            // Debug: sample the centre framebuffer pixel BEFORE the desaturation blit so it can be compared
+            // against the AFTER value below. Underwater the "before" pixel is the blue overlay (~alpha 0.1);
+            // if the blit corrupts the overlay, the "after" pixel reveals exactly how (e.g. near-black).
+            boolean logNow = MedicalDebug.verbose() && (logFrame++ % 12L == 0L);
+            float[] before = logNow ? MedicalDebug.sampleCenterPixel(mc.getMainRenderTarget()) : null;
+
             active.process(event.getPartialTick());
             // Rebind the main target so subsequent HUD rendering draws to the right place.
             var target = mc.getMainRenderTarget();
@@ -100,6 +118,21 @@ public final class BloodDesaturationEffect {
             RenderSystem.depthMask(true);
             RenderSystem.clearDepth(1.0);
             RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
+
+            if (logNow) {
+                float[] after = MedicalDebug.sampleCenterPixel(target);
+                WFMedical.LOGGER.info(
+                        "[{}][desat] amount={} saturation={} eyeInWater={} underwater={} target={}x{} "
+                                + "| centre before={} after={} (before=scene+overlay, after=post-desaturation-blit)",
+                        WFMedical.MOD_ID,
+                        String.format("%.3f", amount),
+                        String.format("%.3f", saturation),
+                        MedicalDebug.localPlayerEyeInWater(),
+                        player.isUnderWater(),
+                        target.width, target.height,
+                        MedicalDebug.fmt(before),
+                        MedicalDebug.fmt(after));
+            }
         } catch (Throwable t) {
             // A shader/GL failure must never crash the game: disable and tear down for the session.
             WFMedical.LOGGER.warn("[{}] Blood desaturation effect failed; disabling for this session",

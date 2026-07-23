@@ -5,6 +5,7 @@ import com.warfactory.medical.client.overlay.ActionProgressOverlay;
 import com.warfactory.medical.client.overlay.DamageOutlineOverlay;
 import com.warfactory.medical.client.overlay.HealthBarOverlay;
 import com.warfactory.medical.client.render.TourniquetLayer;
+import com.warfactory.medical.compat.playeranim.PlayerAnimHitbox;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.EntityRenderersEvent;
@@ -12,7 +13,9 @@ import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 
 /**
  * Client MOD-bus bootstrap: registers key bindings and HUD overlays. CLIENT-ONLY (Dist.CLIENT).
@@ -31,6 +34,18 @@ public final class WFMedicalClient {
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         MedicalKeyMappings.register(event);
+    }
+
+    /**
+     * Wire PlayerAnimator into the limb hitbox rig so hitboxes track played animations. Guarded by the
+     * mod-presence check so {@link PlayerAnimHitbox} (which names PlayerAnimator types) is only class-loaded
+     * when the {@code playeranimator} mod is installed; absent, hitboxes keep the vanilla pose.
+     */
+    @SubscribeEvent
+    public static void onClientSetup(FMLClientSetupEvent event) {
+        if (ModList.get().isLoaded("playeranimator")) {
+            event.enqueueWork(PlayerAnimHitbox::register);
+        }
     }
 
     /**

@@ -42,6 +42,26 @@ public final class MedicalKeyMappings {
             GLFW.GLFW_KEY_K,
             CATEGORY);
 
+    /**
+     * Debug: master on/off for ALL WF Medical full-screen effects (desaturation, blur, vignettes, outline).
+     */
+    public static final KeyMapping TOGGLE_SCREEN_FX = new KeyMapping(
+            "key.wfmedical.toggle_screen_fx",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_N,
+            CATEGORY);
+
+    /**
+     * Debug: verbose per-frame logging for the screen effects (includes framebuffer pixel sampling).
+     */
+    public static final KeyMapping TOGGLE_FX_LOG = new KeyMapping(
+            "key.wfmedical.toggle_fx_log",
+            KeyConflictContext.IN_GAME,
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_M,
+            CATEGORY);
+
     private MedicalKeyMappings() {
     }
 
@@ -50,5 +70,11 @@ public final class MedicalKeyMappings {
         event.register(OPEN_RADIAL);
         event.register(TOGGLE_DEBUG);
         event.register(TOGGLE_HITBOX);
+        // Developer-only screen-effect debug binds: registered (and thus visible in Controls / usable) ONLY when
+        // the JVM was started with -Dwfmedical.debug=true. Normal players never see or trigger them.
+        if (MedicalDebug.ENABLED) {
+            event.register(TOGGLE_SCREEN_FX);
+            event.register(TOGGLE_FX_LOG);
+        }
     }
 }

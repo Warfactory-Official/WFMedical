@@ -496,7 +496,7 @@ public final class MedicalEventHandler {
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             MedicalEngine.onPlayerJoin(player);
-            // Tell the client whether to stream its pose (CLIENT_HINT authority mode).
+            // Tell the client whether to stream its pose (CLIENT_HINT authority or animatedHitboxes toggle).
             MedicalNetworking.sendHitAuthority(player);
             // Send the wearer their own worn-tourniquet mask so their third-person / first-person model shows it.
             IMedicalData data = MedicalCapabilities.get(player);

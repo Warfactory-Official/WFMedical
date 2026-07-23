@@ -58,6 +58,10 @@ public final class MedicalClientEvents {
             drain(MedicalKeyMappings.OPEN_RADIAL);
             drain(MedicalKeyMappings.TOGGLE_DEBUG);
             drain(MedicalKeyMappings.TOGGLE_HITBOX);
+            if (MedicalDebug.ENABLED) {
+                drain(MedicalKeyMappings.TOGGLE_SCREEN_FX);
+                drain(MedicalKeyMappings.TOGGLE_FX_LOG);
+            }
             return;
         }
         while (MedicalKeyMappings.OPEN_SHEET.consumeClick()) {
@@ -73,6 +77,18 @@ public final class MedicalClientEvents {
             HitboxDebugRenderer.toggle();
             mc.player.displayClientMessage(Component.literal("Hitbox overlay: "
                     + (HitboxDebugRenderer.enabled ? "on (" + HitboxDebugRenderer.style + ", scroll to change)" : "off")), true);
+        }
+        if (MedicalDebug.ENABLED) {
+            while (MedicalKeyMappings.TOGGLE_SCREEN_FX.consumeClick()) {
+                boolean on = MedicalDebug.toggleScreenEffects();
+                mc.player.displayClientMessage(Component.literal("WFMedical screen effects: "
+                        + (on ? "ON" : "OFF (desaturation/blur/vignettes/outline)")), true);
+            }
+            while (MedicalKeyMappings.TOGGLE_FX_LOG.consumeClick()) {
+                boolean on = MedicalDebug.toggleVerbose();
+                mc.player.displayClientMessage(Component.literal("WFMedical effect logging: "
+                        + (on ? "ON (see log)" : "OFF")), true);
+            }
         }
     }
 

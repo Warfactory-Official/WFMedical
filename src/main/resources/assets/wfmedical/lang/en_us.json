@@ -19,6 +19,8 @@
   "key.wfmedical.open_radial": "Medical Interaction Menu",
   "key.wfmedical.toggle_debug": "Toggle Medical Debug",
   "key.wfmedical.toggle_hitbox": "Toggle Limb Hitbox Overlay",
+  "key.wfmedical.toggle_screen_fx": "Debug: Toggle All Screen Effects",
+  "key.wfmedical.toggle_fx_log": "Debug: Toggle Screen-Effect Logging",
   "gui.wfmedical.health": "Health",
   "gui.wfmedical.blood": "Blood",
   "gui.wfmedical.pain": "Pain",
