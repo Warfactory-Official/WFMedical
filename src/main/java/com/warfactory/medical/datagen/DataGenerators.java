@@ -1,11 +1,7 @@
 package com.warfactory.medical.datagen;
 
 import com.warfactory.medical.WFMedical;
-import com.warfactory.medical.item.ModItems;
 import net.minecraft.data.PackOutput;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.PackType;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraftforge.client.model.generators.ItemModelProvider;
 import net.minecraftforge.client.model.generators.ModelFile;
@@ -13,7 +9,6 @@ import net.minecraftforge.common.data.ExistingFileHelper;
 import net.minecraftforge.data.event.GatherDataEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.RegistryObject;
 
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public final class DataGenerators {
@@ -35,15 +30,7 @@ public final class DataGenerators {
 
         @Override
         protected void registerModels() {
-            for (RegistryObject<Item> item : ModItems.ITEMS.getEntries()) {
-                String name = item.getId().getPath();
-                if (existingFileHelper.exists(new ResourceLocation(WFMedical.MOD_ID, name),
-                        PackType.CLIENT_RESOURCES, ".obj", "models/item")) {
-                    objItem(name);
-                } else {
-                    basicItem(item.get());
-                }
-            }
+
         }
 
         private void objItem(String name) {
