@@ -48,6 +48,7 @@ public final class HitboxDebugRenderer {
     };
     private static final float FILL_ALPHA = 0.30F;
     public static boolean enabled = false;
+    public static final boolean DEBUG = false;
 
     public enum Style {
         EDGES,
@@ -60,6 +61,10 @@ public final class HitboxDebugRenderer {
     }
 
     public static void toggle() {
+        if(!DEBUG){
+            enabled = false;
+            return;
+        }
         enabled = !enabled;
     }
 
