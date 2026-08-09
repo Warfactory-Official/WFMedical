@@ -5,6 +5,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalDouble;
 
 /**
  * Server-thread-only cache bridging {@code EntityKineticBulletMixin} (which captures TACZ's own
@@ -35,6 +36,21 @@ public final class TaczHitCapture {
         }
     };
 
+
+    private static final Map<Integer, Float> DAMAGE = new LinkedHashMap<>(32, 0.75f, false) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Integer, Float> eldest) {
+            return size() > MAX_ENTRIES;
+        }
+    };
+
+    private static final Map<Integer, Long> CLAIMED = new LinkedHashMap<>(32, 0.75f, false) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Integer, Long> eldest) {
+            return size() > MAX_ENTRIES;
+        }
+    };
+
     private TaczHitCapture() {
     }
 
@@ -44,5 +60,23 @@ public final class TaczHitCapture {
 
     public static Optional<TaczHit> peek(int bulletEntityId) {
         return Optional.ofNullable(HITS.get(bulletEntityId));
+    }
+
+    public static void captureDamage(int bulletEntityId, float totalDamage) {
+        DAMAGE.put(bulletEntityId, totalDamage);
+    }
+
+    public static OptionalDouble totalDamage(int bulletEntityId) {
+        Float v = DAMAGE.get(bulletEntityId);
+        return v == null ? OptionalDouble.empty() : OptionalDouble.of(v.doubleValue());
+    }
+
+    public static boolean claim(int bulletEntityId, long tick) {
+        Long prev = CLAIMED.get(bulletEntityId);
+        if (prev != null && prev.longValue() == tick) {
+            return false;
+        }
+        CLAIMED.put(bulletEntityId, tick);
+        return true;
     }
 }

@@ -12,6 +12,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -87,6 +88,27 @@ public final class TaczCompat {
      */
     public static Optional<Vec3[]> bulletSegment(DamageSource src) {
         return taczHit(src).map(h -> new Vec3[]{h.start(), h.end()});
+    }
+
+
+    public static OptionalDouble bulletTotalDamage(DamageSource src) {
+        if (!isGunDamage(src)) {
+            return OptionalDouble.empty();
+        }
+        var direct = src.getDirectEntity();
+        if (direct == null) {
+            return OptionalDouble.empty();
+        }
+        return TaczHitCapture.totalDamage(direct.getId());
+    }
+
+
+    public static boolean claimBulletHit(DamageSource src, long tick) {
+        var direct = src == null ? null : src.getDirectEntity();
+        if (direct == null) {
+            return true;
+        }
+        return TaczHitCapture.claim(direct.getId(), tick);
     }
 
     private static Optional<TaczHitCapture.TaczHit> taczHit(DamageSource src) {

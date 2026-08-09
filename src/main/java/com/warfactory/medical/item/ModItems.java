@@ -30,7 +30,7 @@ public final class ModItems {
                     cats(TraumaCategory.FRACTURE), 1.0F, 0.0D, 60, false));
     public static final RegistryObject<Item> SUTURE_KIT = medical("suture_kit",
             new Treatment(TreatmentAction.SUTURE_WOUND,
-                    cats(TraumaCategory.LACERATION, TraumaCategory.PUNCTURE), 1.0F, 0.0D, 100, false));
+                    cats(TraumaCategory.LACERATION, TraumaCategory.PUNCTURE), 1.0F, 0.0D, 60, false));
     public static final RegistryObject<Item> BLOOD_BAG = medical("blood_bag",
             new Treatment(TreatmentAction.RESTORE_BLOOD,
                     cats(), 0.0F, 1000.0D, 120, false));
@@ -47,10 +47,10 @@ public final class ModItems {
             new Treatment(TreatmentAction.APPLY_TOURNIQUET, cats(), 0.0F, 0.0D, 20, false));
     public static final RegistryObject<Item> MEDKIT = medical("medkit",
             new Treatment(TreatmentAction.HEAL_TRAUMA,
-                    cats(), 1.0F, 250.0D, 160, true));
+                    cats(), 1.0F, 250.0D, 180, true));
     public static final RegistryObject<Item> BURN_OINTMENT = medical("burn_ointment",
             new Treatment(TreatmentAction.TREAT_BURN,
-                    cats(TraumaCategory.BURN, TraumaCategory.CHEMICAL_BURN), 0.8F, 0.0D, 80, false));
+                    cats(TraumaCategory.BURN, TraumaCategory.CHEMICAL_BURN), 0.8F, 0.0D, 60, false));
     public static final RegistryObject<Item> ANTIRAD_SHOT = medical("antirad_shot",
             new Treatment(TreatmentAction.TREAT_RADIATION,
                     cats(TraumaCategory.RADIATION_BURN), 1.0F, 0.0D, 40, true), true);

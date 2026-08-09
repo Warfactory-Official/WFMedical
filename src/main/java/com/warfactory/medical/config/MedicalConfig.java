@@ -81,6 +81,7 @@ public final class MedicalConfig {
     private static final ForgeConfigSpec.BooleanValue TACZ_ARM_POSE;
     private static final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> DAMAGE_SOURCE_CATEGORIES;
     private static final ForgeConfigSpec.EnumValue<HitRegMode> HITREG_MODE;
+    private static final ForgeConfigSpec.DoubleValue HIT_GAP_REJECT_TOLERANCE;
     private static final ForgeConfigSpec.DoubleValue[] ENV_REACH_H;
     private static final ForgeConfigSpec.DoubleValue[] ENV_REACH_V;
     private static final ForgeConfigSpec.DoubleValue BLOOD_MOVEMENT_PENALTY_LOSS_FRACTION;
@@ -629,7 +630,16 @@ public final class MedicalConfig {
                         "  PRECISE  - ENVELOPE registration, then a shot that actually threaded a gap between the",
                         "             rigged limb boxes is rejected (whiffs). A centre-mass hit is a cheap tight-box",
                         "             fast-path, so only grazing arm-margin shots ever build the rig.")
-                .defineEnum("hitRegistrationMode", HitRegMode.ENVELOPE);
+                .defineEnum("hitRegistrationMode", HitRegMode.PRECISE);
+        HIT_GAP_REJECT_TOLERANCE = b
+                .comment("PRECISE only: forgiveness (blocks) for the gap-rejection test. A shot is thrown out as a",
+                        "'gap' (whiff between the limb boxes  no damage, no hitmarker) only when its path clears",
+                        "EVERY limb box by more than this margin. It exists because the classifier assigns the nearest",
+                        "limb to any envelope hit, so a grazing shot, or one skimming a limb whose server-side pose",
+                        "drifted slightly from what the shooter saw, would otherwise be silently dropped. Higher =",
+                        "more forgiving (fewer whiffs, but narrow gaps between an arm and the torso start to count);",
+                        "0 = strict, reject unless the ray passes exactly through a limb box. Default 0.2.")
+                .defineInRange("hitGapRejectTolerance", 0.2D, 0.0D, 2.0D);
         b.comment("Per-STANCE broad-phase envelope: blocks the hit-scan box is widened for each pose so arm /",
                         "prone hits register. Horizontal = X/Z per side, Vertical = Y top+bottom. Size each to just",
                         "contain the model in that stance -- the vanilla box already shrinks while crouching/swimming,",
@@ -1249,6 +1259,10 @@ public final class MedicalConfig {
 
     public static HitRegMode hitRegistrationMode() {
         return HITREG_MODE.get();
+    }
+
+    public static double hitGapRejectTolerance() {
+        return HIT_GAP_REJECT_TOLERANCE.get();
     }
 
     public static double hitEnvelopeReachHorizontal(RigTuning.RigPose pose) {

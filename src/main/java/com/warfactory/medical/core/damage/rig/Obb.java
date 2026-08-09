@@ -24,6 +24,20 @@ public record Obb(Vec3 center, Vec3 axisX, Vec3 axisY, Vec3 axisZ, Vec3 half, Li
      * returns {@code 0}. Fully deterministic.
      */
     public double rayEntry(Vec3 origin, Vec3 dir) {
+        return rayEntry(origin, dir, half.x, half.y, half.z);
+    }
+
+    /**
+     * As {@link #rayEntry(Vec3, Vec3)} but with each half-extent grown by {@code pad}, i.e. a tolerant test
+     * that also reports a ray passing within {@code pad} of the box as a hit. Used ONLY by gap rejection so a
+     * grazing / slightly pose-desynced shot that skims a limb is not thrown away; limb classification always
+     * uses the un-padded {@link #rayEntry(Vec3, Vec3)}.
+     */
+    public double rayEntry(Vec3 origin, Vec3 dir, double pad) {
+        return rayEntry(origin, dir, half.x + pad, half.y + pad, half.z + pad);
+    }
+
+    private double rayEntry(Vec3 origin, Vec3 dir, double hx, double hy, double hz) {
         double px = origin.x - center.x;
         double py = origin.y - center.y;
         double pz = origin.z - center.z;
@@ -35,12 +49,12 @@ public record Obb(Vec3 center, Vec3 axisX, Vec3 axisY, Vec3 axisZ, Vec3 half, Li
         double po = px * axisX.x + py * axisX.y + pz * axisX.z;
         double d = dir.x * axisX.x + dir.y * axisX.y + dir.z * axisX.z;
         if (Math.abs(d) < 1.0e-9) {
-            if (po < -half.x || po > half.x) {
+            if (po < -hx || po > hx) {
                 return Double.POSITIVE_INFINITY;
             }
         } else {
-            double t1 = (-half.x - po) / d;
-            double t2 = (half.x - po) / d;
+            double t1 = (-hx - po) / d;
+            double t2 = (hx - po) / d;
             if (t1 > t2) {
                 double tmp = t1;
                 t1 = t2;
@@ -60,12 +74,12 @@ public record Obb(Vec3 center, Vec3 axisX, Vec3 axisY, Vec3 axisZ, Vec3 half, Li
         po = px * axisY.x + py * axisY.y + pz * axisY.z;
         d = dir.x * axisY.x + dir.y * axisY.y + dir.z * axisY.z;
         if (Math.abs(d) < 1.0e-9) {
-            if (po < -half.y || po > half.y) {
+            if (po < -hy || po > hy) {
                 return Double.POSITIVE_INFINITY;
             }
         } else {
-            double t1 = (-half.y - po) / d;
-            double t2 = (half.y - po) / d;
+            double t1 = (-hy - po) / d;
+            double t2 = (hy - po) / d;
             if (t1 > t2) {
                 double tmp = t1;
                 t1 = t2;
@@ -85,12 +99,12 @@ public record Obb(Vec3 center, Vec3 axisX, Vec3 axisY, Vec3 axisZ, Vec3 half, Li
         po = px * axisZ.x + py * axisZ.y + pz * axisZ.z;
         d = dir.x * axisZ.x + dir.y * axisZ.y + dir.z * axisZ.z;
         if (Math.abs(d) < 1.0e-9) {
-            if (po < -half.z || po > half.z) {
+            if (po < -hz || po > hz) {
                 return Double.POSITIVE_INFINITY;
             }
         } else {
-            double t1 = (-half.z - po) / d;
-            double t2 = (half.z - po) / d;
+            double t1 = (-hz - po) / d;
+            double t2 = (hz - po) / d;
             if (t1 > t2) {
                 double tmp = t1;
                 t1 = t2;

@@ -6,6 +6,7 @@ import com.warfactory.medical.capability.IMedicalData;
 import com.warfactory.medical.capability.MedicalCapabilities;
 import com.warfactory.medical.capability.MedicalProvider;
 import com.warfactory.medical.compat.OpenPersistenceCompat;
+import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
@@ -50,6 +51,7 @@ import net.minecraftforge.fml.common.Mod;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
@@ -177,15 +179,27 @@ public final class MedicalEventHandler {
             return;
         }
 
+        // A TACZ bullet lands as two hurt events (a non-armor-piercing and an armor-piercing portion, with
+        // i-frames zeroed between them). It applied damage twice
+        float effectiveAmount = amount;
+        OptionalDouble taczTotal = TaczCompat.bulletTotalDamage(src);
+        if (taczTotal.isPresent()) {
+            if (!TaczCompat.claimBulletHit(src, player.level().getGameTime())) {
+                event.setAmount(0.0F);
+                return;
+            }
+            effectiveAmount = (float) taczTotal.getAsDouble();
+        }
+
         recordDamagingPlayer(profile, src, player);
 
         boolean alreadyDowned = profile.isDowned() || profile.getState() == HealthState.UNCONSCIOUS;
         boolean finishDowned = alreadyDowned && MedicalConfig.finishDownedOnHit();
 
-        HurtResolution res = finishDowned ? null : resolveHit(player, src, amount, profile);
+        HurtResolution res = finishDowned ? null : resolveHit(player, src, effectiveAmount, profile);
         if (finishDowned || (res != null && res.majorTrauma())) {
             markDead(player, data, profile);
-            event.setAmount(Math.max(amount, player.getHealth() + 1.0F));
+            event.setAmount(Math.max(effectiveAmount, player.getHealth() + 1.0F));
             return;
         }
 
@@ -205,7 +219,7 @@ public final class MedicalEventHandler {
         MedicalEngine.resync(player, true);
 
         if (res.armor() == ArmorEvaluation.Outcome.BLOCKED) {
-            event.setAmount(Math.min(amount * BLOCKED_RESIDUAL_FRACTION, BLOCKED_RESIDUAL_MAX));
+            event.setAmount(Math.min(effectiveAmount * BLOCKED_RESIDUAL_FRACTION, BLOCKED_RESIDUAL_MAX));
         } else {
             event.setAmount(0.0F);
         }
@@ -558,17 +572,26 @@ public final class MedicalEventHandler {
         if (amount <= 0.0F) {
             return;
         }
+        float effectiveAmount = amount;
+        OptionalDouble taczTotal = TaczCompat.bulletTotalDamage(src);
+        if (taczTotal.isPresent()) {
+            if (!TaczCompat.claimBulletHit(src, victim.level().getGameTime())) {
+                event.setAmount(0.0F);
+                return;
+            }
+            effectiveAmount = (float) taczTotal.getAsDouble();
+        }
         IMedicalData data = victim.getCapability(MedicalCapabilities.MEDICAL).resolve().orElse(null);
         if (data == null) {
             return;
         }
         MedicalProfile profile = data.getProfile();
 
-        HurtResolution res = resolveHit(victim, src, amount, profile);
+        HurtResolution res = resolveHit(victim, src, effectiveAmount, profile);
         if (res.majorTrauma()) {
             profile.enterDeadState(false);
             data.bumpRevision();
-            event.setAmount(Math.max(amount, victim.getHealth() + 1.0F));
+            event.setAmount(Math.max(effectiveAmount, victim.getHealth() + 1.0F));
             return;
         }
         if (res.traumaAdded()) {

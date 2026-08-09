@@ -22,9 +22,11 @@ public final class TourniquetLayer extends RenderLayer<AbstractClientPlayer, Pla
     private static final ResourceLocation MODEL_LOC =
             new ResourceLocation(WFMedical.MOD_ID, "models/entity/tourniquet.obj");
 
-    public static final float SCALE = 16.0F;
-    private static final double ARM_DOWN = 6.0;
-    private static final double LEG_DOWN = 7.0;
+
+    public static final float SCALE = 1.1F;
+    private static final double ARM_DOWN = 0.125;  // slide ~6px down the arm, in blocks
+    private static final double LEG_DOWN = 0.250; // slide ~7px down the leg, in blocks
+    private static final double ARM_OFFSET = 0.0575f;
 
     private static ObjModel cachedModel;
     private static boolean loadFailed;
@@ -56,20 +58,20 @@ public final class TourniquetLayer extends RenderLayer<AbstractClientPlayer, Pla
         PlayerModel<AbstractClientPlayer> model = getParentModel();
         VertexConsumer vc = buffer.getBuffer(RenderType.entityCutoutNoCull(TEXTURE));
         int overlay = LivingEntityRenderer.getOverlayCoords(player, 0.0F);
-        renderOn(mask, LimbType.RIGHT_ARM, model.rightArm, ARM_DOWN, pose, vc, light, overlay, m);
-        renderOn(mask, LimbType.LEFT_ARM, model.leftArm, ARM_DOWN, pose, vc, light, overlay, m);
-        renderOn(mask, LimbType.RIGHT_LEG, model.rightLeg, LEG_DOWN, pose, vc, light, overlay, m);
-        renderOn(mask, LimbType.LEFT_LEG, model.leftLeg, LEG_DOWN, pose, vc, light, overlay, m);
+        renderOn(mask, LimbType.RIGHT_ARM, model.rightArm, ARM_DOWN, -ARM_OFFSET, pose, vc, light, overlay, m);
+        renderOn(mask, LimbType.LEFT_ARM, model.leftArm, ARM_DOWN, ARM_OFFSET, pose, vc, light, overlay, m);
+        renderOn(mask, LimbType.RIGHT_LEG, model.rightLeg, LEG_DOWN, 0, pose, vc, light, overlay, m);
+        renderOn(mask, LimbType.LEFT_LEG, model.leftLeg, LEG_DOWN, 0, pose, vc, light, overlay, m);
     }
 
-    private static void renderOn(int mask, LimbType limb, ModelPart part, double down, PoseStack pose,
+    private static void renderOn(int mask, LimbType limb, ModelPart part, double down, double armOffset, PoseStack pose,
                                  VertexConsumer vc, int light, int overlay, ObjModel m) {
         if ((mask & (1 << limb.ordinal())) == 0) {
             return;
         }
         pose.pushPose();
         part.translateAndRotate(pose);
-        pose.translate(0.0, down, 0.0);
+        pose.translate(armOffset, down, 0 );
         pose.scale(SCALE, -SCALE, SCALE);
         m.render(pose, vc, light, overlay, 1.0F, 1.0F, 1.0F, 1.0F);
         pose.popPose();

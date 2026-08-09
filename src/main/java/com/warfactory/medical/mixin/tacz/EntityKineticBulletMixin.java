@@ -6,9 +6,11 @@ import com.tacz.guns.util.TacHitResult;
 import com.warfactory.medical.compat.TaczHitCapture;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.damage.HitDetectionDebug;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.phys.Vec3;
+import org.apache.commons.lang3.tuple.Pair;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -28,6 +30,14 @@ public abstract class EntityKineticBulletMixin {
     private void wfmedical$captureHitPos(TacHitResult hitResult, Vec3 startVec, Vec3 endVec, CallbackInfo ci) {
         Entity bullet = (Entity) (Object) this;
         TaczHitCapture.capture(bullet.getId(), hitResult.getLocation(), startVec, endVec);
+    }
+
+
+    @Inject(method = "tacAttackEntity", at = @At("HEAD"))
+    private void wfmedical$captureTotalDamage(EntityKineticBullet.MaybeMultipartEntity target, float amount,
+                                              Pair<DamageSource, DamageSource> damageSources, CallbackInfo ci) {
+        Entity bullet = (Entity) (Object) this;
+        TaczHitCapture.captureDamage(bullet.getId(), amount);
     }
 
     /**

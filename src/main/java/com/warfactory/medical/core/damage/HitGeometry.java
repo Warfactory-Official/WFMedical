@@ -147,7 +147,13 @@ public final class HitGeometry {
             return false;
         }
 
-        return rigRayPick(victim, seg[0], seg[1]) == null;
+        // A shot only "threads the gap" (and is thrown away) when its path clears EVERY limb box by more than
+        // the tolerance. The tolerance matters because the hit classifier assigns the nearest limb to ANY
+        // envelope hit (ray-pick, then a no-limit nearest-point fallback), so rejecting a shot that merely
+        // grazed a limb -- or that skimmed one whose server-side pose/position drifted a hair from what the
+        // shooter saw -- registers as "my hit didn't count". Testing against boxes grown by the tolerance
+        // keeps genuine between-the-limbs whiffs rejected while letting those near-limb hits through.
+        return !rigRayHitsWithin(victim, seg[0], seg[1], MedicalConfig.hitGapRejectTolerance());
     }
 
 
@@ -181,8 +187,9 @@ public final class HitGeometry {
         var direct = src.getDirectEntity();
         var attacker = src.getEntity();
         if (direct instanceof Projectile && direct != attacker) {
-            if (TaczCompat.bulletHitPos(src).isPresent()) {
-                return null;
+            Optional<Vec3[]> taczSeg = TaczCompat.bulletSegment(src);
+            if (taczSeg.isPresent()) {
+                return taczSeg.get();
             }
             Vec3 to = direct.position();
             Vec3 from = new Vec3(direct.xo, direct.yo, direct.zo);
@@ -347,6 +354,29 @@ public final class HitGeometry {
             }
         }
         return best == Double.POSITIVE_INFINITY ? null : limb;
+    }
+
+    /**
+     * Whether the ray comes within {@code pad} of ANY limb box (each grown by {@code pad}). This is the
+     * tolerant counterpart to {@link #rigRayPick} used only for gap rejection: it answers "did the shot skim
+     * a limb" rather than "which limb", so a near-miss the classifier would still count is not rejected.
+     * A {@code pad} of 0 makes it exactly {@code rigRayPick(...) != null}.
+     */
+    private static boolean rigRayHitsWithin(LivingEntity victim, Vec3 from, Vec3 to, double pad) {
+        Vec3 dir = to.subtract(from);
+        if (dir.lengthSqr() < 1.0e-12) {
+            return false;
+        }
+        Vec3 origin = worldToLocalPoint(victim, from);
+        Vec3 localDir = worldToLocalDir(victim, dir);
+        HumanoidRig.LocalRig rig = RigCache.resolve(victim);
+        double p = Math.max(pad, 0.0);
+        for (Obb obb : rig.all()) {
+            if (obb.rayEntry(origin, localDir, p) != Double.POSITIVE_INFINITY) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static List<LimbType> rigRayPierce(LivingEntity victim, Vec3 from, Vec3 to) {

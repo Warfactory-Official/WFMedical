@@ -256,15 +256,17 @@ public final class MedicalDefinitions {
 
         registry.register(TraumaType.builder("laceration_small", TraumaCategory.LACERATION)
                 .major(false).severityContribution(0.4F).painPerSeverity(0.2F).bleedingPerSeverity(0.4F)
-                .healSpeedPerTick(0.0004F).canReopen(true).permanent(false).movementModifier(1.0F)
+                .healSpeedPerTick(0.0010F).canReopen(true).permanent(false).movementModifier(1.0F)
                 .healthReductionPerSeverity(1.0F).maxSeverity(1.0F).mergeable(true)
-                .treatments(TreatmentAction.REDUCE_BLEEDING, TreatmentAction.SUTURE_WOUND, TreatmentAction.HEAL_TRAUMA).build());
+                .response(new TraumaResponse(TreatmentAction.REDUCE_BLEEDING, TraumaResponse.Effect.STOP_BLEED, 0.0F))
+                .treatments(TreatmentAction.SUTURE_WOUND, TreatmentAction.HEAL_TRAUMA).build());
 
         registry.register(TraumaType.builder("laceration_large", TraumaCategory.LACERATION)
                 .major(true).severityContribution(0.8F).painPerSeverity(0.6F).bleedingPerSeverity(1.2F)
-                .healSpeedPerTick(0.0001F).canReopen(true).permanent(false).movementModifier(1.0F)
+                .healSpeedPerTick(0.0010F).canReopen(true).permanent(false).movementModifier(1.0F)
                 .healthReductionPerSeverity(4.0F).maxSeverity(1.0F).mergeable(true)
-                .treatments(TreatmentAction.REDUCE_BLEEDING, TreatmentAction.SUTURE_WOUND, TreatmentAction.HEAL_TRAUMA).build());
+                .response(new TraumaResponse(TreatmentAction.REDUCE_BLEEDING, TraumaResponse.Effect.STOP_BLEED, 0.0F))
+                .treatments(TreatmentAction.SUTURE_WOUND, TreatmentAction.HEAL_TRAUMA).build());
 
         registry.register(TraumaType.builder("fracture", TraumaCategory.FRACTURE)
                 .major(true).severityContribution(0.9F).painPerSeverity(0.5F).bleedingPerSeverity(0.0F)
@@ -288,9 +290,11 @@ public final class MedicalDefinitions {
 
         registry.register(TraumaType.builder("puncture", TraumaCategory.PUNCTURE)
                 .major(true).severityContribution(0.7F).painPerSeverity(0.5F).bleedingPerSeverity(0.9F)
-                .healSpeedPerTick(0.0002F).canReopen(true).permanent(false).movementModifier(1.0F)
+                .healSpeedPerTick(0.0010F).canReopen(true).permanent(false).movementModifier(1.0F)
                 .healthReductionPerSeverity(3.5F).maxSeverity(1.0F).mergeable(true)
-                .treatments(TreatmentAction.REDUCE_BLEEDING, TreatmentAction.SUTURE_WOUND, TreatmentAction.HEAL_TRAUMA).build());
+                // A bandage fully stops the bleed; a suture closes it and it then mends over ~1 minute.
+                .response(new TraumaResponse(TreatmentAction.REDUCE_BLEEDING, TraumaResponse.Effect.STOP_BLEED, 0.0F))
+                .treatments(TreatmentAction.SUTURE_WOUND, TreatmentAction.HEAL_TRAUMA).build());
 
         registry.register(TraumaType.builder("crush_injury", TraumaCategory.CRUSH_INJURY)
                 .major(true).severityContribution(0.8F).painPerSeverity(0.6F).bleedingPerSeverity(0.3F)
@@ -318,7 +322,7 @@ public final class MedicalDefinitions {
         itemTreatments.put("wfmedical:splint", new Treatment(TreatmentAction.STABILIZE_FRACTURE,
                 EnumSet.of(TraumaCategory.FRACTURE), 1.0F, 0.0D, 60, false));
         itemTreatments.put("wfmedical:suture_kit", new Treatment(TreatmentAction.SUTURE_WOUND,
-                EnumSet.of(TraumaCategory.LACERATION, TraumaCategory.PUNCTURE), 1.0F, 0.0D, 100, false));
+                EnumSet.of(TraumaCategory.LACERATION, TraumaCategory.PUNCTURE), 1.0F, 0.0D, 60, false));
         itemTreatments.put("wfmedical:blood_bag", new Treatment(TreatmentAction.RESTORE_BLOOD,
                 Collections.emptySet(), 0.0F, 1000.0D, 120, false));
         itemTreatments.put("wfmedical:painkillers", new Treatment(TreatmentAction.REDUCE_PAIN,
@@ -330,9 +334,9 @@ public final class MedicalDefinitions {
         itemTreatments.put("wfmedical:tourniquet", new Treatment(TreatmentAction.APPLY_TOURNIQUET,
                 Collections.emptySet(), 0.0F, 0.0D, 20, false));
         itemTreatments.put("wfmedical:medkit", new Treatment(TreatmentAction.HEAL_TRAUMA,
-                Collections.emptySet(), 1.0F, 250.0D, 160, true));
+                Collections.emptySet(), 1.0F, 250.0D, 180, true));
         itemTreatments.put("wfmedical:burn_ointment", new Treatment(TreatmentAction.TREAT_BURN,
-                EnumSet.of(TraumaCategory.BURN, TraumaCategory.CHEMICAL_BURN), 0.8F, 0.0D, 80, false));
+                EnumSet.of(TraumaCategory.BURN, TraumaCategory.CHEMICAL_BURN), 0.8F, 0.0D, 60, false));
         itemTreatments.put("wfmedical:antirad_shot", new Treatment(TreatmentAction.TREAT_RADIATION,
                 EnumSet.of(TraumaCategory.RADIATION_BURN), 1.0F, 0.0D, 40, true));
 

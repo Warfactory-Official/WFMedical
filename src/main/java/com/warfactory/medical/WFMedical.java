@@ -13,6 +13,7 @@ import com.warfactory.medical.core.treatment.Treatment;
 import com.warfactory.medical.item.ModCreativeTab;
 import com.warfactory.medical.item.ModItems;
 import com.warfactory.medical.network.MedicalNetworking;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
@@ -73,6 +74,9 @@ public final class WFMedical {
 
             if (TaczCompat.isLoaded()) {
                 LOGGER.info("[{}] TACZ detected; gun/bullet damage will map to ballistic trauma", MOD_ID);
+                // Gate this registration behind the presence check so the TACZ event classes referenced by
+                // TaczHitMarkerGuard are only ever class-loaded when TACZ is actually installed.
+                MinecraftForge.EVENT_BUS.register(com.warfactory.medical.compat.TaczHitMarkerGuard.class);
             }
         });
     }

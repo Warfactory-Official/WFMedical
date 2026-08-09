@@ -18,7 +18,7 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class TourniquetArmRenderer {
 
-    private static final double ARM_DOWN_FP = 6.0;
+    private static final double ARM_DOWN_FP = 0.375; // slide ~6px down the arm, in blocks
 
     private TourniquetArmRenderer() {
     }

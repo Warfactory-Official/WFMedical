@@ -132,7 +132,10 @@ public final class TreatmentInteractions {
                 removeMask |= bit;
                 continue;
             }
-            if (LimbStatus.isDamaged(s) && (treatableMask & bit) != 0) {
+
+            boolean eligible = (treatableMask & bit) != 0
+                    && (tourniquetHeld || LimbStatus.isDamaged(s));
+            if (eligible) {
                 applyMask |= bit;
             }
         }

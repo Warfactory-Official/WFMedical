@@ -97,7 +97,8 @@ maxSeverity = 1.0
 mergeable = true
 treatmentActions = ["HEAL_TRAUMA"]
 
-# Small laceration: light bleeding, closes with a bandage or suture.
+# Small laceration: light bleeding. A bandage fully stops the bleed; a suture kit closes it and it then
+# mends quickly on its own.
 [[trauma]]
 id = "laceration_small"
 category = "LACERATION"
@@ -105,16 +106,17 @@ major = false
 severityContribution = 0.4
 painPerSeverity = 0.2
 bleedingPerSeverity = 0.4
-healSpeedPerTick = 0.0004
+healSpeedPerTick = 0.0010
 canReopen = true
 permanent = false
 movementModifier = 1.0
 healthReductionPerSeverity = 1.0
 maxSeverity = 1.0
 mergeable = true
-treatmentActions = ["REDUCE_BLEEDING", "SUTURE_WOUND", "HEAL_TRAUMA"]
+treatmentActions = ["REDUCE_BLEEDING=STOP", "SUTURE_WOUND", "HEAL_TRAUMA"]
 
-# Large laceration: heavy bleeding, can reopen, best closed with a suture kit.
+# Large laceration: heavy bleeding, can reopen. A bandage fully stops the bleed (but the wound stays open
+# until treated); a suture kit closes it and it then mends on its own over roughly a minute.
 [[trauma]]
 id = "laceration_large"
 category = "LACERATION"
@@ -122,14 +124,14 @@ major = true
 severityContribution = 0.8
 painPerSeverity = 0.6
 bleedingPerSeverity = 1.2
-healSpeedPerTick = 0.0001
+healSpeedPerTick = 0.0010
 canReopen = true
 permanent = false
 movementModifier = 1.0
 healthReductionPerSeverity = 4.0
 maxSeverity = 1.0
 mergeable = true
-treatmentActions = ["REDUCE_BLEEDING", "SUTURE_WOUND", "HEAL_TRAUMA"]
+treatmentActions = ["REDUCE_BLEEDING=STOP", "SUTURE_WOUND", "HEAL_TRAUMA"]
 
 # Fracture: no bleeding but strong movement penalty; stabilised with a splint. The leg-fracture speed
 # penalty is applied by the engine (legFractureSpeedMultiplier) and only affects legs, so movementModifier
@@ -184,7 +186,8 @@ maxSeverity = 1.0
 mergeable = true
 treatmentActions = ["BOOST_CLOTTING=REDUCE:0.3", "HEAL_TRAUMA"]
 
-# Puncture: deep wound, bleeds, can reopen.
+# Puncture: deep wound, bleeds, can reopen. A bandage fully stops the bleed; a suture kit closes it and it
+# then mends on its own over roughly a minute.
 [[trauma]]
 id = "puncture"
 category = "PUNCTURE"
@@ -192,14 +195,14 @@ major = true
 severityContribution = 0.7
 painPerSeverity = 0.5
 bleedingPerSeverity = 0.9
-healSpeedPerTick = 0.0002
+healSpeedPerTick = 0.0010
 canReopen = true
 permanent = false
 movementModifier = 1.0
 healthReductionPerSeverity = 3.5
 maxSeverity = 1.0
 mergeable = true
-treatmentActions = ["REDUCE_BLEEDING", "SUTURE_WOUND", "HEAL_TRAUMA"]
+treatmentActions = ["REDUCE_BLEEDING=STOP", "SUTURE_WOUND", "HEAL_TRAUMA"]
 
 # Crush injury: blunt trauma, big health hit, mild bleeding. A dressing (REDUCE_BLEEDING) can stop the
 # bleed, but the crush itself is only healed by a medkit (HEAL_TRAUMA) -- until then it keeps hurting
@@ -277,14 +280,15 @@ bloodRestoreMl = 0.0
 useDurationTicks = 60
 removesTrauma = false
 
-# Suture kit: closes lacerations/punctures so they cannot reopen easily.
+# Suture kit: closes lacerations/punctures so they cannot reopen, and they then mend on their own. Quick to
+# apply so it can be a mainstay item rather than a fallback.
 [[treatment]]
 item = "wfmedical:suture_kit"
 action = "SUTURE_WOUND"
 categories = ["LACERATION", "PUNCTURE"]
 magnitude = 1.0
 bloodRestoreMl = 0.0
-useDurationTicks = 100
+useDurationTicks = 60
 removesTrauma = false
 
 # Blood bag: restores blood volume, no trauma effect.
@@ -339,14 +343,15 @@ bloodRestoreMl = 0.0
 useDurationTicks = 60
 removesTrauma = false
 
-# Medkit: general-purpose, fully heals (removes) most trauma.
+# Medkit: general-purpose, fully heals (removes) most trauma and restores blood. Deliberately slow to apply
+# (9s) -- the premium "fix it now" tool, whereas bandages/suture kits are the fast everyday items.
 [[treatment]]
 item = "wfmedical:medkit"
 action = "HEAL_TRAUMA"
 categories = []
 magnitude = 1.0
 bloodRestoreMl = 250.0
-useDurationTicks = 160
+useDurationTicks = 180
 removesTrauma = true
 
 # Burn ointment: treats burns and chemical burns.
@@ -356,7 +361,7 @@ action = "TREAT_BURN"
 categories = ["BURN", "CHEMICAL_BURN"]
 magnitude = 0.8
 bloodRestoreMl = 0.0
-useDurationTicks = 80
+useDurationTicks = 60
 removesTrauma = false
 
 # Anti-rad shot: treats radiation burns.
