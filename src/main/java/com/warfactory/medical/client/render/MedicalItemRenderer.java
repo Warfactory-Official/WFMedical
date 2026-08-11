@@ -10,7 +10,7 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -38,7 +38,7 @@ public final class MedicalItemRenderer extends BlockEntityWithoutLevelRenderer {
     @Override
     public void renderByItem(ItemStack stack, ItemDisplayContext ctx, PoseStack pose,
                              MultiBufferSource buffer, int light, int overlay) {
-        ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
         if (id == null) {
             return;
         }
@@ -47,7 +47,7 @@ public final class MedicalItemRenderer extends BlockEntityWithoutLevelRenderer {
         if (m == null) {
             return;
         }
-        ResourceLocation tex = new ResourceLocation(WFMedical.MOD_ID, "textures/item/" + name + ".png");
+        ResourceLocation tex = ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "textures/item/" + name + ".png");
         pose.pushPose();
         pose.translate(0.5, 0.5, 0.5);
         pose.scale(BASE_SCALE, BASE_SCALE, BASE_SCALE);
@@ -62,7 +62,7 @@ public final class MedicalItemRenderer extends BlockEntityWithoutLevelRenderer {
         }
         ObjModel m = models.get(name);
         if (m == null) {
-            m = ObjModel.load(new ResourceLocation(WFMedical.MOD_ID, "models/item/" + name + ".obj"));
+            m = ObjModel.load(ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "models/item/" + name + ".obj"));
             if (m == null) {
                 missing.put(name, Boolean.TRUE);
                 return null;

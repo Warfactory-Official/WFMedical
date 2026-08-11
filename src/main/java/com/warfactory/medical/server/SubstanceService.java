@@ -1,7 +1,7 @@
 package com.warfactory.medical.server;
 
-import com.warfactory.medical.capability.IMedicalData;
-import com.warfactory.medical.capability.MedicalCapabilities;
+import com.warfactory.medical.attachment.IMedicalData;
+import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
@@ -23,7 +23,7 @@ public final class SubstanceService {
         if (player == null) {
             return false;
         }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return false;
         }

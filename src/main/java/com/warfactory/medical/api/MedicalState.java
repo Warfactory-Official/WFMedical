@@ -1,14 +1,14 @@
 package com.warfactory.medical.api;
 
-import com.warfactory.medical.capability.IMedicalData;
-import com.warfactory.medical.capability.MedicalCapabilities;
+import com.warfactory.medical.attachment.IMedicalData;
+import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.client.ClientDownedTracker;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.world.entity.player.Player;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.loading.FMLEnvironment;
 
 public final class MedicalState {
 
@@ -22,7 +22,7 @@ public final class MedicalState {
         if (player.level().isClientSide()) {
             return ClientMedicalCache.stats();
         }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return null;
         }
@@ -69,11 +69,11 @@ public final class MedicalState {
             return false;
         }
         if (player.level().isClientSide()) {
-            Boolean r = DistExecutor.unsafeCallWhenOn(Dist.CLIENT,
-                    () -> () -> ClientDownedTracker.isDowned(player.getId()));
-            return Boolean.TRUE.equals(r);
+            // DistExecutor is gone; the dist check keeps the client-only tracker off the server's
+            // class-loading path exactly as unsafeCallWhenOn did.
+            return FMLEnvironment.dist == Dist.CLIENT && ClientDownedTracker.isDowned(player.getId());
         }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         return data != null && data.getProfile().isDowned();
     }
 }

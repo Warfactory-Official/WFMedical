@@ -1,10 +1,11 @@
 package com.warfactory.medical.client.screen;
 
-import com.lowdragmc.lowdraglib.LDLib;
-import com.lowdragmc.lowdraglib.client.shader.management.ShaderManager;
-import com.lowdragmc.lowdraglib.gui.texture.IGuiTexture;
-import com.lowdragmc.lowdraglib.gui.texture.ShaderTexture;
-import com.lowdragmc.lowdraglib.gui.texture.TransformTexture;
+import com.lowdragmc.lowdraglib2.LDLib2;
+import com.lowdragmc.lowdraglib2.client.shader.management.ShaderManager;
+import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
+import com.lowdragmc.lowdraglib2.client.shader.LDShaderHolder;
+import com.lowdragmc.lowdraglib2.gui.texture.ShaderTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.TransformTexture;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.core.limb.LimbType;
@@ -12,6 +13,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
+import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 
@@ -20,7 +22,7 @@ import java.util.function.DoubleSupplier;
 /**
  * Resolves a player's already-loaded client skin and paints the front-facing region of a single body part
  * into a GUI rect, so the medical body diagram shows WHO is being treated instead of anonymous coloured boxes.
- * No textures are uploaded here -- it reuses {@link AbstractClientPlayer#getSkinTextureLocation()} (the skin the
+ * No textures are uploaded here -- it reuses {@link AbstractClientPlayer#getSkin()} (the skin the
  * client already streamed/cached for rendering the player), so there is nothing extra to manage or free.
  *
  * <p>The damage look is done per-pixel by the {@code wfmedical:limb_damage} LDLib shader: a healthy limb is the
@@ -29,7 +31,7 @@ import java.util.function.DoubleSupplier;
  */
 public final class ClientPlayerSkins {
 
-    private static final ResourceLocation DAMAGE_SHADER = new ResourceLocation(WFMedical.MOD_ID, "limb_damage");
+    private static final ResourceLocation DAMAGE_SHADER = ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "limb_damage");
     private static final float SKIN = 64.0F;
 
     private ClientPlayerSkins() {
@@ -53,9 +55,10 @@ public final class ClientPlayerSkins {
             entity = mc.level.getEntity(entityId);
         }
         if (entity instanceof AbstractClientPlayer player) {
-            return new Skin(player.getSkinTextureLocation(), "slim".equals(player.getModelName()));
+            PlayerSkin skin = player.getSkin();
+            return new Skin(skin.texture(), skin.model() == PlayerSkin.Model.SLIM);
         }
-        return new Skin(DefaultPlayerSkin.getDefaultSkin(), false);
+        return new Skin(DefaultPlayerSkin.getDefaultTexture(), false);
     }
 
     /**
@@ -65,10 +68,10 @@ public final class ClientPlayerSkins {
     public static IGuiTexture limbTile(LimbType limb, Skin skin, DoubleSupplier health) {
         Region base = baseRegion(limb, skin.slim());
         Region overlay = overlayRegion(limb, skin.slim());
-        if (LDLib.isRemote() && ShaderManager.allowedShader()) {
+        if (LDLib2.isRemote() && ShaderManager.allowedShader()) {
             try {
-                ShaderTexture shared = ShaderTexture.createShader(DAMAGE_SHADER);
-                if (shared != null) {
+                ShaderTexture shared = sharedDamageShader();
+                if (shared != null && shared.getShaderHolder() != null) {
                     return new ShaderLimbTexture(shared, skin.texture(), base, overlay, health);
                 }
             } catch (RuntimeException | LinkageError e) {
@@ -76,6 +79,20 @@ public final class ClientPlayerSkins {
             }
         }
         return new SkinPartTexture(skin.texture(), base, overlay);
+    }
+
+    /**
+     * One shared damage-shader texture for every limb tile. LDLib 1.x handed these out through a cached
+     * {@code ShaderTexture.createShader(id)}; LDLib2 dropped that, so the cache lives here instead --
+     * constructing a ShaderTexture compiles the program, which must not happen per tile per frame.
+     */
+    private static ShaderTexture damageShader;
+
+    private static ShaderTexture sharedDamageShader() {
+        if (damageShader == null) {
+            damageShader = new ShaderTexture(DAMAGE_SHADER);
+        }
+        return damageShader;
     }
 
     private static float clamp01(float v) {
@@ -137,18 +154,30 @@ public final class ClientPlayerSkins {
         }
 
         @Override
-        protected void drawInternal(GuiGraphics graphics, int mouseX, int mouseY, float x, float y,
-                                    int width, int height) {
+        protected void drawInternal(GuiGraphics graphics, float mouseX, float mouseY, float x, float y,
+                                    float width, float height, float partialTicks) {
             if (width <= 0 || height <= 0) {
                 return;
             }
-            shader.bindTexture("Skin", skin);
-            shader.setUniformCache(cache -> {
-                cache.glUniform4F("uBase", base.u(), base.v(), base.w(), base.h());
-                cache.glUniform4F("uOverlay", overlay.u(), overlay.v(), overlay.w(), overlay.h());
-                cache.glUniform1F("uHealth", clamp01((float) health.getAsDouble()));
-            });
-            shader.draw(graphics, mouseX, mouseY, x, y, width, height);
+            LDShaderHolder holder = shader.getShaderHolder();
+            if (holder == null) {
+                return;
+            }
+            // LDLib2 replaced bindTexture/setUniformCache with dynamic samplers+uniforms on the holder.
+            // They are registered around the draw and removed afterwards so limb tiles sharing this one
+            // shader instance cannot leak each other's values.
+            holder.addDynamicSampler("Skin", () -> skin);
+            holder.addDynamicUniform("uBase", u -> u.set(base.u(), base.v(), base.w(), base.h()));
+            holder.addDynamicUniform("uOverlay", u -> u.set(overlay.u(), overlay.v(), overlay.w(), overlay.h()));
+            holder.addDynamicUniform("uHealth", u -> u.set(clamp01((float) health.getAsDouble())));
+            try {
+                shader.draw(graphics, mouseX, mouseY, x, y, width, height, partialTicks);
+            } finally {
+                holder.removeDynamicSampler("Skin");
+                holder.removeDynamicUniform("uBase");
+                holder.removeDynamicUniform("uOverlay");
+                holder.removeDynamicUniform("uHealth");
+            }
         }
     }
 
@@ -166,8 +195,8 @@ public final class ClientPlayerSkins {
         }
 
         @Override
-        protected void drawInternal(GuiGraphics graphics, int mouseX, int mouseY, float x, float y,
-                                    int width, int height) {
+        protected void drawInternal(GuiGraphics graphics, float mouseX, float mouseY, float x, float y,
+                                    float width, float height, float partialTicks) {
             if (width <= 0 || height <= 0) {
                 return;
             }
@@ -175,8 +204,8 @@ public final class ClientPlayerSkins {
             int iy = (int) y;
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
-            blit(graphics, ix, iy, width, height, base);
-            blit(graphics, ix, iy, width, height, overlay);
+            blit(graphics, ix, iy, (int) width, (int) height, base);
+            blit(graphics, ix, iy, (int) width, (int) height, overlay);
             RenderSystem.disableBlend();
         }
 

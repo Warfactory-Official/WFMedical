@@ -1,10 +1,8 @@
-package com.warfactory.medical.capability;
+package com.warfactory.medical.attachment;
 
 import com.warfactory.medical.core.MedicalProfile;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraftforge.common.capabilities.AutoRegisterCapability;
 
-@AutoRegisterCapability
 public interface IMedicalData {
 
     MedicalProfile getProfile();

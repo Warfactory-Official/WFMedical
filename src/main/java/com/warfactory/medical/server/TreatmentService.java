@@ -1,7 +1,7 @@
 package com.warfactory.medical.server;
 
-import com.warfactory.medical.capability.IMedicalData;
-import com.warfactory.medical.capability.MedicalCapabilities;
+import com.warfactory.medical.attachment.IMedicalData;
+import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.limb.Limb;
@@ -27,7 +27,7 @@ public final class TreatmentService {
         if (player == null) {
             return false;
         }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return false;
         }

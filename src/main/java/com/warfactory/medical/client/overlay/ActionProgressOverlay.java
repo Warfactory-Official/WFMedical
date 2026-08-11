@@ -1,8 +1,7 @@
 package com.warfactory.medical.client.overlay;
 
-import com.lowdragmc.lowdraglib.gui.texture.ColorRectTexture;
-import com.lowdragmc.lowdraglib.gui.texture.ProgressTexture;
-import com.lowdragmc.lowdraglib.gui.texture.TextTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.ColorRectTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.TextTexture;
 import com.warfactory.medical.client.UiText;
 import com.warfactory.medical.client.screen.MedicalUIParts;
 import com.warfactory.medical.core.limb.LimbType;
@@ -10,21 +9,21 @@ import com.warfactory.medical.core.treatment.TreatmentAction;
 import com.warfactory.medical.network.ActiveTreatmentPacket;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.gui.overlay.ForgeGui;
-import net.minecraftforge.client.gui.overlay.IGuiOverlay;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 
 import java.util.Locale;
 
 @OnlyIn(Dist.CLIENT)
-public final class ActionProgressOverlay implements IGuiOverlay {
+public final class ActionProgressOverlay implements LayeredDraw.Layer {
 
-    public static final IGuiOverlay INSTANCE = new ActionProgressOverlay();
+    public static final LayeredDraw.Layer INSTANCE = new ActionProgressOverlay();
 
     private static final int BAR_WIDTH = 100;
     private static final int BAR_HEIGHT = 8;
@@ -60,11 +59,14 @@ public final class ActionProgressOverlay implements IGuiOverlay {
     }
 
     @Override
-    public void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenW, int screenH) {
-        drawBar(graphics, screenW / 2 - BAR_WIDTH / 2, screenH - 60, BAR_WIDTH);
+    public void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+        int screenW = graphics.guiWidth();
+        int screenH = graphics.guiHeight();
+        float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
+        drawBar(graphics, screenW / 2 - BAR_WIDTH / 2, screenH - 60, BAR_WIDTH, partialTick);
     }
 
-    public static boolean drawBar(GuiGraphics graphics, int x, int barY, int width) {
+    public static boolean drawBar(GuiGraphics graphics, int x, int barY, int width, float partialTick) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null || mc.level == null || !ClientMedicalCache.hasActiveTreatment()) {
@@ -97,14 +99,14 @@ public final class ActionProgressOverlay implements IGuiOverlay {
         }
 
         LABEL.updateText(UiText.escape(label));
-        LABEL.draw(graphics, -1, -1, x, barY - 11, width, 9);
+        LABEL.draw(graphics, -1, -1, x, barY - 11, width, 9, partialTick);
 
-        BACKGROUND.draw(graphics, -1, -1, x, barY, width, BAR_HEIGHT);
+        BACKGROUND.draw(graphics, -1, -1, x, barY, width, BAR_HEIGHT, partialTick);
         FILL.setProgress(progress);
-        FILL.draw(graphics, -1, -1, x, barY, width, BAR_HEIGHT);
+        FILL.draw(graphics, -1, -1, x, barY, width, BAR_HEIGHT, partialTick);
 
         PERCENT.updateText(UiText.escape(Math.round(progress * 100.0F) + "%"));
-        PERCENT.draw(graphics, -1, -1, x, barY, width, BAR_HEIGHT);
+        PERCENT.draw(graphics, -1, -1, x, barY, width, BAR_HEIGHT, partialTick);
         return true;
     }
 }

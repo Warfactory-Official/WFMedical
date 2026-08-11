@@ -1,6 +1,6 @@
 package com.warfactory.medical.client;
 
-import com.lowdragmc.lowdraglib.gui.modular.ModularUIGuiContainer;
+import com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.api.MedicalState;
 import com.warfactory.medical.config.MedicalConfig;
@@ -21,17 +21,17 @@ import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
-import net.minecraftforge.client.event.RegisterClientCommandsEvent;
-import net.minecraftforge.client.event.RenderGuiOverlayEvent;
-import net.minecraftforge.client.event.RenderHandEvent;
-import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
+import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
+import net.neoforged.neoforge.client.event.RenderHandEvent;
+import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = WFMedical.MOD_ID, value = Dist.CLIENT)
 public final class MedicalClientEvents {
 
     private static int deathScreenTicks;
@@ -43,10 +43,7 @@ public final class MedicalClientEvents {
     }
 
     @SubscribeEvent
-    public static void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) {
-            return;
-        }
+    public static void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         keepRespawnButtonUsable(mc);
         pollTargetSheet(mc);
@@ -94,7 +91,7 @@ public final class MedicalClientEvents {
     }
 
     @SubscribeEvent
-    public static void onMouseScroll(net.minecraftforge.client.event.InputEvent.MouseScrollingEvent event) {
+    public static void onMouseScroll(net.neoforged.neoforge.client.event.InputEvent.MouseScrollingEvent event) {
         if (!HitboxDebugRenderer.enabled) {
             return;
         }
@@ -102,7 +99,7 @@ public final class MedicalClientEvents {
         if (mc.player == null || mc.screen != null) {
             return;
         }
-        double delta = event.getScrollDelta();
+        double delta = event.getScrollDeltaY();
         if (delta == 0.0) {
             return;
         }
@@ -122,7 +119,7 @@ public final class MedicalClientEvents {
             targetSheetPoll = 0;
             return;
         }
-        if (mc.player == null || !(mc.screen instanceof ModularUIGuiContainer)) {
+        if (mc.player == null || !(mc.screen instanceof ModularUIScreen)) {
             MedInteractionScreen.clearTarget();
             targetSheetPoll = 0;
             return;
@@ -177,8 +174,8 @@ public final class MedicalClientEvents {
     }
 
     @SubscribeEvent
-    public static void onRenderGuiOverlayPre(RenderGuiOverlayEvent.Pre event) {
-        if (!event.getOverlay().id().equals(VanillaGuiOverlay.PLAYER_HEALTH.id())) {
+    public static void onRenderGuiLayerPre(RenderGuiLayerEvent.Pre event) {
+        if (!event.getName().equals(VanillaGuiLayers.PLAYER_HEALTH)) {
             return;
         }
         LocalPlayer player = Minecraft.getInstance().player;

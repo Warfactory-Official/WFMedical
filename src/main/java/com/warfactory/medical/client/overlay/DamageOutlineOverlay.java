@@ -7,20 +7,20 @@ import com.warfactory.medical.config.MedicalClientConfig.HudAnchor;
 import com.warfactory.medical.core.limb.LimbType;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.gui.overlay.ForgeGui;
-import net.minecraftforge.client.gui.overlay.IGuiOverlay;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
 @OnlyIn(Dist.CLIENT)
-@Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
-public final class DamageOutlineOverlay implements IGuiOverlay {
+@EventBusSubscriber(modid = WFMedical.MOD_ID, value = Dist.CLIENT)
+public final class DamageOutlineOverlay implements LayeredDraw.Layer {
 
     public static final DamageOutlineOverlay INSTANCE = new DamageOutlineOverlay();
 
@@ -49,10 +49,7 @@ public final class DamageOutlineOverlay implements IGuiOverlay {
 
 
     @SubscribeEvent
-    public static void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) {
-            return;
-        }
+    public static void onClientTick(ClientTickEvent.Post event) {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null) {
             prevHurtTime = 0;
@@ -67,7 +64,10 @@ public final class DamageOutlineOverlay implements IGuiOverlay {
 
 
     @Override
-    public void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenW, int screenH) {
+    public void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+        int screenW = graphics.guiWidth();
+        int screenH = graphics.guiHeight();
+        float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
         if (!com.warfactory.medical.client.MedicalDebug.screenEffectsEnabled()) {
             return;
         }

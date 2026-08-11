@@ -7,15 +7,15 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemDisplayContext;
-import net.minecraftforge.client.model.generators.ItemModelProvider;
-import net.minecraftforge.client.model.generators.ModelFile;
-import net.minecraftforge.common.data.ExistingFileHelper;
-import net.minecraftforge.data.event.GatherDataEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.neoforge.client.model.generators.ItemModelProvider;
+import net.neoforged.neoforge.client.model.generators.ModelFile;
+import net.neoforged.neoforge.common.data.ExistingFileHelper;
+import net.neoforged.neoforge.data.event.GatherDataEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.registries.DeferredHolder;
 
-@Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = WFMedical.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
 public final class DataGenerators {
 
     private DataGenerators() {
@@ -35,9 +35,9 @@ public final class DataGenerators {
 
         @Override
         protected void registerModels() {
-            for (RegistryObject<Item> item : ModItems.ITEMS.getEntries()) {
+            for (DeferredHolder<Item, ? extends Item> item : ModItems.ITEMS.getEntries()) {
                 String name = item.getId().getPath();
-                if (existingFileHelper.exists(new ResourceLocation(WFMedical.MOD_ID, name),
+                if (existingFileHelper.exists(ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, name),
                         PackType.CLIENT_RESOURCES, ".obj", "models/item")) {
                     objItem(name);
                 } else {

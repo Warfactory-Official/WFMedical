@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin {
 
-    @Inject(method = "getJumpPower", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "getJumpPower()F", at = @At("RETURN"), cancellable = true)
     private void wfmedical$scaleJumpPower(CallbackInfoReturnable<Float> callbackInfo) {
         if (!((Object) this instanceof Player player)) {
             return;

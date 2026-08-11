@@ -2,6 +2,7 @@ package com.warfactory.medical.client.screen;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
@@ -22,7 +23,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.core.registries.BuiltInRegistries;
 import org.joml.Matrix4f;
 
 import java.util.ArrayList;
@@ -60,7 +61,7 @@ public final class LimbWheelScreen extends Screen {
         super(Component.translatable("gui.wfmedical.wheel.title"));
         this.targetEntityId = targetEntityId;
         this.itemId = itemId;
-        Item item = ForgeRegistries.ITEMS.getValue(itemId);
+        Item item = BuiltInRegistries.ITEM.getOptional(itemId).orElse(null);
         this.itemIcon = item == null ? ItemStack.EMPTY : new ItemStack(item);
         if (limbs != null) {
             for (LimbSummary s : limbs) {
@@ -91,7 +92,7 @@ public final class LimbWheelScreen extends Screen {
             onClose();
             return;
         }
-        renderBackground(g);
+        renderBackground(g, mouseX, mouseY, partialTick);
 
         float cx = this.width / 2.0F;
         float cy = this.height / 2.0F;
@@ -293,16 +294,16 @@ public final class LimbWheelScreen extends Screen {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShader(GameRenderer::getPositionColorShader);
-        BufferBuilder buf = Tesselator.getInstance().getBuilder();
-        buf.begin(VertexFormat.Mode.TRIANGLE_STRIP, DefaultVertexFormat.POSITION_COLOR);
+        BufferBuilder buf = Tesselator.getInstance()
+                .begin(VertexFormat.Mode.TRIANGLE_STRIP, DefaultVertexFormat.POSITION_COLOR);
         for (int i = 0; i <= seg; i++) {
             float t = a0 + (a1 - a0) * i / seg;
             float cos = Mth.cos(t);
             float sin = Mth.sin(t);
-            buf.vertex(mat, cx + cos * rOut, cy + sin * rOut, 0.0F).color(r, gr, b, alpha).endVertex();
-            buf.vertex(mat, cx + cos * rIn, cy + sin * rIn, 0.0F).color(r, gr, b, alpha).endVertex();
+            buf.addVertex(mat, cx + cos * rOut, cy + sin * rOut, 0.0F).setColor(r, gr, b, alpha);
+            buf.addVertex(mat, cx + cos * rIn, cy + sin * rIn, 0.0F).setColor(r, gr, b, alpha);
         }
-        Tesselator.getInstance().end();
+        BufferUploader.drawWithShader(buf.buildOrThrow());
         RenderSystem.disableBlend();
     }
 
@@ -335,7 +336,7 @@ public final class LimbWheelScreen extends Screen {
         if (mc.player == null) {
             return false;
         }
-        Item item = ForgeRegistries.ITEMS.getValue(itemId);
+        Item item = BuiltInRegistries.ITEM.getOptional(itemId).orElse(null);
         return item != null
                 && (mc.player.getMainHandItem().getItem() == item || mc.player.getOffhandItem().getItem() == item);
     }

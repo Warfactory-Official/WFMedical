@@ -1,10 +1,12 @@
-package com.warfactory.medical.capability;
+package com.warfactory.medical.attachment;
 
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.trauma.TraumaRegistry;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.neoforged.neoforge.common.util.INBTSerializable;
 
-public final class MedicalData implements IMedicalData {
+public final class MedicalData implements IMedicalData, INBTSerializable<CompoundTag> {
 
     private MedicalProfile profile = new MedicalProfile();
     private int revision;
@@ -68,5 +70,20 @@ public final class MedicalData implements IMedicalData {
         this.profile = loaded;
         this.revision = tag.getInt("Revision");
         this.lastSyncedRevision = -1;
+    }
+
+    // --- attachment persistence -------------------------------------------------------------
+    // The profile NBT holds only primitives and trauma ids, so the registry lookup provider the
+    // attachment API hands us is not needed; save()/load() stay the plain-CompoundTag pair the
+    // rest of the mod (sync packets, /wfmedical commands) already uses.
+
+    @Override
+    public CompoundTag serializeNBT(HolderLookup.Provider provider) {
+        return save();
+    }
+
+    @Override
+    public void deserializeNBT(HolderLookup.Provider provider, CompoundTag tag) {
+        load(tag);
     }
 }

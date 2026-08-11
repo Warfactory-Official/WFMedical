@@ -11,8 +11,8 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import com.warfactory.medical.WFMedical;
-import com.warfactory.medical.capability.IMedicalData;
-import com.warfactory.medical.capability.MedicalCapabilities;
+import com.warfactory.medical.attachment.IMedicalData;
+import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
@@ -45,13 +45,13 @@ import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
 import java.util.*;
 
-@Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(modid = WFMedical.MOD_ID)
 public final class WFMedicalCommands {
 
     private static final int DEFAULT_OVERDOSE_TICKS = 200;
@@ -395,7 +395,7 @@ public final class WFMedicalCommands {
     private static int cmdQuery(CommandSourceStack src, Collection<ServerPlayer> targets) {
         int count = 0;
         for (ServerPlayer p : targets) {
-            IMedicalData data = MedicalCapabilities.get(p);
+            IMedicalData data = MedicalAttachments.get(p);
             if (data == null) {
                 warnNoCap(src, p);
                 continue;
@@ -737,7 +737,7 @@ public final class WFMedicalCommands {
         RigSpec spec = RigSpecIO.effectiveSpec();
         java.nio.file.Path file;
         try {
-            file = RigSpecIO.write(net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get(), spec);
+            file = RigSpecIO.write(net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get(), spec);
         } catch (Exception e) {
             src.sendFailure(Component.literal("[wfmedical] hitbox export file FAILED: " + e.getMessage()));
             return 0;
@@ -1263,7 +1263,7 @@ public final class WFMedicalCommands {
     private static int forEach(CommandSourceStack src, Collection<ServerPlayer> targets, ProfileAction action) {
         int count = 0;
         for (ServerPlayer p : targets) {
-            IMedicalData data = MedicalCapabilities.get(p);
+            IMedicalData data = MedicalAttachments.get(p);
             if (data == null) {
                 warnNoCap(src, p);
                 continue;

@@ -1,5 +1,9 @@
 package com.warfactory.medical.network;
 
+import com.warfactory.medical.WFMedical;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.MedicalProfile;
@@ -12,7 +16,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double bloodMl, double maxBloodMl,
-                                float painSuppression, float drugLoad, HealthState state, float deathProgress) {
+                                float painSuppression, float drugLoad, HealthState state, float deathProgress) implements CustomPacketPayload {
+
+    public static final CustomPacketPayload.Type<MedicalSyncPacket> TYPE =
+            new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "medical_sync"));
+
+    public static final StreamCodec<FriendlyByteBuf, MedicalSyncPacket> STREAM_CODEC =
+            CustomPacketPayload.codec(MedicalSyncPacket::encode, MedicalSyncPacket::decode);
+
+    @Override
+    public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
+
 
     public static MedicalSyncPacket fromProfile(MedicalProfile profile) {
         LimbType[] all = LimbType.VALUES;

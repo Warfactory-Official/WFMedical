@@ -18,9 +18,9 @@ import net.minecraft.resources.ResourceLocation;
 public final class TourniquetLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
 
     public static final ResourceLocation TEXTURE =
-            new ResourceLocation(WFMedical.MOD_ID, "textures/entity/tourniquet.png");
+            ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "textures/entity/tourniquet.png");
     private static final ResourceLocation MODEL_LOC =
-            new ResourceLocation(WFMedical.MOD_ID, "models/entity/tourniquet.obj");
+            ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "models/entity/tourniquet.obj");
 
 
     public static final float SCALE = 1.1F;

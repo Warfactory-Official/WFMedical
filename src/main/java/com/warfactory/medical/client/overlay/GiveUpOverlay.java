@@ -3,18 +3,21 @@ package com.warfactory.medical.client.overlay;
 import com.warfactory.medical.client.GiveUpHandler;
 import com.warfactory.medical.client.MedicalKeyMappings;
 import net.minecraft.client.Minecraft;
+import com.warfactory.medical.WFMedical;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.network.chat.Component;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.gui.overlay.ForgeGui;
-import net.minecraftforge.client.gui.overlay.IGuiOverlay;
+import net.minecraft.resources.ResourceLocation;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 
 @OnlyIn(Dist.CLIENT)
-public final class GiveUpOverlay implements IGuiOverlay {
+public final class GiveUpOverlay implements LayeredDraw.Layer {
 
-    public static final IGuiOverlay INSTANCE = new GiveUpOverlay();
-    public static final String OVERLAY_ID = "wfmedical_give_up";
+    public static final LayeredDraw.Layer INSTANCE = new GiveUpOverlay();
+    public static final ResourceLocation OVERLAY_ID =
+            ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "give_up");
 
     private static final int BAR_WIDTH = 160;
     private static final int BAR_HEIGHT = 6;
@@ -27,7 +30,10 @@ public final class GiveUpOverlay implements IGuiOverlay {
     }
 
     @Override
-    public void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenW, int screenH) {
+    public void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+        int screenW = graphics.guiWidth();
+        int screenH = graphics.guiHeight();
+        float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
         if (!GiveUpHandler.available()) {
             return;
         }

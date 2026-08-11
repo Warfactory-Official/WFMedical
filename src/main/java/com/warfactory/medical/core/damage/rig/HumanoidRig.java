@@ -799,7 +799,7 @@ public final class HumanoidRig {
         a.yRot = right ? -0.8 : 0.8;
         a.xRot = -0.97079635;
         b.xRot = a.xRot;
-        double f = CrossbowItem.getChargeDuration(e.getUseItem());
+        double f = CrossbowItem.getChargeDuration(e.getUseItem(), e);
         double f1 = f <= 0.0 ? 0.0 : Mth.clamp((float) e.getTicksUsingItem(), 0.0F, (float) f);
         double f2 = f <= 0.0 ? 0.0 : f1 / f;
         b.yRot = Mth.lerp(f2, 0.4, 0.85) * (right ? 1 : -1);

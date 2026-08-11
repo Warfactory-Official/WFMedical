@@ -4,6 +4,7 @@ import com.warfactory.medical.core.limb.LimbType;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.core.Holder;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
@@ -100,7 +101,7 @@ public final class ArmorEvaluation {
         }
     }
 
-    private static double attr(LivingEntity entity, Attribute attribute) {
+    private static double attr(LivingEntity entity, Holder<Attribute> attribute) {
         if (entity.getAttribute(attribute) == null) {
             return 0.0D;
         }

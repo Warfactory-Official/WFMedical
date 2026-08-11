@@ -1,5 +1,9 @@
 package com.warfactory.medical.network;
 
+import com.warfactory.medical.WFMedical;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.damage.HitAuthority;
 import com.warfactory.medical.core.damage.rig.HumanoidRig;
@@ -10,7 +14,19 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 
-public record PoseStreamPacket(HumanoidRig.LocalRig rig) {
+public record PoseStreamPacket(HumanoidRig.LocalRig rig) implements CustomPacketPayload {
+
+    public static final CustomPacketPayload.Type<PoseStreamPacket> TYPE =
+            new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "pose_stream"));
+
+    public static final StreamCodec<FriendlyByteBuf, PoseStreamPacket> STREAM_CODEC =
+            CustomPacketPayload.codec(PoseStreamPacket::encode, PoseStreamPacket::decode);
+
+    @Override
+    public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
+
 
     public static PoseStreamPacket decode(FriendlyByteBuf buf) {
         HumanoidRig.LocalRig rig = new HumanoidRig.LocalRig();

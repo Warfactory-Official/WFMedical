@@ -1,24 +1,23 @@
 package com.warfactory.medical.client.overlay;
 
-import com.lowdragmc.lowdraglib.gui.texture.ColorRectTexture;
-import com.lowdragmc.lowdraglib.gui.texture.ProgressTexture;
-import com.lowdragmc.lowdraglib.gui.texture.TextTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.ColorRectTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.TextTexture;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.network.ClientMedicalCache;
 import com.warfactory.medical.network.MedicalSyncPacket;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.gui.overlay.ForgeGui;
-import net.minecraftforge.client.gui.overlay.IGuiOverlay;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 
 @OnlyIn(Dist.CLIENT)
-public final class VitalsOverlay implements IGuiOverlay {
+public final class VitalsOverlay implements LayeredDraw.Layer {
 
-    public static final IGuiOverlay INSTANCE = new VitalsOverlay();
+    public static final LayeredDraw.Layer INSTANCE = new VitalsOverlay();
 
     private static final int BAR_WIDTH = 60;
     private static final int BAR_HEIGHT = 6;
@@ -42,7 +41,10 @@ public final class VitalsOverlay implements IGuiOverlay {
     }
 
     @Override
-    public void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenW, int screenH) {
+    public void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+        int screenW = graphics.guiWidth();
+        int screenH = graphics.guiHeight();
+        float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null || mc.level == null) {
@@ -80,18 +82,18 @@ public final class VitalsOverlay implements IGuiOverlay {
         int y = MARGIN_Y;
         if (showBlood) {
             BLOOD_LABEL.updateText(Component.translatable("gui.wfmedical.blood").getString());
-            BLOOD_LABEL.draw(graphics, -1, -1, MARGIN_X, y, LABEL_WIDTH, BAR_HEIGHT);
-            BACKGROUND.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT);
+            BLOOD_LABEL.draw(graphics, -1, -1, MARGIN_X, y, LABEL_WIDTH, BAR_HEIGHT, partialTick);
+            BACKGROUND.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT, partialTick);
             BLOOD_FILL.setProgress(bloodFraction);
-            BLOOD_FILL.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT);
+            BLOOD_FILL.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT, partialTick);
             y += BAR_HEIGHT + 2;
         }
         if (showPain) {
             PAIN_LABEL.updateText(Component.translatable("gui.wfmedical.pain").getString());
-            PAIN_LABEL.draw(graphics, -1, -1, MARGIN_X, y, LABEL_WIDTH, BAR_HEIGHT);
-            BACKGROUND.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT);
+            PAIN_LABEL.draw(graphics, -1, -1, MARGIN_X, y, LABEL_WIDTH, BAR_HEIGHT, partialTick);
+            BACKGROUND.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT, partialTick);
             PAIN_FILL.setProgress(pain);
-            PAIN_FILL.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT);
+            PAIN_FILL.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT, partialTick);
         }
     }
 }

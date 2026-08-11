@@ -1,13 +1,26 @@
 package com.warfactory.medical.network;
 
+import com.warfactory.medical.WFMedical;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import com.warfactory.medical.network.MedicalSyncPacket.LimbSummary;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
 
 public record TreatmentTargetInfoPacket(int targetEntityId, ResourceLocation itemId, LimbSummary[] limbs,
-                                        int treatableMask) {
+                                        int treatableMask) implements CustomPacketPayload {
+
+    public static final CustomPacketPayload.Type<TreatmentTargetInfoPacket> TYPE =
+            new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "treatment_target_info"));
+
+    public static final StreamCodec<FriendlyByteBuf, TreatmentTargetInfoPacket> STREAM_CODEC =
+            CustomPacketPayload.codec(TreatmentTargetInfoPacket::encode, TreatmentTargetInfoPacket::decode);
+
+    @Override
+    public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
+
 
     public static TreatmentTargetInfoPacket decode(FriendlyByteBuf buf) {
         int targetEntityId = buf.readVarInt();
@@ -32,7 +45,6 @@ public record TreatmentTargetInfoPacket(int targetEntityId, ResourceLocation ite
     }
 
     public void handleClient() {
-        DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-                () -> () -> com.warfactory.medical.client.TreatmentInteractions.onTargetInfo(this));
+        com.warfactory.medical.client.TreatmentInteractions.onTargetInfo(this);
     }
 }

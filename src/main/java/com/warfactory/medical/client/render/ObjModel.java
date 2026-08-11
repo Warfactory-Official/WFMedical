@@ -6,7 +6,6 @@ import com.warfactory.medical.WFMedical;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
-import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 
 import java.io.BufferedReader;
@@ -117,7 +116,7 @@ public final class ObjModel {
     public void render(PoseStack pose, VertexConsumer vc, int light, int overlay,
                        float red, float green, float blue, float alpha) {
         Matrix4f mat = pose.last().pose();
-        Matrix3f nm = pose.last().normal();
+        PoseStack.Pose nm = pose.last();
         for (int[][] face : faces) {
             if (face.length == 4) {
                 for (int[] v : face) {
@@ -139,7 +138,7 @@ public final class ObjModel {
         }
     }
 
-    private void emit(Matrix4f mat, Matrix3f nm, VertexConsumer vc, int[] v, int light, int overlay,
+    private void emit(Matrix4f mat, PoseStack.Pose nm, VertexConsumer vc, int[] v, int light, int overlay,
                       float red, float green, float blue, float alpha) {
         float[] p = positions[v[0]];
         float u = v[1] >= 0 ? uvs[v[1]][0] : 0.0F;
@@ -151,7 +150,7 @@ public final class ObjModel {
             ny = n[1];
             nz = n[2];
         }
-        vc.vertex(mat, p[0], p[1], p[2]).color(red, green, blue, alpha).uv(u, w)
-                .overlayCoords(overlay).uv2(light).normal(nm, nx, ny, nz).endVertex();
+        vc.addVertex(mat, p[0], p[1], p[2]).setColor(red, green, blue, alpha).setUv(u, w)
+                .setOverlay(overlay).setLight(light).setNormal(nm, nx, ny, nz);
     }
 }

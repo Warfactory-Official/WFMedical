@@ -22,17 +22,16 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.RenderLevelStageEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import org.joml.Matrix3f;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 import org.joml.Matrix4f;
 
 import java.util.List;
 
 
-@Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = WFMedical.MOD_ID, value = Dist.CLIENT)
 public final class HitboxDebugRenderer {
 
     private static final double RANGE = 32.0;
@@ -88,14 +87,14 @@ public final class HitboxDebugRenderer {
             return;
         }
 
-        float pt = event.getPartialTick();
+        float pt = event.getPartialTick().getGameTimeDeltaPartialTick(false);
         PoseStack ps = event.getPoseStack();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
 
         ps.pushPose();
         ps.translate(-cam.x, -cam.y, -cam.z);
         Matrix4f mat = ps.last().pose();
-        Matrix3f nrm = ps.last().normal();
+        PoseStack.Pose nrm = ps.last();
         boolean regActive = MedicalConfig.hitRegistrationMode() != HitRegMode.OFF;
 
         if (style == Style.FILLED) {
@@ -124,7 +123,7 @@ public final class HitboxDebugRenderer {
         buffers.endBatch(RenderType.lines());
     }
 
-    private static void renderRig(Matrix4f mat, Matrix3f nrm, VertexConsumer vc, LivingEntity e, float pt, float alpha) {
+    private static void renderRig(Matrix4f mat, PoseStack.Pose nrm, VertexConsumer vc, LivingEntity e, float pt, float alpha) {
         HumanoidRig.LocalRig rig = RigCache.get(e);
         double[] frame = frame(e, pt);
         LimbType hl = RigTuning.ACTIVE ? RigTuning.highlight : null;
@@ -208,16 +207,16 @@ public final class HitboxDebugRenderer {
 
     private static void fillTri(Matrix4f mat, VertexConsumer vc, Vec3 a, Vec3 b, Vec3 c,
                                 float red, float green, float blue, float alpha) {
-        vc.vertex(mat, (float) a.x, (float) a.y, (float) a.z).color(red, green, blue, alpha).endVertex();
-        vc.vertex(mat, (float) b.x, (float) b.y, (float) b.z).color(red, green, blue, alpha).endVertex();
-        vc.vertex(mat, (float) c.x, (float) c.y, (float) c.z).color(red, green, blue, alpha).endVertex();
+        vc.addVertex(mat, (float) a.x, (float) a.y, (float) a.z).setColor(red, green, blue, alpha);
+        vc.addVertex(mat, (float) b.x, (float) b.y, (float) b.z).setColor(red, green, blue, alpha);
+        vc.addVertex(mat, (float) c.x, (float) c.y, (float) c.z).setColor(red, green, blue, alpha);
     }
 
     private static int cornerIndex(int sx, int sy, int sz) {
         return (sx > 0 ? 1 : 0) | (sy > 0 ? 2 : 0) | (sz > 0 ? 4 : 0);
     }
 
-    private static void line(Matrix4f mat, Matrix3f nrm, VertexConsumer vc, Vec3 a, Vec3 b,
+    private static void line(Matrix4f mat, PoseStack.Pose nrm, VertexConsumer vc, Vec3 a, Vec3 b,
                              float red, float green, float blue, float alpha) {
         float dx = (float) (b.x - a.x);
         float dy = (float) (b.y - a.y);
@@ -228,10 +227,10 @@ public final class HitboxDebugRenderer {
             dy /= len;
             dz /= len;
         }
-        vc.vertex(mat, (float) a.x, (float) a.y, (float) a.z).color(red, green, blue, alpha)
-                .normal(nrm, dx, dy, dz).endVertex();
-        vc.vertex(mat, (float) b.x, (float) b.y, (float) b.z).color(red, green, blue, alpha)
-                .normal(nrm, dx, dy, dz).endVertex();
+        vc.addVertex(mat, (float) a.x, (float) a.y, (float) a.z).setColor(red, green, blue, alpha)
+                .setNormal(nrm, dx, dy, dz);
+        vc.addVertex(mat, (float) b.x, (float) b.y, (float) b.z).setColor(red, green, blue, alpha)
+                .setNormal(nrm, dx, dy, dz);
     }
 
     private static float[] colorFor(LimbType limb) {

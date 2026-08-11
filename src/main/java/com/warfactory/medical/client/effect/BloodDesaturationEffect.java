@@ -14,23 +14,23 @@ import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.client.renderer.PostChain;
 import net.minecraft.client.renderer.PostPass;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
-import net.minecraftforge.client.event.RenderGuiEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 import org.lwjgl.opengl.GL11;
 
 import java.util.List;
 
-@Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = WFMedical.MOD_ID, value = Dist.CLIENT)
 public final class BloodDesaturationEffect {
 
     private static final float MAX_DESATURATION = 0.85F;
     private static final float EPSILON = 0.001F;
 
     private static final ResourceLocation SHADER =
-            new ResourceLocation(WFMedical.MOD_ID, "shaders/post/blood_desaturate.json");
+            ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "shaders/post/blood_desaturate.json");
 
     private static PostChain chain;
     private static int chainWidth = -1;
@@ -73,7 +73,7 @@ public final class BloodDesaturationEffect {
             boolean logNow = MedicalDebug.verbose() && (logFrame++ % 12L == 0L);
             float[] before = logNow ? MedicalDebug.sampleCenterPixel(mc.getMainRenderTarget()) : null;
 
-            active.process(event.getPartialTick());
+            active.process(event.getPartialTick().getGameTimeDeltaPartialTick(false));
             var target = mc.getMainRenderTarget();
             target.bindWrite(false);
             RenderSystem.viewport(0, 0, target.viewWidth, target.viewHeight);

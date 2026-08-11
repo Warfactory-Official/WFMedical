@@ -26,7 +26,7 @@ public abstract class CameraMixin {
     protected abstract void setPosition(double x, double y, double z);
 
     @Inject(method = "setup", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/Camera;move(DDD)V", ordinal = 0))
+            target = "Lnet/minecraft/client/Camera;move(FFF)V", ordinal = 0))
     private void wfmedical$downedThirdPersonPivot(BlockGetter level, Entity entity, boolean detached,
                                                   boolean thirdPersonReverse, float partialTick,
                                                   CallbackInfo callbackInfo) {

@@ -5,13 +5,13 @@ import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.damage.HitAuthority;
 import com.warfactory.medical.core.limb.LimbType;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraftforge.network.NetworkDirection;
-import net.minecraftforge.network.NetworkRegistry;
-import net.minecraftforge.network.PacketDistributor;
-import net.minecraftforge.network.simple.SimpleChannel;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -19,161 +19,56 @@ import java.util.WeakHashMap;
 public final class MedicalNetworking {
 
     private static final String PROTOCOL = "3";
-    private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
-            new ResourceLocation(WFMedical.MOD_ID, "main"),
-            () -> PROTOCOL,
-            PROTOCOL::equals,
-            PROTOCOL::equals);
     private static final Map<ServerPlayer, MedicalSyncPacket> LAST_SENT = new WeakHashMap<>();
     // Last game tick each player was re-baselined with a full authoritative sync (safety net; see syncTo).
     private static final Map<ServerPlayer, Long> LAST_FULL_TICK = new WeakHashMap<>();
-    private static boolean registered;
 
     private MedicalNetworking() {
     }
 
-    public static void register() {
-        if (registered) {
-            return;
-        }
-        registered = true;
+    /**
+     * Registers every payload with the play-phase registrar. Replaces the 1.20.1 SimpleChannel: the
+     * numeric message ids are gone, each payload now carries its own namespaced type id, and the
+     * protocol version string is what gates connecting to a mismatched server.
+     */
+    public static void register(RegisterPayloadHandlersEvent event) {
+        PayloadRegistrar registrar = event.registrar(PROTOCOL);
 
-        CHANNEL.messageBuilder(MedicalSyncPacket.class, 0, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(MedicalSyncPacket::encode)
-                .decoder(MedicalSyncPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleClient();
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
+        registrar.playToClient(MedicalSyncPacket.TYPE, MedicalSyncPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleClient());
+        registrar.playToServer(MedicalActionPacket.TYPE, MedicalActionPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleServer(sender(ctx)));
+        registrar.playToClient(ActiveTreatmentPacket.TYPE, ActiveTreatmentPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleClient());
+        registrar.playToClient(DownedStatePacket.TYPE, DownedStatePacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleClient());
+        registrar.playToServer(RemoveTourniquetPacket.TYPE, RemoveTourniquetPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleServer(sender(ctx)));
+        registrar.playToClient(MedicalDeltaPacket.TYPE, MedicalDeltaPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleClient());
+        registrar.playToServer(PoseStreamPacket.TYPE, PoseStreamPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleServer(sender(ctx)));
+        registrar.playToClient(HitAuthorityPacket.TYPE, HitAuthorityPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleClient());
+        registrar.playToClient(TourniquetStatePacket.TYPE, TourniquetStatePacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleClient());
+        registrar.playToServer(TreatmentTargetRequestPacket.TYPE, TreatmentTargetRequestPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleServer(sender(ctx)));
+        registrar.playToClient(TreatmentTargetInfoPacket.TYPE, TreatmentTargetInfoPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleClient());
+        registrar.playToServer(CancelTreatmentPacket.TYPE, CancelTreatmentPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleServer(sender(ctx)));
+        registrar.playToServer(TargetSheetRequestPacket.TYPE, TargetSheetRequestPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleServer(sender(ctx)));
+        registrar.playToClient(TargetSheetInfoPacket.TYPE, TargetSheetInfoPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleClient());
+        registrar.playToServer(GiveUpPacket.TYPE, GiveUpPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleServer(sender(ctx)));
+    }
 
-
-        CHANNEL.messageBuilder(MedicalActionPacket.class, 2, NetworkDirection.PLAY_TO_SERVER)
-                .encoder(MedicalActionPacket::encode)
-                .decoder(MedicalActionPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleServer(ctx.get().getSender());
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-
-        CHANNEL.messageBuilder(ActiveTreatmentPacket.class, 4, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(ActiveTreatmentPacket::encode)
-                .decoder(ActiveTreatmentPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleClient();
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(DownedStatePacket.class, 5, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(DownedStatePacket::encode)
-                .decoder(DownedStatePacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleClient();
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(RemoveTourniquetPacket.class, 6, NetworkDirection.PLAY_TO_SERVER)
-                .encoder(RemoveTourniquetPacket::encode)
-                .decoder(RemoveTourniquetPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleServer(ctx.get().getSender());
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(MedicalDeltaPacket.class, 7, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(MedicalDeltaPacket::encode)
-                .decoder(MedicalDeltaPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleClient();
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(PoseStreamPacket.class, 8, NetworkDirection.PLAY_TO_SERVER)
-                .encoder(PoseStreamPacket::encode)
-                .decoder(PoseStreamPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleServer(ctx.get().getSender());
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(HitAuthorityPacket.class, 9, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(HitAuthorityPacket::encode)
-                .decoder(HitAuthorityPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleClient();
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(TourniquetStatePacket.class, 10, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(TourniquetStatePacket::encode)
-                .decoder(TourniquetStatePacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleClient();
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(TreatmentTargetRequestPacket.class, 11, NetworkDirection.PLAY_TO_SERVER)
-                .encoder(TreatmentTargetRequestPacket::encode)
-                .decoder(TreatmentTargetRequestPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleServer(ctx.get().getSender());
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(TreatmentTargetInfoPacket.class, 12, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(TreatmentTargetInfoPacket::encode)
-                .decoder(TreatmentTargetInfoPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleClient();
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(CancelTreatmentPacket.class, 13, NetworkDirection.PLAY_TO_SERVER)
-                .encoder(CancelTreatmentPacket::encode)
-                .decoder(CancelTreatmentPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleServer(ctx.get().getSender());
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(TargetSheetRequestPacket.class, 14, NetworkDirection.PLAY_TO_SERVER)
-                .encoder(TargetSheetRequestPacket::encode)
-                .decoder(TargetSheetRequestPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleServer(ctx.get().getSender());
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(TargetSheetInfoPacket.class, 15, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(TargetSheetInfoPacket::encode)
-                .decoder(TargetSheetInfoPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleClient();
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
-
-        CHANNEL.messageBuilder(GiveUpPacket.class, 16, NetworkDirection.PLAY_TO_SERVER)
-                .encoder(GiveUpPacket::encode)
-                .decoder(GiveUpPacket::decode)
-                .consumerMainThread((packet, ctx) -> {
-                    packet.handleServer(ctx.get().getSender());
-                    ctx.get().setPacketHandled(true);
-                })
-                .add();
+    /** Server-side sender, or null when a to-server payload somehow arrives without one. */
+    private static ServerPlayer sender(IPayloadContext ctx) {
+        return ctx.player() instanceof ServerPlayer player ? player : null;
     }
 
     public static int tourniquetMask(MedicalProfile profile) {
@@ -187,22 +82,22 @@ public final class MedicalNetworking {
     }
 
     public static void broadcastTourniquets(LivingEntity entity, MedicalProfile profile) {
-        CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> entity),
+        PacketDistributor.sendToPlayersTrackingEntityAndSelf(entity,
                 new TourniquetStatePacket(entity.getId(), tourniquetMask(profile)));
     }
 
     public static void sendTourniquetsTo(ServerPlayer viewer, int entityId, int mask) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> viewer), new TourniquetStatePacket(entityId, mask));
+        PacketDistributor.sendToPlayer(viewer, new TourniquetStatePacket(entityId, mask));
     }
 
     public static void sendHitAuthority(ServerPlayer player) {
         boolean stream = MedicalConfig.useClientPose();
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new HitAuthorityPacket(stream));
+        PacketDistributor.sendToPlayer(player, new HitAuthorityPacket(stream));
     }
 
     public static void sendFull(ServerPlayer player, MedicalProfile profile) {
         MedicalSyncPacket full = MedicalSyncPacket.fromProfile(profile);
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), full);
+        PacketDistributor.sendToPlayer(player, full);
         LAST_SENT.put(player, full);
         LAST_FULL_TICK.put(player, player.level().getGameTime());
         if (MedicalConfig.logMedicalSync()) {
@@ -236,7 +131,7 @@ public final class MedicalNetworking {
         if (delta.isEmpty()) {
             return;
         }
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), delta);
+        PacketDistributor.sendToPlayer(player, delta);
         LAST_SENT.put(player, full);
         if (MedicalConfig.logMedicalSync()) {
             WFMedical.LOGGER.info("[wfmed-sync] DELTA -> {} mask={} {}", player.getGameProfile().getName(),
@@ -277,27 +172,27 @@ public final class MedicalNetworking {
     }
 
     public static void sendActiveTreatment(ServerPlayer player, ActiveTreatmentPacket packet) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+        PacketDistributor.sendToPlayer(player, packet);
     }
 
     public static void sendTargetInfo(ServerPlayer medic, TreatmentTargetInfoPacket packet) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> medic), packet);
+        PacketDistributor.sendToPlayer(medic, packet);
     }
 
     public static void sendTargetSheet(ServerPlayer medic, TargetSheetInfoPacket packet) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> medic), packet);
+        PacketDistributor.sendToPlayer(medic, packet);
     }
 
     public static void broadcastDowned(ServerPlayer player, boolean downed) {
-        CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> player),
+        PacketDistributor.sendToPlayersTrackingEntityAndSelf(player,
                 new DownedStatePacket(player.getId(), downed));
     }
 
     public static void sendDownedTo(ServerPlayer viewer, int entityId, boolean downed) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> viewer), new DownedStatePacket(entityId, downed));
+        PacketDistributor.sendToPlayer(viewer, new DownedStatePacket(entityId, downed));
     }
 
-    public static void sendToServer(Object packet) {
-        CHANNEL.sendToServer(packet);
+    public static void sendToServer(CustomPacketPayload packet) {
+        PacketDistributor.sendToServer(packet);
     }
 }

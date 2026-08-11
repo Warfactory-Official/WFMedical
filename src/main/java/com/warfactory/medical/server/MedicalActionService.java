@@ -1,8 +1,8 @@
 package com.warfactory.medical.server;
 
 import com.warfactory.medical.api.MedicalState;
-import com.warfactory.medical.capability.IMedicalData;
-import com.warfactory.medical.capability.MedicalCapabilities;
+import com.warfactory.medical.attachment.IMedicalData;
+import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.MedicalProfile;
@@ -27,7 +27,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 public final class MedicalActionService {
 
@@ -44,7 +44,7 @@ public final class MedicalActionService {
         if (MedicalState.isHandsDisabled(actor)) {
             return false;
         }
-        IMedicalData actorData = MedicalCapabilities.get(actor);
+        IMedicalData actorData = MedicalAttachments.get(actor);
         if (actorData == null) {
             return false;
         }
@@ -53,7 +53,7 @@ public final class MedicalActionService {
             return false;
         }
 
-        Item item = ForgeRegistries.ITEMS.getValue(itemId);
+        Item item = BuiltInRegistries.ITEM.getOptional(itemId).orElse(null);
         if (!(item instanceof MedicalItem medical)) {
             return false;
         }
@@ -122,7 +122,7 @@ public final class MedicalActionService {
         if (MedicalState.isHandsDisabled(actor)) {
             return;
         }
-        Item item = ForgeRegistries.ITEMS.getValue(itemId);
+        Item item = BuiltInRegistries.ITEM.getOptional(itemId).orElse(null);
         if (!(item instanceof MedicalItem medical) || findItemSlot(actor, item) < 0) {
             return;
         }
@@ -130,7 +130,7 @@ public final class MedicalActionService {
         IMedicalData data;
         if (targetId < 0 || targetId == actor.getId()) {
             target = actor;
-            data = MedicalCapabilities.get(actor);
+            data = MedicalAttachments.get(actor);
         } else {
             target = resolveOtherTarget(actor, targetId);
             data = target == null ? null : medicalDataOf(target);
@@ -181,7 +181,7 @@ public final class MedicalActionService {
         }
 
         ResourceLocation itemId = ResourceLocation.tryParse(actorProfile.getActiveItemId());
-        Item item = itemId == null ? null : ForgeRegistries.ITEMS.getValue(itemId);
+        Item item = itemId == null ? null : BuiltInRegistries.ITEM.getOptional(itemId).orElse(null);
         boolean injectable = item instanceof InjectableItem inj && inj.getSubstance() != null;
         if (!(item instanceof MedicalItem medical) || (medical.getTreatment() == null && !injectable)) {
             cancel(actor, "invalid_item");
@@ -199,7 +199,7 @@ public final class MedicalActionService {
         IMedicalData targetData;
         if (targetId < 0 || targetId == actor.getId()) {
             target = actor;
-            targetData = MedicalCapabilities.get(actor);
+            targetData = MedicalAttachments.get(actor);
         } else {
             target = resolveOtherTarget(actor, targetId);
             targetData = target == null ? null : medicalDataOf(target);
@@ -236,7 +236,7 @@ public final class MedicalActionService {
         if (player == null) {
             return;
         }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return;
         }
@@ -285,7 +285,7 @@ public final class MedicalActionService {
         IMedicalData data;
         if (targetId < 0 || targetId == actor.getId()) {
             target = actor;
-            data = MedicalCapabilities.get(actor);
+            data = MedicalAttachments.get(actor);
         } else {
             if (MedicalState.isHandsDisabled(actor)) {
                 return false;
@@ -345,7 +345,7 @@ public final class MedicalActionService {
             if (other == actor) {
                 continue;
             }
-            IMedicalData otherData = MedicalCapabilities.get(other);
+            IMedicalData otherData = MedicalAttachments.get(other);
             if (otherData == null) {
                 continue;
             }
@@ -369,7 +369,7 @@ public final class MedicalActionService {
     }
 
     private static IMedicalData medicalDataOf(LivingEntity entity) {
-        return entity.getCapability(MedicalCapabilities.MEDICAL).resolve().orElse(null);
+        return MedicalAttachments.get(entity);
     }
 
     private static int slotToLock(ServerPlayer actor, Item item) {

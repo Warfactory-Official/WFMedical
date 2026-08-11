@@ -4,26 +4,27 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
-import net.minecraftforge.client.gui.overlay.ForgeGui;
-import net.minecraftforge.client.gui.overlay.IGuiOverlay;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
 @OnlyIn(Dist.CLIENT)
-public final class UnconsciousOverlay implements IGuiOverlay {
+public final class UnconsciousOverlay implements LayeredDraw.Layer {
 
-    public static final IGuiOverlay INSTANCE = new UnconsciousOverlay();
+    public static final LayeredDraw.Layer INSTANCE = new UnconsciousOverlay();
 
-    public static final String OVERLAY_ID = "wfmedical_unconscious";
+    public static final ResourceLocation OVERLAY_ID =
+            ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "unconscious");
 
     private static final ResourceLocation VIGNETTE_TEXTURE =
-            new ResourceLocation("minecraft", "textures/misc/vignette.png");
+            ResourceLocation.fromNamespaceAndPath("minecraft", "textures/misc/vignette.png");
 
     private static final float FADE_STEP = 0.06F;
     private static final float FADE_EPSILON = 0.001F;
@@ -54,7 +55,10 @@ public final class UnconsciousOverlay implements IGuiOverlay {
     }
 
     @Override
-    public void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenW, int screenH) {
+    public void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+        int screenW = graphics.guiWidth();
+        int screenH = graphics.guiHeight();
+        float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
         if (!com.warfactory.medical.client.MedicalDebug.screenEffectsEnabled()) {
             return;
         }
@@ -93,7 +97,7 @@ public final class UnconsciousOverlay implements IGuiOverlay {
     }
 
     @OnlyIn(Dist.CLIENT)
-    @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+    @EventBusSubscriber(modid = WFMedical.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class Registrar {
 
         private static boolean registered;
@@ -102,14 +106,13 @@ public final class UnconsciousOverlay implements IGuiOverlay {
         }
 
         @SubscribeEvent
-        public static void onRegisterOverlays(RegisterGuiOverlaysEvent event) {
+        public static void onRegisterLayers(RegisterGuiLayersEvent event) {
             if (registered) {
                 return;
             }
             registered = true;
             event.registerAboveAll(OVERLAY_ID, INSTANCE);
-            event.registerAbove(new ResourceLocation(WFMedical.MOD_ID, OVERLAY_ID),
-                    GiveUpOverlay.OVERLAY_ID, GiveUpOverlay.INSTANCE);
+            event.registerAbove(OVERLAY_ID, GiveUpOverlay.OVERLAY_ID, GiveUpOverlay.INSTANCE);
         }
     }
 }

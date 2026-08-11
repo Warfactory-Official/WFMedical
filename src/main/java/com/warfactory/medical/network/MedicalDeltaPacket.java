@@ -1,5 +1,9 @@
 package com.warfactory.medical.network;
 
+import com.warfactory.medical.WFMedical;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.limb.LimbType;
@@ -8,7 +12,19 @@ import net.minecraft.network.FriendlyByteBuf;
 
 public record MedicalDeltaPacket(int mask, DerivedStats stats, LimbSummary[] limbs, double bloodMl,
                                  double maxBloodMl, float painSuppression, float drugLoad, HealthState state,
-                                 float deathProgress) {
+                                 float deathProgress) implements CustomPacketPayload {
+
+    public static final CustomPacketPayload.Type<MedicalDeltaPacket> TYPE =
+            new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "medical_delta"));
+
+    public static final StreamCodec<FriendlyByteBuf, MedicalDeltaPacket> STREAM_CODEC =
+            CustomPacketPayload.codec(MedicalDeltaPacket::encode, MedicalDeltaPacket::decode);
+
+    @Override
+    public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
+
 
     private static final int STATS = 1;
     private static final int SCALARS = 1 << 1;

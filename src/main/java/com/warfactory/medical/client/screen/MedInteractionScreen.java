@@ -1,23 +1,17 @@
 package com.warfactory.medical.client.screen;
 
-import com.lowdragmc.lowdraglib.gui.modular.IUIHolder;
-import com.lowdragmc.lowdraglib.gui.modular.ModularUI;
-import com.lowdragmc.lowdraglib.gui.texture.ColorBorderTexture;
-import com.lowdragmc.lowdraglib.gui.texture.ColorRectTexture;
-import com.lowdragmc.lowdraglib.gui.texture.GuiTextureGroup;
-import com.lowdragmc.lowdraglib.gui.texture.ItemStackTexture;
-import com.lowdragmc.lowdraglib.gui.texture.ResourceBorderTexture;
-import com.lowdragmc.lowdraglib.gui.texture.TextTexture;
-import com.lowdragmc.lowdraglib.gui.util.ClickData;
-import com.lowdragmc.lowdraglib.gui.widget.ButtonWidget;
-import com.lowdragmc.lowdraglib.gui.widget.ImageWidget;
-import com.lowdragmc.lowdraglib.gui.widget.LabelWidget;
-import com.lowdragmc.lowdraglib.gui.widget.Widget;
-import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
-import com.lowdragmc.lowdraglib.utils.Position;
-import com.lowdragmc.lowdraglib.utils.Size;
+import com.lowdragmc.lowdraglib2.gui.texture.ColorRectTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.GuiTextureGroup;
+import com.lowdragmc.lowdraglib2.gui.texture.ItemStackTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.SDFRectTexture;
+import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
+import com.lowdragmc.lowdraglib2.gui.ui.UI;
+import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
+import com.lowdragmc.lowdraglib2.gui.ui.data.Tooltips;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
+import com.lowdragmc.lowdraglib2.gui.ui.rendering.GUIContext;
 import com.warfactory.medical.client.ClientTourniquetTracker;
-import com.warfactory.medical.client.UiText;
 import com.warfactory.medical.client.overlay.ActionProgressOverlay;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
@@ -40,6 +34,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 
@@ -144,8 +139,12 @@ public final class MedInteractionScreen {
             targetSnapshot = null;
         }
 
-        WidgetGroup root = new WidgetGroup(0, 0, ROOT_W, ROOT_H);
-        root.setBackground(new ColorRectTexture(ROOT_BG));
+        UIElement root = new UIElement();
+        // Size only, and deliberately NOT position: absolute -- ModularUI centres the root on screen
+        // only when its position type is not ABSOLUTE, otherwise it honours the root's own taffy
+        // location (which for an absolute root pinned at 0,0 means the top-left corner).
+        root.layout(layout -> layout.width(ROOT_W).height(ROOT_H));
+        root.style(style -> style.background(new ColorRectTexture(ROOT_BG)));
 
         addHeaders(root);
         addBodyDiagram(root);
@@ -154,10 +153,7 @@ public final class MedInteractionScreen {
         addTreatmentGrid(root);
         addOverview(root);
 
-        root.setClientSideWidget();
-
-        ModularUI ui = new ModularUI(root, IUIHolder.EMPTY, player);
-        ClientUIOpener.openClientUI(ui);
+        ClientUIOpener.openClientUI(ModularUI.of(UI.of(root), player));
     }
 
 
@@ -199,19 +195,19 @@ public final class MedInteractionScreen {
     }
 
 
-    private static void addHeaders(WidgetGroup root) {
-        root.addWidget(new LabelWidget(LEFT_X, 5, "EXAMINATION"));
-        root.addWidget(new LabelWidget(LEFT_X, TREAT_LABEL_Y, "TREATMENT"));
-        LabelWidget statusHeader = new LabelWidget(208, 5, targetId < 0 ? "STATUS" : targetName().getString());
+    private static void addHeaders(UIElement root) {
+        root.addChild(MedUi.label(LEFT_X, 5, "EXAMINATION"));
+        root.addChild(MedUi.label(LEFT_X, TREAT_LABEL_Y, "TREATMENT"));
+        Label statusHeader = MedUi.label(208, 5, targetId < 0 ? "STATUS" : targetName().getString());
         if (targetId >= 0) {
-            statusHeader.setColor(0xFFE0A020);
+            statusHeader.textStyle(style -> style.textColor(0xFFE0A020));
         }
-        root.addWidget(statusHeader);
-        root.addWidget(new LabelWidget(340, 5, "OVERVIEW"));
+        root.addChild(statusHeader);
+        root.addChild(MedUi.label(340, 5, "OVERVIEW"));
     }
 
 
-    private static void addBodyDiagram(WidgetGroup root) {
+    private static void addBodyDiagram(UIElement root) {
         ClientPlayerSkins.Skin skin = ClientPlayerSkins.forEntity(targetId);
         for (LimbTile tile : BODY_TILES) {
             MedicalUIParts.addLimbTile(root, tile.limb(), tile.x(), tile.y(), tile.w(), tile.h(),
@@ -220,8 +216,8 @@ public final class MedInteractionScreen {
     }
 
 
-    private static void addExaminationGrid(WidgetGroup root) {
-        root.addWidget(new RefreshingGroup(LEFT_X, WOUND_Y, 185, 30,
+    private static void addExaminationGrid(UIElement root) {
+        root.addChild(new RefreshingGroup(LEFT_X, WOUND_Y, 185, 30,
                 MedInteractionScreen::examinationSignature, MedInteractionScreen::buildWounds));
     }
 
@@ -240,24 +236,22 @@ public final class MedInteractionScreen {
         return sb.toString();
     }
 
-    private static void buildWounds(WidgetGroup group) {
+    private static void buildWounds(UIElement group) {
         LimbType limb = MedicalUIParts.selectedLimb();
         if (limb == null) {
-            group.addWidget(new LabelWidget(0, 8, Component.translatable("gui.wfmedical.wound.no_limb").getString()));
+            group.addChild(MedUi.label(0, 8, Component.translatable("gui.wfmedical.wound.no_limb").getString()));
             return;
         }
         List<WoundView> wounds = sheetLimb(limb).wounds();
         if (wounds.isEmpty()) {
-            group.addWidget(new LabelWidget(0, 8, Component.translatable("gui.wfmedical.wound.none").getString()));
+            group.addChild(MedUi.label(0, 8, Component.translatable("gui.wfmedical.wound.none").getString()));
             return;
         }
         int col = 0;
         for (WoundView w : wounds) {
             int x = col * (WOUND_CELL + WOUND_GAP);
-            ImageWidget square = new ImageWidget(x, 0, WOUND_CELL, WOUND_CELL,
-                    new ColorRectTexture(woundColor(w)).setRadius(3));
-            square.setHoverTooltips(woundTooltip(w));
-            group.addWidget(square);
+            group.addChild(MedUi.image(x, 0, WOUND_CELL, WOUND_CELL,
+                    SDFRectTexture.of(woundColor(w)).setRadius(3), woundTooltip(w)));
             col++;
         }
     }
@@ -338,8 +332,8 @@ public final class MedInteractionScreen {
     }
 
 
-    private static void addTreatmentGrid(WidgetGroup root) {
-        root.addWidget(new RefreshingGroup(LEFT_X, GRID_Y, 185, 95,
+    private static void addTreatmentGrid(UIElement root) {
+        root.addChild(new RefreshingGroup(LEFT_X, GRID_Y, 185, 95,
                 MedInteractionScreen::treatmentSignature, MedInteractionScreen::buildTreatments));
     }
 
@@ -354,7 +348,7 @@ public final class MedInteractionScreen {
         return sb.toString();
     }
 
-    private static void buildTreatments(WidgetGroup group) {
+    private static void buildTreatments(UIElement group) {
         if (ClientMedicalCache.hasActiveTreatment()) {
             buildActiveTreatment(group);
             return;
@@ -376,7 +370,7 @@ public final class MedInteractionScreen {
             idx++;
         }
         if (idx == 0) {
-            group.addWidget(new LabelWidget(0, 8, Component.translatable("gui.wfmedical.radial.no_items").getString()));
+            group.addChild(MedUi.label(0, 8, Component.translatable("gui.wfmedical.radial.no_items").getString()));
         }
     }
 
@@ -388,34 +382,41 @@ public final class MedInteractionScreen {
         return (idx / GRID_COLS) * (GRID_CELL + GRID_GAP);
     }
 
-    private static void buildActiveTreatment(WidgetGroup group) {
-        group.addWidget(new ProgressWidget(0, 0, 165, 20));
+    private static void buildActiveTreatment(UIElement group) {
+        group.addChild(new ProgressElement(0, 0, 165, 20));
         String cancel = Component.translatable("gui.wfmedical.treat.interrupt").getString();
-        group.addWidget(new ButtonWidget(43, 27, 80, 16,
-                new GuiTextureGroup(ResourceBorderTexture.BUTTON_COMMON, new TextTexture(cancel)),
-                (ClickData cd) -> MedicalUIParts.requestCancelTreatment()));
+        // LDLib2 has no ResourceBorderTexture.BUTTON_COMMON; its Button already paints the stock
+        // LDLib button look (Sprites.RECT_RD and friends) and hosts the label itself.
+        group.addChild(MedUi.textButton(43, 27, 80, 16, cancel, MedicalUIParts::requestCancelTreatment));
     }
 
-    private static void addTreatmentButton(WidgetGroup group, ItemStack stack, int x, int y) {
+    private static void addTreatmentButton(UIElement group, ItemStack stack, int x, int y) {
         GuiTextureGroup face = new GuiTextureGroup(
-                new ColorRectTexture(GRID_BG_COLOR).setRadius(GRID_RADIUS),
+                SDFRectTexture.of(GRID_BG_COLOR).setRadius(GRID_RADIUS),
                 new ItemStackTexture(stack));
-        ButtonWidget button = new ButtonWidget(x, y, GRID_CELL, GRID_CELL, face,
-                (ClickData cd) -> MedicalUIParts.requestAction(stack, MedicalUIParts.selectedLimb(), targetId));
-        button.setHoverTexture(new ColorBorderTexture(2, GRID_HOVER_COLOR).setRadius(GRID_RADIUS));
-        button.setHoverTooltips(stack.getTooltipLines(Minecraft.getInstance().player, TooltipFlag.Default.NORMAL));
-        group.addWidget(button);
+        GuiTextureGroup hover = new GuiTextureGroup(face,
+                SDFRectTexture.of(0x00000000).setRadius(GRID_RADIUS)
+                        .setBorderColor(GRID_HOVER_COLOR).setStroke(2));
+        group.addChild(MedUi.iconButton(x, y, GRID_CELL, GRID_CELL, face, hover,
+                itemTooltip(stack),
+                () -> MedicalUIParts.requestAction(stack, MedicalUIParts.selectedLimb(), targetId)));
     }
 
-    private static void addTourniquetRemoveButton(WidgetGroup group, int x, int y) {
+    private static void addTourniquetRemoveButton(UIElement group, int x, int y) {
         GuiTextureGroup face = new GuiTextureGroup(
-                new ColorRectTexture(TQ_REMOVE_BG_COLOR).setRadius(GRID_RADIUS),
+                SDFRectTexture.of(TQ_REMOVE_BG_COLOR).setRadius(GRID_RADIUS),
                 new ItemStackTexture(new ItemStack(ModItems.TOURNIQUET.get())));
-        ButtonWidget button = new ButtonWidget(x, y, GRID_CELL, GRID_CELL, face,
-                (ClickData cd) -> MedicalUIParts.requestRemoveTourniquet(MedicalUIParts.selectedLimb(), targetId));
-        button.setHoverTexture(new ColorBorderTexture(2, GRID_HOVER_COLOR).setRadius(GRID_RADIUS));
-        button.setHoverTooltips(List.of(Component.translatable("gui.wfmedical.tourniquet.remove")));
-        group.addWidget(button);
+        GuiTextureGroup hover = new GuiTextureGroup(face,
+                SDFRectTexture.of(0x00000000).setRadius(GRID_RADIUS)
+                        .setBorderColor(GRID_HOVER_COLOR).setStroke(2));
+        group.addChild(MedUi.iconButton(x, y, GRID_CELL, GRID_CELL, face, hover,
+                List.of(Component.translatable("gui.wfmedical.tourniquet.remove")),
+                () -> MedicalUIParts.requestRemoveTourniquet(MedicalUIParts.selectedLimb(), targetId)));
+    }
+
+    private static List<Component> itemTooltip(ItemStack stack) {
+        Minecraft mc = Minecraft.getInstance();
+        return stack.getTooltipLines(Item.TooltipContext.of(mc.level), mc.player, TooltipFlag.Default.NORMAL);
     }
 
     private static boolean tourniquetApplied(LimbType limb) {
@@ -433,27 +434,9 @@ public final class MedInteractionScreen {
     }
 
 
-    private static void addStatusReadout(WidgetGroup root) {
-        root.addWidget(new StatusLabel(STATUS_CENTER_X, STATUS_Y));
-    }
-
-    private static final class StatusLabel extends LabelWidget {
-        private final int centerX;
-        private final int lineY;
-
-        private StatusLabel(int centerX, int y) {
-            super(centerX, y, MedInteractionScreen::statusText);
-            this.centerX = centerX;
-            this.lineY = y;
-        }
-
-        @Override
-        public void updateScreen() {
-            super.updateScreen();
-            setColor(statusColor());
-            int width = Minecraft.getInstance().font.width(statusText());
-            setSelfPosition(new Position(centerX - width / 2, lineY));
-        }
+    private static void addStatusReadout(UIElement root) {
+        root.addChild(MedUi.centeredLabel(STATUS_CENTER_X, STATUS_Y,
+                MedInteractionScreen::statusText, MedInteractionScreen::statusColor));
     }
 
     private static String statusText() {
@@ -467,7 +450,10 @@ public final class MedInteractionScreen {
         if (s.fracture()) {
             line += "  †";
         }
-        return UiText.escape(line);
+        // No UiText.escape here: MedUi labels render via Component.literal, which does no format
+        // substitution, so a doubled %% would show up verbatim. (The HUD overlays still need it --
+        // they go through TextTexture -> LocalizationUtils.format -> I18n.)
+        return line;
     }
 
     private static int statusColor() {
@@ -479,7 +465,7 @@ public final class MedInteractionScreen {
     }
 
 
-    private static void addOverview(WidgetGroup root) {
+    private static void addOverview(UIElement root) {
         int y = OVERVIEW_Y;
         Player player = Minecraft.getInstance().player;
 
@@ -501,26 +487,20 @@ public final class MedInteractionScreen {
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () ->
-                UiText.escape("Pain: " + Math.round(sheetStats().totalPain() * 100.0F) + "%"));
+                "Pain: " + Math.round(sheetStats().totalPain() * 100.0F) + "%");
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () ->
                 "Bleeding: " + fmt((float) sheetStats().totalBleeding()) + " ml/s");
         y += OVERVIEW_LINE_H;
 
-        LabelWidget stateLine = new LabelWidget(OVERVIEW_X, y, () ->
-                "State: " + MedicalUIParts.stateName(sheetState()).getString()) {
-            @Override
-            public void updateScreen() {
-                super.updateScreen();
-                setColor(MedicalUIParts.stateColor(sheetState()));
-            }
-        };
-        root.addWidget(stateLine);
+        root.addChild(MedUi.label(OVERVIEW_X, y,
+                () -> "State: " + MedicalUIParts.stateName(sheetState()).getString(),
+                () -> MedicalUIParts.stateColor(sheetState())));
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () ->
-                UiText.escape("Movement: " + Math.round(sheetStats().movementMultiplier() * 100.0F) + "%"));
+                "Movement: " + Math.round(sheetStats().movementMultiplier() * 100.0F) + "%");
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () -> {
@@ -538,8 +518,8 @@ public final class MedInteractionScreen {
         });
     }
 
-    private static void addLine(WidgetGroup root, int y, Supplier<String> text) {
-        root.addWidget(new LabelWidget(OVERVIEW_X, y, text));
+    private static void addLine(UIElement root, int y, Supplier<String> text) {
+        root.addChild(MedUi.label(OVERVIEW_X, y, text, null));
     }
 
     private static String fmt(float value) {
@@ -547,44 +527,54 @@ public final class MedInteractionScreen {
     }
 
 
-    private static final class ProgressWidget extends Widget {
-        private ProgressWidget(int x, int y, int width, int height) {
-            super(new Position(x, y), new Size(width, height));
+    /** Hosts the shared HUD treatment-progress bar inside the sheet. */
+    private static final class ProgressElement extends UIElement {
+
+        private ProgressElement(int x, int y, int width, int height) {
+            MedUi.at(this, x, y, width, height);
         }
 
         @Override
-        public void drawInBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-            super.drawInBackground(graphics, mouseX, mouseY, partialTick);
-            Position p = getPosition();
-            Size s = getSize();
-            ActionProgressOverlay.drawBar(graphics, p.x, p.y + 11, s.width);
+        public void drawBackgroundAdditional(GUIContext guiContext) {
+            super.drawBackgroundAdditional(guiContext);
+            ActionProgressOverlay.drawBar(guiContext.graphics,
+                    Math.round(getPositionX()), Math.round(getPositionY()) + 11,
+                    Math.round(getSizeWidth()), guiContext.partialTick);
         }
     }
 
+    /**
+     * A container that rebuilds its children whenever a cheap signature of the underlying state changes.
+     *
+     * <p>LDLib 1.x drove this from {@code WidgetGroup.updateScreen()}; the LDLib2 equivalent is
+     * {@link #screenTick()}, which ModularUI pumps once per client tick. The rebuild must happen there
+     * and not from a draw hook: layout is solved before the draw pass, so children added mid-draw have
+     * no computed rect yet and paint at a stale one for a frame -- visible as a flash on every change.
+     */
+    private static final class RefreshingGroup extends UIElement {
 
-    private static final class RefreshingGroup extends WidgetGroup {
         private final Supplier<Object> signature;
-        private final Consumer<WidgetGroup> builder;
+        private final Consumer<UIElement> builder;
         private Object last;
 
         private RefreshingGroup(int x, int y, int width, int height,
-                                Supplier<Object> signature, Consumer<WidgetGroup> builder) {
-            super(x, y, width, height);
+                                Supplier<Object> signature, Consumer<UIElement> builder) {
             this.signature = signature;
             this.builder = builder;
+            MedUi.at(this, x, y, width, height);
             builder.accept(this);
             this.last = signature.get();
         }
 
         @Override
-        public void updateScreen() {
+        public void screenTick() {
+            super.screenTick();
             Object current = signature.get();
             if (!Objects.equals(current, last)) {
                 last = current;
-                clearAllWidgets();
+                clearAllChildren();
                 builder.accept(this);
             }
-            super.updateScreen();
         }
     }
 }

@@ -1,7 +1,7 @@
 package com.warfactory.medical.server;
 
-import com.warfactory.medical.capability.IMedicalData;
-import com.warfactory.medical.capability.MedicalCapabilities;
+import com.warfactory.medical.attachment.IMedicalData;
+import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
@@ -57,7 +57,7 @@ public final class MedicalEngine {
     }
 
     private static void tickPlayer(ServerPlayer player, PhysiologyParams params, int interval) {
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return;
         }
@@ -356,7 +356,7 @@ public final class MedicalEngine {
         if (player == null || !MedicalConfig.enableGiveUp()) {
             return;
         }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return;
         }
@@ -553,7 +553,7 @@ public final class MedicalEngine {
         if (player == null) {
             return;
         }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return;
         }
@@ -570,7 +570,7 @@ public final class MedicalEngine {
 
     public static void onPlayerLeave(ServerPlayer player) {
         MedicalEffects.clear(player);
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data != null && data.getProfile().isLastBroadcastDowned()) {
             MedicalNetworking.broadcastDowned(player, false);
             data.getProfile().setLastBroadcastDowned(false);

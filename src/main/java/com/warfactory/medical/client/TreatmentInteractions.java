@@ -30,14 +30,14 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.InputEvent;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.minecraft.core.registries.BuiltInRegistries;
 
-@Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = WFMedical.MOD_ID, value = Dist.CLIENT)
 public final class TreatmentInteractions {
 
     private static int lockedSlot = -1;
@@ -72,7 +72,7 @@ public final class TreatmentInteractions {
 
     private static void beginTreatment(Minecraft mc, LocalPlayer player, ItemStack held) {
         Item item = held.getItem();
-        ResourceLocation itemId = ForgeRegistries.ITEMS.getKey(item);
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
         if (itemId == null) {
             return;
         }
@@ -101,7 +101,7 @@ public final class TreatmentInteractions {
         if (player == null || mc.screen != null) {
             return;
         }
-        Item item = ForgeRegistries.ITEMS.getValue(packet.itemId());
+        Item item = BuiltInRegistries.ITEM.getOptional(packet.itemId()).orElse(null);
         if (!(item instanceof MedicalItem) || !holdsAnywhere(player, item)) {
             return;
         }
@@ -115,7 +115,7 @@ public final class TreatmentInteractions {
         if (player == null || limbs == null) {
             return;
         }
-        Item item = ForgeRegistries.ITEMS.getValue(itemId);
+        Item item = BuiltInRegistries.ITEM.getOptional(itemId).orElse(null);
         boolean tourniquetHeld = item instanceof MedicalItem medical
                 && medical.getTreatment() != null
                 && medical.getTreatment().action() == TreatmentAction.APPLY_TOURNIQUET;
@@ -201,10 +201,7 @@ public final class TreatmentInteractions {
 
 
     @SubscribeEvent
-    public static void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) {
-            return;
-        }
+    public static void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         boolean active = player != null && ClientMedicalCache.hasActiveTreatment();

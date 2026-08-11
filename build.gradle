@@ -2,8 +2,7 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'maven-publish'
-    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
-    id 'org.spongepowered.mixin' version '0.7.+'
+    id 'net.neoforged.moddev' version '2.0.143'
 }
 
 version = mod_version
@@ -13,77 +12,80 @@ base {
     archivesName = mod_id
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
 
-minecraft {
-    mappings channel: mapping_channel, version: mapping_version
+neoForge {
+    version = neoforge_version
 
-    // Required for this template to function (process resources on IDE output before launch).
-    copyIdeResources = true
+    // Mixin configs are declared in neoforge.mods.toml; NeoForge 1.21.1 runs on official names in
+    // both dev and production, so no refmap / remapping step is needed any more.
+    accessTransformers.from('src/main/resources/META-INF/accesstransformer.cfg')
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
 
     runs {
         configureEach {
-            workingDirectory project.file('run')
-
-            property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'debug'
-
-            // Mixin: make the refmap remapping happy in the dev environment.
-            property 'mixin.env.remapRefMap', 'true'
-            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
-
-            mods {
-                "${mod_id}" {
-                    source sourceSets.main
-                }
-            }
+            gameDirectory = project.file('run')
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            logLevel = org.slf4j.event.Level.DEBUG
         }
 
         client {
-            property 'forge.enabledGameTestNamespaces', mod_id
-            // Developer-only: unlocks the WF Medical screen-effect debug key binds (toggle all effects / verbose
-            // logging). Set only on dev client runs; shipped clients never get it, so players cannot access it.
-            // Inherited by client1/client2 via `parent minecraft.runs.client`.
-            property 'wfmedical.debug', 'true'
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+            // Developer-only: unlocks the WF Medical screen-effect debug key binds (toggle all effects /
+            // verbose logging). Set only on dev client runs; shipped clients never get it, so players
+            // cannot access it. Repeated on client1/client2 (MDG runs do not inherit from each other).
+            systemProperty 'wfmedical.debug', 'true'
         }
 
-
         client1 {
-            parent minecraft.runs.client
-            workingDirectory project.file('run/client1')
-            property 'forge.enabledGameTestNamespaces', mod_id
-            args '--username', 'Player1'
-            args '--quickPlayMultiplayer', 'localhost:25565'
+            client()
+            gameDirectory = project.file('run/client1')
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+            systemProperty 'wfmedical.debug', 'true'
+            programArguments.addAll '--username', 'Player1'
+            programArguments.addAll '--quickPlayMultiplayer', 'localhost:25565'
         }
 
         client2 {
-            parent minecraft.runs.client
-            workingDirectory project.file('run/client2')
-            property 'forge.enabledGameTestNamespaces', mod_id
-            args '--username', 'Player2'
-            args '--quickPlayMultiplayer', 'localhost:25565'
+            client()
+            gameDirectory = project.file('run/client2')
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+            systemProperty 'wfmedical.debug', 'true'
+            programArguments.addAll '--username', 'Player2'
+            programArguments.addAll '--quickPlayMultiplayer', 'localhost:25565'
         }
 
         server {
-            property 'forge.enabledGameTestNamespaces', mod_id
+            server()
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
         }
 
         gameTestServer {
-            property 'forge.enabledGameTestNamespaces', mod_id
+            type = 'gameTestServer'
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
         }
 
         data {
-            workingDirectory project.file('run-data')
-            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+            data()
+            gameDirectory = project.file('run-data')
+            programArguments.addAll '--mod', mod_id, '--all',
+                    '--output', file('src/generated/resources/').getAbsolutePath(),
+                    '--existing', file('src/main/resources/').getAbsolutePath()
         }
     }
 }
 
 tasks.register('prepareDedicatedServer') {
     description = 'Accepts the EULA and forces offline mode for the dev dedicated server.'
-    group = 'forgegradle runs'
+    group = 'neoforge runs'
 
     doLast {
         def runDir = project.file('run')
@@ -110,10 +112,10 @@ tasks.matching { it.name in ['runServer', 'runGameTestServer'] }.configureEach {
 
 
 tasks.register('runAll') {
-    group = 'forgegradle runs'
+    group = 'neoforge runs'
     description = 'Launch the offline server + both isolated clients together (multiplayer test).'
 
-    dependsOn 'prepareDedicatedServer', 'prepareRunServer', 'prepareRunClient1', 'prepareRunClient2'
+    dependsOn 'prepareDedicatedServer'
 
     doLast {
         if (System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win')) {
@@ -170,7 +172,7 @@ tasks.register('runAll') {
 
 
 tasks.register('stopAll') {
-    group = 'forgegradle runs'
+    group = 'neoforge runs'
     description = 'Stop the offline server + both clients started by runAll.'
     doLast {
         def handles = findWfmedicalGameJvms(project)
@@ -182,7 +184,7 @@ tasks.register('stopAll') {
 
 def findWfmedicalGameJvms(project) {
     def root = project.projectDir.absolutePath
-    def markers = ['--launchTarget forgeserveruserdev', '--username Player1', '--username Player2']
+    def markers = ['net.neoforged.dev.DedicatedServerLaunch', '--username Player1', '--username Player2']
     def handles = []
     new File('/proc').listFiles()?.each { dir ->
         if (!(dir.name ==~ /\d+/)) { return }
@@ -198,22 +200,21 @@ def findWfmedicalGameJvms(project) {
     return handles
 }
 
-// Sponge Mixin plugin: generate and bundle the refmap for our mixin config.
-mixin {
-    add sourceSets.main, "${mod_id}.refmap.json"
-    config "${mod_id}.mixins.json"
-    config "${mod_id}.tacz.mixins.json"
-}
-
 // Include resources generated by data generators.
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
+    // LDLib2 (UI framework).
     maven {
-        name = 'SpongePowered'
-        url = 'https://repo.spongepowered.org/repository/maven-public/'
+        name = 'FirstDarkDev'
+        url = 'https://maven.firstdark.dev/snapshots'
     }
-    // CurseForge maven – hosts LDLib (UI framework) and, if ever needed directly, TACZ.
+    // PlayerAnimator (KosmX).
+    maven {
+        name = 'KosmX'
+        url = 'https://maven.kosmx.dev/'
+    }
+    // CurseForge maven – hosts the unofficial TACZ 1.21.1 NeoForge port.
     maven {
         name = 'CurseMaven'
         url = 'https://cursemaven.com'
@@ -223,54 +224,32 @@ repositories {
 }
 
 dependencies {
-    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
-
-    // Mixin annotation processor (required so @Mixin classes generate the refmap).
-    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
-
-    // LDLib – UI framework used for the character sheet, radial menu and HUD overlays.
-    implementation fg.deobf("curse.maven:ldlib-626676:7809449")
+    // LDLib2 – UI framework used for the character sheet, radial menu and HUD overlays.
+    // The `all` classifier is the shaded jar LDLib2 documents for consumers.
+    implementation "com.lowdragmc.ldlib2:ldlib2-neoforge-1.21.1:${ldlib_version}:all"
 
     // PlayerAnimator (KosmX) – player animation library. The limb hitbox rig reads its animated bone
     // transforms so hitboxes track played animations instead of only the vanilla pose.
-    implementation fg.deobf("curse.maven:playeranimator-658587:4587214")
+    implementation "dev.kosmx.player-anim:player-animation-lib-forge:${playeranimator_version}"
 
-    // Soft TACZ compat only – no hard dependency. To reference TACZ directly:
-     compileOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")
-    runtimeOnly fg.deobf("curse.maven:timeless-and-classics-zero-1028108:8141310")
+    // Soft TACZ compat only – no hard dependency, but the mixins need the classes at compile time.
+    compileOnly "curse.maven:tacz-1-21-1-${tacz_curse_project}:${tacz_curse_file}"
+    runtimeOnly "curse.maven:tacz-1-21-1-${tacz_curse_project}:${tacz_curse_file}"
 }
 
 tasks.named('processResources', ProcessResources).configure {
     var replaceProperties = [
             minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
-            forge_version: forge_version, forge_version_range: forge_version_range,
+            neoforge_version: neoforge_version, neoforge_version_range: neoforge_version_range,
             loader_version_range: loader_version_range,
             mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
             mod_authors: mod_authors, mod_description: mod_description,
     ]
     inputs.properties replaceProperties
 
-    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+    filesMatching(['META-INF/neoforge.mods.toml', 'pack.mcmeta']) {
         expand replaceProperties + [project: project]
     }
-}
-
-tasks.named('jar', Jar).configure {
-    manifest {
-        attributes([
-                'Specification-Title'     : mod_id,
-                'Specification-Vendor'    : mod_authors,
-                'Specification-Version'   : '1',
-                'Implementation-Title'    : project.name,
-                'Implementation-Version'  : project.jar.archiveVersion,
-                'Implementation-Vendor'   : mod_authors,
-                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-                // Tell Forge which mixin config(s) to load from this jar.
-                'MixinConfigs'            : "${mod_id}.mixins.json,${mod_id}.tacz.mixins.json"
-        ])
-    }
-
-    finalizedBy 'reobfJar'
 }
 
 publishing {

@@ -1,22 +1,21 @@
 package com.warfactory.medical.client.overlay;
 
-import com.lowdragmc.lowdraglib.gui.texture.ColorRectTexture;
-import com.lowdragmc.lowdraglib.gui.texture.ProgressTexture;
-import com.lowdragmc.lowdraglib.gui.texture.TextTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.ColorRectTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.TextTexture;
 import com.warfactory.medical.client.screen.MedicalUIParts;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.gui.overlay.ForgeGui;
-import net.minecraftforge.client.gui.overlay.IGuiOverlay;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 
 @OnlyIn(Dist.CLIENT)
-public final class HealthBarOverlay implements IGuiOverlay {
+public final class HealthBarOverlay implements LayeredDraw.Layer {
 
-    public static final IGuiOverlay INSTANCE = new HealthBarOverlay();
+    public static final LayeredDraw.Layer INSTANCE = new HealthBarOverlay();
 
     private static final int BAR_WIDTH = 81;
     private static final int BAR_HEIGHT = 9;
@@ -33,7 +32,10 @@ public final class HealthBarOverlay implements IGuiOverlay {
     }
 
     @Override
-    public void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenW, int screenH) {
+    public void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+        int screenW = graphics.guiWidth();
+        int screenH = graphics.guiHeight();
+        float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null || mc.level == null) {
@@ -45,7 +47,8 @@ public final class HealthBarOverlay implements IGuiOverlay {
         if (mc.gameMode == null || !mc.gameMode.canHurtPlayer()) {
             return;
         }
-        if (!gui.shouldDrawSurvivalElements()) {
+        // ForgeGui.shouldDrawSurvivalElements() is gone; this is its body.
+        if (!(mc.getCameraEntity() instanceof net.minecraft.world.entity.player.Player)) {
             return;
         }
 
@@ -59,19 +62,19 @@ public final class HealthBarOverlay implements IGuiOverlay {
         }
 
         int x = screenW / 2 - 91;
-        int y = screenH - gui.leftHeight;
+        int y = screenH - mc.gui.leftHeight;
 
-        BACKGROUND.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT);
+        BACKGROUND.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT, partialTick);
         HEALTH_FILL.setProgress(fraction);
-        HEALTH_FILL.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT);
+        HEALTH_FILL.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT, partialTick);
 
         int color = MedicalUIParts.stateColor(ClientMedicalCache.state());
         LABEL.setColor(color);
         LABEL.updateText(Math.round(health) + "/" + Math.round(maxHealth));
-        LABEL.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT);
+        LABEL.draw(graphics, -1, -1, x, y, BAR_WIDTH, BAR_HEIGHT, partialTick);
 
         // Mirror vanilla renderHealth's leftHeight contract so the next left-stack overlay
         // (armor) renders above this bar instead of on top of it.
-        gui.leftHeight += 10;
+        mc.gui.leftHeight += 10;
     }
 }

@@ -2,9 +2,8 @@ package com.warfactory.medical.event;
 
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.api.MedicalState;
-import com.warfactory.medical.capability.IMedicalData;
-import com.warfactory.medical.capability.MedicalCapabilities;
-import com.warfactory.medical.capability.MedicalProvider;
+import com.warfactory.medical.attachment.IMedicalData;
+import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.compat.OpenPersistenceCompat;
 import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.config.MedicalConfig;
@@ -23,7 +22,6 @@ import com.warfactory.medical.network.MedicalNetworking;
 import com.warfactory.medical.server.MedicalActionService;
 import com.warfactory.medical.server.MedicalEffects;
 import com.warfactory.medical.server.MedicalEngine;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.RandomSource;
@@ -34,30 +32,27 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
-import net.minecraftforge.event.AttachCapabilitiesEvent;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.entity.living.LivingAttackEvent;
-import net.minecraftforge.event.entity.living.LivingDeathEvent;
-import net.minecraftforge.event.entity.living.LivingEntityUseItemEvent;
-import net.minecraftforge.event.entity.living.LivingHealEvent;
-import net.minecraftforge.event.entity.living.LivingHurtEvent;
-import net.minecraftforge.event.entity.player.AttackEntityEvent;
-import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.event.entity.player.PlayerInteractEvent;
-import net.minecraftforge.event.level.BlockEvent;
-import net.minecraftforge.eventbus.api.EventPriority;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
+import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
+import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
+import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.bus.api.EventPriority;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.UUID;
 
-@Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(modid = WFMedical.MOD_ID)
 public final class MedicalEventHandler {
-
-    private static final ResourceLocation MEDICAL_KEY = new ResourceLocation(WFMedical.MOD_ID, "medical");
 
     private static final float BLOCKED_RESIDUAL_FRACTION = 0.15F;
     private static final float BLOCKED_RESIDUAL_MAX = 1.0F;
@@ -69,42 +64,29 @@ public final class MedicalEventHandler {
     }
 
 
-    @SubscribeEvent
-    public static void onAttachCapabilities(AttachCapabilitiesEvent<Entity> event) {
-        Entity object = event.getObject();
-        if (object instanceof Player
-                || (OpenPersistenceCompat.isPersistentBody(object) && MedicalConfig.openPersistenceCompat())) {
-            MedicalProvider provider = new MedicalProvider();
-            event.addCapability(MEDICAL_KEY, provider);
-            event.addListener(provider::invalidate);
-        }
-    }
-
+    // No attach handler any more: medical state is a data attachment, created lazily on first access.
+    // MedicalAttachments.get() carries the old attach condition (players + OpenPersistence bodies), so
+    // ineligible entities still read back null instead of silently gaining a profile.
 
     @SubscribeEvent
-    public static void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase == TickEvent.Phase.END) {
-            MedicalEngine.onServerTick(event.getServer());
-        }
+    public static void onServerTick(ServerTickEvent.Post event) {
+        MedicalEngine.onServerTick(event.getServer());
     }
 
     @SubscribeEvent
-    public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) {
+    public static void onPlayerTick(PlayerTickEvent.Post event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
-        if (!(event.player instanceof ServerPlayer player)) {
-            return;
-        }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return;
         }
         MedicalEngine.tickBreathing(player, data.getProfile());
     }
 
-    @SubscribeEvent
-    public static void onDrownDamage(LivingAttackEvent event) {
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onDrownDamage(LivingIncomingDamageEvent event) {
         if (!MedicalConfig.drowningAsphyxiaEnabled()) {
             return;
         }
@@ -116,8 +98,8 @@ public final class MedicalEventHandler {
         }
     }
 
-    @SubscribeEvent
-    public static void onDownedSuffocation(LivingAttackEvent event) {
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onDownedSuffocation(LivingIncomingDamageEvent event) {
         if (!(event.getEntity() instanceof Player player) || player.level().isClientSide) {
             return;
         }
@@ -129,8 +111,8 @@ public final class MedicalEventHandler {
 
 
 
-    @SubscribeEvent
-    public static void onLivingAttackGapReject(LivingAttackEvent event) {
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onLivingAttackGapReject(LivingIncomingDamageEvent event) {
         LivingEntity victim = event.getEntity();
         if (victim.level().isClientSide) {
             return;
@@ -152,7 +134,7 @@ public final class MedicalEventHandler {
     }
 
     @SubscribeEvent
-    public static void onLivingHurt(LivingHurtEvent event) {
+    public static void onLivingHurt(LivingIncomingDamageEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
@@ -168,7 +150,7 @@ public final class MedicalEventHandler {
             return;
         }
 
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return;
         }
@@ -243,7 +225,7 @@ public final class MedicalEventHandler {
         if ((player.isCreative() || player.isSpectator()) && MedicalConfig.effectImmuneInCreative()) {
             return;
         }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return;
         }
@@ -380,7 +362,7 @@ public final class MedicalEventHandler {
         if (player.level().isClientSide) {
             return;
         }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return;
         }
@@ -472,7 +454,7 @@ public final class MedicalEventHandler {
         if (event.getEntity() instanceof ServerPlayer player) {
             MedicalEngine.onPlayerJoin(player);
             MedicalNetworking.sendHitAuthority(player);
-            IMedicalData data = MedicalCapabilities.get(player);
+            IMedicalData data = MedicalAttachments.get(player);
             if (data != null) {
                 MedicalNetworking.broadcastTourniquets(player, data.getProfile());
             }
@@ -507,7 +489,7 @@ public final class MedicalEventHandler {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
-        IMedicalData data = MedicalCapabilities.get(player);
+        IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
             return;
         }
@@ -529,7 +511,7 @@ public final class MedicalEventHandler {
         if (!(event.getEntity() instanceof ServerPlayer viewer)) {
             return;
         }
-        IMedicalData data = MedicalCapabilities.get(target);
+        IMedicalData data = MedicalAttachments.get(target);
         if (data == null) {
             return;
         }
@@ -543,17 +525,11 @@ public final class MedicalEventHandler {
         if (event.isWasDeath()) {
             return;
         }
-        Player original = event.getOriginal();
-        original.reviveCaps();
-        try {
-            MedicalCapabilities.copy(original, event.getEntity());
-        } finally {
-            original.invalidateCaps();
-        }
+        MedicalAttachments.copy(event.getOriginal(), event.getEntity());
     }
 
     @SubscribeEvent
-    public static void onPersistentBodyHurt(LivingHurtEvent event) {
+    public static void onPersistentBodyHurt(LivingIncomingDamageEvent event) {
         if (!MedicalConfig.openPersistenceCompat()) {
             return;
         }
@@ -581,7 +557,7 @@ public final class MedicalEventHandler {
             }
             effectiveAmount = (float) taczTotal.getAsDouble();
         }
-        IMedicalData data = victim.getCapability(MedicalCapabilities.MEDICAL).resolve().orElse(null);
+        IMedicalData data = MedicalAttachments.get(victim);
         if (data == null) {
             return;
         }
@@ -609,12 +585,12 @@ public final class MedicalEventHandler {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
-        IMedicalData playerData = MedicalCapabilities.get(player);
+        IMedicalData playerData = MedicalAttachments.get(player);
         if (playerData == null) {
             return;
         }
         findPersistentBody(player).ifPresent(body -> {
-            IMedicalData bodyData = body.getCapability(MedicalCapabilities.MEDICAL).resolve().orElse(null);
+            IMedicalData bodyData = MedicalAttachments.get(body);
             if (bodyData != null) {
                 bodyData.load(playerData.save());
                 bodyData.bumpRevision();
@@ -634,12 +610,12 @@ public final class MedicalEventHandler {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
-        IMedicalData playerData = MedicalCapabilities.get(player);
+        IMedicalData playerData = MedicalAttachments.get(player);
         if (playerData == null) {
             return;
         }
         findPersistentBody(player).ifPresent(body -> {
-            IMedicalData bodyData = body.getCapability(MedicalCapabilities.MEDICAL).resolve().orElse(null);
+            IMedicalData bodyData = MedicalAttachments.get(body);
             if (bodyData != null) {
                 playerData.load(bodyData.save());
                 playerData.bumpRevision();

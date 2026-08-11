@@ -2,8 +2,8 @@ package com.warfactory.medical.compat;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
-import net.minecraftforge.fml.ModList;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.fml.ModList;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 import java.lang.reflect.Method;
 import java.util.Optional;
@@ -14,7 +14,7 @@ public final class OpenPersistenceCompat {
 
     public static final String MOD_ID = "openpersistence";
 
-    private static final ResourceLocation BODY_TYPE = new ResourceLocation(MOD_ID, "player");
+    private static final ResourceLocation BODY_TYPE = ResourceLocation.fromNamespaceAndPath(MOD_ID, "player");
 
     private static volatile boolean ownerMethodResolved;
     private static volatile Method ownerMethod;
@@ -32,7 +32,7 @@ public final class OpenPersistenceCompat {
         if (entity == null || !isLoaded()) {
             return false;
         }
-        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+        ResourceLocation key = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return BODY_TYPE.equals(key);
     }
 

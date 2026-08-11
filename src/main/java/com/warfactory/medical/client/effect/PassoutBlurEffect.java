@@ -12,16 +12,16 @@ import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.client.renderer.PostChain;
 import net.minecraft.client.renderer.PostPass;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
-import net.minecraftforge.client.event.RenderGuiEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 import org.lwjgl.opengl.GL11;
 
 import java.util.List;
 
-@Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = WFMedical.MOD_ID, value = Dist.CLIENT)
 public final class PassoutBlurEffect {
 
     private static final float FADE_STEP = 0.06F;
@@ -29,7 +29,7 @@ public final class PassoutBlurEffect {
     private static final float MAX_RADIUS = 6.0F;
 
     private static final ResourceLocation SHADER =
-            new ResourceLocation(WFMedical.MOD_ID, "shaders/post/passout_blur.json");
+            ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "shaders/post/passout_blur.json");
 
     private static PostChain chain;
     private static int chainWidth = -1;
@@ -76,7 +76,7 @@ public final class PassoutBlurEffect {
             }
             setBlurUniforms(active, fade * MAX_RADIUS);
             event.getGuiGraphics().flush();
-            active.process(event.getPartialTick());
+            active.process(event.getPartialTick().getGameTimeDeltaPartialTick(false));
             var mainTarget = mc.getMainRenderTarget();
             mainTarget.bindWrite(false);
             RenderSystem.viewport(0, 0, mainTarget.viewWidth, mainTarget.viewHeight);

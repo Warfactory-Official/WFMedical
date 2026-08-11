@@ -1,11 +1,12 @@
 package com.warfactory.medical.client.screen;
 
-import com.lowdragmc.lowdraglib.gui.texture.ColorBorderTexture;
-import com.lowdragmc.lowdraglib.gui.texture.IGuiTexture;
-import com.lowdragmc.lowdraglib.gui.util.ClickData;
-import com.lowdragmc.lowdraglib.gui.widget.ButtonWidget;
-import com.lowdragmc.lowdraglib.gui.widget.ImageWidget;
-import com.lowdragmc.lowdraglib.gui.widget.WidgetGroup;
+import com.lowdragmc.lowdraglib2.gui.texture.ColorBorderTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
+import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
+import com.lowdragmc.lowdraglib2.gui.ui.data.Tooltips;
+import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
+import com.lowdragmc.lowdraglib2.gui.ui.rendering.GUIContext;
+import dev.vfyjxf.taffy.style.TaffyPosition;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.limb.LimbType;
@@ -18,7 +19,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 import java.util.*;
 import java.util.function.Function;
@@ -82,7 +83,7 @@ public final class MedicalUIParts {
                 || !(medicalItemStack.getItem() instanceof MedicalItem)) {
             return;
         }
-        ResourceLocation id = ForgeRegistries.ITEMS.getKey(medicalItemStack.getItem());
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(medicalItemStack.getItem());
         if (id == null) {
             return;
         }
@@ -164,8 +165,11 @@ public final class MedicalUIParts {
     }
 
 
-    public static WidgetGroup bodyDiagram(int x, int y, int width, int height) {
-        WidgetGroup group = new WidgetGroup(x, y, width, height);
+    public static UIElement bodyDiagram(int x, int y, int width, int height) {
+        UIElement group = new UIElement();
+        group.layout(layout -> layout
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(x).top(y).width(width).height(height));
 
         int colW = Math.max(1, width / 3);
         int rowH = Math.max(1, height / 4);
@@ -179,49 +183,70 @@ public final class MedicalUIParts {
         addLimbTile(group, LimbType.LEFT_LEG, colW + gap, 3 * rowH + gap, halfCol - 2 * gap, rowH - 2 * gap);
         addLimbTile(group, LimbType.RIGHT_LEG, colW + halfCol + gap, 3 * rowH + gap, halfCol - 2 * gap, rowH - 2 * gap);
 
-        group.setClientSideWidget();
         return group;
     }
 
-    public static void addLimbTile(WidgetGroup group, LimbType limb, int tx, int ty, int tw, int th) {
+    public static void addLimbTile(UIElement group, LimbType limb, int tx, int ty, int tw, int th) {
         addLimbTile(group, limb, tx, ty, tw, th, MedicalUIParts::limbSummary);
     }
 
-    public static void addLimbTile(WidgetGroup group, LimbType limb, int tx, int ty, int tw, int th,
+    public static void addLimbTile(UIElement group, LimbType limb, int tx, int ty, int tw, int th,
                                    Function<LimbType, LimbSummary> source) {
         addLimbTile(group, limb, tx, ty, tw, th, source, ClientPlayerSkins.forEntity(-1));
     }
 
-    public static void addLimbTile(WidgetGroup group, LimbType limb, int tx, int ty, int tw, int th,
+    public static void addLimbTile(UIElement group, LimbType limb, int tx, int ty, int tw, int th,
                                    Function<LimbType, LimbSummary> source, ClientPlayerSkins.Skin skin) {
         if (tw <= 0 || th <= 0) {
             return;
         }
+        group.addChild(new LimbTile(limb, source, skin, tx, ty, tw, th));
+    }
 
-        ImageWidget fill = new ImageWidget(tx, ty, tw, th,
-                ClientPlayerSkins.limbTile(limb, skin, () -> source.apply(limb).healthPercent()));
-        fill.setClientSideWidget();
-        group.addWidget(fill);
+    /**
+     * One clickable body-part tile: the skin-and-damage fill, a selection border while this limb is the
+     * selected one, and a live tooltip.
+     *
+     * <p>In LDLib 1.x this was three stacked widgets (a static ImageWidget, a supplier-driven ImageWidget
+     * for the border, and a ButtonWidget for the click + tooltip). LDLib2's UIElement has no
+     * supplier-backed image widget, so the three collapse into one element that paints the border itself
+     * and refreshes its tooltip each frame. Same pixels, one element instead of three.
+     */
+    public static final class LimbTile extends UIElement {
 
-        ImageWidget border = new ImageWidget(tx, ty, tw, th,
-                () ->
-                        selectedLimb() == limb
-                                ? new ColorBorderTexture(HIGHLIGHT_BORDER, HIGHLIGHT_COLOR)
-                                : IGuiTexture.EMPTY);
-        border.setClientSideWidget();
-        group.addWidget(border);
+        private static final IGuiTexture SELECTION =
+                new ColorBorderTexture(HIGHLIGHT_BORDER, HIGHLIGHT_COLOR);
 
-        ButtonWidget click = new ButtonWidget(tx, ty, tw, th,
-                (ClickData cd) -> selectLimb(limb)) {
-            @Override
-            public void updateScreen() {
-                super.updateScreen();
-                setHoverTooltips(limbTooltip(limb, source));
+        private final LimbType limb;
+        private final Function<LimbType, LimbSummary> source;
+
+        private LimbTile(LimbType limb, Function<LimbType, LimbSummary> source, ClientPlayerSkins.Skin skin,
+                         int tx, int ty, int tw, int th) {
+            this.limb = limb;
+            this.source = source;
+            layout(layout -> layout
+                    .positionType(TaffyPosition.ABSOLUTE)
+                    .left(tx).top(ty).width(tw).height(th));
+            style(style -> style
+                    .background(ClientPlayerSkins.limbTile(limb, skin, () -> source.apply(limb).healthPercent()))
+                    .tooltips(Tooltips.of(limbTooltip(limb, source))));
+            addEventListener(UIEvents.MOUSE_DOWN, event -> selectLimb(limb));
+        }
+
+        @Override
+        public void screenTick() {
+            super.screenTick();
+            // The old ButtonWidget refreshed its tooltip from updateScreen(); this is the equivalent hook.
+            getStyle().tooltips(Tooltips.of(limbTooltip(limb, source)));
+        }
+
+        @Override
+        public void drawBackgroundAdditional(GUIContext guiContext) {
+            super.drawBackgroundAdditional(guiContext);
+            if (selectedLimb() == limb) {
+                guiContext.drawTexture(SELECTION, getPositionX(), getPositionY(), getSizeWidth(), getSizeHeight());
             }
-        };
-        click.setHoverTooltips(limbTooltip(limb, source));
-        click.setClientSideWidget();
-        group.addWidget(click);
+        }
     }
 
     public static List<Component> limbTooltip(LimbType limb) {

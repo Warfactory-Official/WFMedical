@@ -2,6 +2,7 @@ package com.warfactory.medical.server;
 
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
@@ -9,14 +10,15 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 
-import java.util.UUID;
 
 public final class MedicalEffects {
 
-    private static final UUID MAX_HEALTH_MODIFIER_ID = UUID.fromString("b6d4c2a0-1e3f-4a7b-9c11-2f6e8a4d1c30");
-    private static final UUID MOVEMENT_MODIFIER_ID = UUID.fromString("a1f0e9d8-7c6b-4a53-8e42-0b9c7d6e5f14");
-    private static final String MAX_HEALTH_MODIFIER_NAME = "wfmedical:trauma_max_health";
-    private static final String MOVEMENT_MODIFIER_NAME = "wfmedical:trauma_movement";
+    // 1.21 replaced UUID-keyed attribute modifiers with ResourceLocation-keyed ones; these ids keep the
+    // same names the old modifiers carried, so the intent is unchanged.
+    private static final ResourceLocation MAX_HEALTH_MODIFIER_ID =
+            ResourceLocation.fromNamespaceAndPath("wfmedical", "trauma_max_health");
+    private static final ResourceLocation MOVEMENT_MODIFIER_ID =
+            ResourceLocation.fromNamespaceAndPath("wfmedical", "trauma_movement");
     private static final double EPSILON = 1.0E-4D;
 
     private MedicalEffects() {
@@ -39,11 +41,9 @@ public final class MedicalEffects {
             double without = maxHealth.getValue();
             double amount = attrTarget - without;
             if (Math.abs(amount) > EPSILON) {
-                maxHealth.addTransientModifier(new AttributeModifier(
-                        MAX_HEALTH_MODIFIER_ID,
-                        MAX_HEALTH_MODIFIER_NAME,
+                maxHealth.addTransientModifier(new AttributeModifier(MAX_HEALTH_MODIFIER_ID,
                         amount,
-                        AttributeModifier.Operation.ADDITION));
+                        AttributeModifier.Operation.ADD_VALUE));
             }
         }
 
@@ -53,11 +53,9 @@ public final class MedicalEffects {
             speed.removeModifier(MOVEMENT_MODIFIER_ID);
             double amount = movementMultiplier - 1.0D;
             if (Math.abs(amount) > EPSILON) {
-                speed.addTransientModifier(new AttributeModifier(
-                        MOVEMENT_MODIFIER_ID,
-                        MOVEMENT_MODIFIER_NAME,
+                speed.addTransientModifier(new AttributeModifier(MOVEMENT_MODIFIER_ID,
                         amount,
-                        AttributeModifier.Operation.MULTIPLY_TOTAL));
+                        AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
             }
         }
 
@@ -103,11 +101,9 @@ public final class MedicalEffects {
             double without = maxHealth.getValue();
             double amount = attrTarget - without;
             if (Math.abs(amount) > EPSILON) {
-                maxHealth.addPermanentModifier(new AttributeModifier(
-                        MAX_HEALTH_MODIFIER_ID,
-                        MAX_HEALTH_MODIFIER_NAME,
+                maxHealth.addPermanentModifier(new AttributeModifier(MAX_HEALTH_MODIFIER_ID,
                         amount,
-                        AttributeModifier.Operation.ADDITION));
+                        AttributeModifier.Operation.ADD_VALUE));
             }
         }
         float target = Math.min(stats.effectiveCurrentHealth(), attrTarget);

@@ -6,6 +6,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.UseAnim;
@@ -29,7 +30,7 @@ public class InjectableItem extends MedicalItem {
     }
 
     @Override
-    public int getUseDuration(ItemStack stack) {
+    public int getUseDuration(ItemStack stack, LivingEntity entity) {
         int ticks = substance != null ? substance.useDurationTicks() : 0;
         return ticks > 0 ? ticks : 20;
     }
@@ -40,7 +41,7 @@ public class InjectableItem extends MedicalItem {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltip, TooltipFlag flag) {
+    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
         if (substance != null) {
             String key = "tooltip.wfmedical." + substance.id().toLowerCase(Locale.ROOT);
             tooltip.add(Component.translatable(key + ".effect").withStyle(ChatFormatting.GRAY));
@@ -48,7 +49,7 @@ public class InjectableItem extends MedicalItem {
             tooltip.add(Component.translatable("tooltip.wfmedical.apply_time",
                     formatSeconds(substance.useDurationTicks())).withStyle(ChatFormatting.DARK_GRAY));
         }
-        super.appendHoverText(stack, level, tooltip, flag);
+        super.appendHoverText(stack, context, tooltip, flag);
     }
 
     @Override

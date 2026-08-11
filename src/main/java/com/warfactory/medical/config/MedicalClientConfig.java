@@ -1,19 +1,19 @@
 package com.warfactory.medical.config;
 
-import net.minecraftforge.common.ForgeConfigSpec;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 public final class MedicalClientConfig {
 
-    public static final ForgeConfigSpec SPEC;
+    public static final ModConfigSpec SPEC;
 
-    private static final ForgeConfigSpec.BooleanValue DAMAGE_OUTLINE_ENABLED;
-    private static final ForgeConfigSpec.EnumValue<HudAnchor> DAMAGE_OUTLINE_ANCHOR;
-    private static final ForgeConfigSpec.IntValue DAMAGE_OUTLINE_OFFSET_X;
-    private static final ForgeConfigSpec.IntValue DAMAGE_OUTLINE_OFFSET_Y;
-    private static final ForgeConfigSpec.DoubleValue DAMAGE_OUTLINE_SCALE;
+    private static final ModConfigSpec.BooleanValue DAMAGE_OUTLINE_ENABLED;
+    private static final ModConfigSpec.EnumValue<HudAnchor> DAMAGE_OUTLINE_ANCHOR;
+    private static final ModConfigSpec.IntValue DAMAGE_OUTLINE_OFFSET_X;
+    private static final ModConfigSpec.IntValue DAMAGE_OUTLINE_OFFSET_Y;
+    private static final ModConfigSpec.DoubleValue DAMAGE_OUTLINE_SCALE;
 
     static {
-        ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
+        ModConfigSpec.Builder b = new ModConfigSpec.Builder();
 
         b.comment("On-damage body-outline overlay: a limb-health-coloured silhouette that flashes up when you "
                         + "take damage, then eases out.")

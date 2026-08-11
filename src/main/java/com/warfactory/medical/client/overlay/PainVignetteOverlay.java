@@ -7,28 +7,29 @@ import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
-import net.minecraftforge.client.gui.overlay.ForgeGui;
-import net.minecraftforge.client.gui.overlay.IGuiOverlay;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
 @OnlyIn(Dist.CLIENT)
-public final class PainVignetteOverlay implements IGuiOverlay {
+public final class PainVignetteOverlay implements LayeredDraw.Layer {
 
-    public static final IGuiOverlay INSTANCE = new PainVignetteOverlay();
-    public static final String OVERLAY_ID = "wfmedical_pain_vignette";
+    public static final LayeredDraw.Layer INSTANCE = new PainVignetteOverlay();
+    public static final ResourceLocation OVERLAY_ID =
+            ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "pain_vignette");
 
     private static final ResourceLocation VIGNETTE_TEXTURE =
-            new ResourceLocation("minecraft", "textures/misc/vignette.png");
+            ResourceLocation.fromNamespaceAndPath("minecraft", "textures/misc/vignette.png");
 
     private static final float PAIN_THRESHOLD = 0.02F;
     private static final float ASPHYXIA_INTENSITY = 0.90F;
@@ -53,7 +54,10 @@ public final class PainVignetteOverlay implements IGuiOverlay {
     }
 
     @Override
-    public void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenW, int screenH) {
+    public void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+        int screenW = graphics.guiWidth();
+        int screenH = graphics.guiHeight();
+        float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
         if (!com.warfactory.medical.client.MedicalDebug.screenEffectsEnabled()) {
             return;
         }
@@ -153,7 +157,7 @@ public final class PainVignetteOverlay implements IGuiOverlay {
                 }
             }
             DynamicTexture texture = new DynamicTexture(image);
-            ResourceLocation id = new ResourceLocation(WFMedical.MOD_ID, "pain_vignette_white");
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "pain_vignette_white");
             Minecraft.getInstance().getTextureManager().register(id, texture);
             texture.setFilter(true, false);
             whiteTexture = id;
@@ -172,7 +176,7 @@ public final class PainVignetteOverlay implements IGuiOverlay {
     }
 
     @OnlyIn(Dist.CLIENT)
-    @Mod.EventBusSubscriber(modid = WFMedical.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+    @EventBusSubscriber(modid = WFMedical.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class Registrar {
 
         private static boolean registered;
@@ -181,7 +185,7 @@ public final class PainVignetteOverlay implements IGuiOverlay {
         }
 
         @SubscribeEvent
-        public static void onRegisterOverlays(RegisterGuiOverlaysEvent event) {
+        public static void onRegisterLayers(RegisterGuiLayersEvent event) {
             if (registered) {
                 return;
             }

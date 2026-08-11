@@ -7,7 +7,7 @@ import com.warfactory.medical.core.damage.DamageClassifier;
 import com.warfactory.medical.core.damage.HitGeometry;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.neoforged.bus.api.SubscribeEvent;
 
 
 public final class TaczHitMarkerGuard {
