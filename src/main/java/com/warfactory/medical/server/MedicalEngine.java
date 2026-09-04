@@ -538,6 +538,20 @@ public final class MedicalEngine {
 
     public static void onPlayerJoin(ServerPlayer player) {
         resync(player);
+        resendDowned(player);
+    }
+
+
+    private static void resendDowned(ServerPlayer player) {
+        IMedicalData data = MedicalCapabilities.get(player);
+        if (data == null) {
+            return;
+        }
+        MedicalProfile profile = data.getProfile();
+        boolean downed = profile.isDowned();
+        profile.setLastBroadcastDowned(downed);
+        MedicalNetworking.broadcastDowned(player, downed);
+        player.refreshDimensions();
     }
 
     public static void resync(ServerPlayer player) {

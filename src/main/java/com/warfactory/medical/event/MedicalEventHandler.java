@@ -398,15 +398,7 @@ public final class MedicalEventHandler {
         if (profile.hasActiveTreatment()) {
             MedicalActionService.cancel(player, "dead");
         }
-        // Deliberately NOT un-broadcasting downed=false / resetting the hitbox here: this used to snap
-        // the corpse back to the standing pose/hitbox the instant death was triggered, which races ahead
-        // of vanilla's own ~20-tick death-fall animation and produces a visible "stands upright, then
-        // lays back down a second later" flash on any hit that finishes off an already-downed player.
-        // A dead body staying rendered lying flat through the death sequence is the correct look anyway.
-        // The downed flag/hitbox is reset independently on respawn: the respawned player gets a brand new
-        // MedicalProfile (onPlayerClone bails out on death, MedicalProfile.java) whose lastBroadcastDowned
-        // defaults false, MedicalEventHandler.onPlayerRespawn resyncs it, and the client's own
-        // ClientDownedTracker.Events.onRespawnClone independently clears the flag for the new entity id.
+
         data.bumpRevision();
     }
 
