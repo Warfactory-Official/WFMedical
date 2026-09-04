@@ -8,6 +8,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.Entity;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 
@@ -62,6 +63,17 @@ public final class ClientDownedTracker {
         @SubscribeEvent
         public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
             clear();
+        }
+
+
+        @SubscribeEvent
+        public static void onEntityLeaveLevel(EntityLeaveLevelEvent event) {
+            if (!event.getLevel().isClientSide()) {
+                return;
+            }
+            synchronized (LOCK) {
+                DOWNED.remove(event.getEntity().getId());
+            }
         }
 
         @SubscribeEvent
