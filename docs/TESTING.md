@@ -45,6 +45,20 @@ run never fires a gun, so they are otherwise never loaded) and asserts both that
 still exists and that the handler was merged in. Mixin uniquifies merged handlers, so
 `wfmedical$captureHitPos` arrives as `handler$zbb000$wfmedical$captureHitPos` — match on the suffix.
 
+**A test-constructed player cannot be hurt, twice over.** `FakePlayer.isInvulnerableTo` returns `true`
+unconditionally, and a fresh `ServerPlayer` starts with 60 ticks of `spawnInvulnerableTime` that only
+decays in `ServerPlayer.tick` — which `FakePlayer` also no-ops. Both gates sit *before*
+`LivingIncomingDamageEvent` is fired, so a damage test written on a plain FakePlayer passes while
+never invoking a line of WFMedical. `TraumaPipelineGameTest.Victim` overrides the first; the second
+needs the access transformer entry in `META-INF/accesstransformer.cfg` (an AT only widens access, it
+changes no behaviour).
+
+**Don't assert a fixed wound count.** One ballistic hit legitimately produces several traumas —
+penetration walks every limb the ray crossed and `TraumaGenerator` can emit more than one per limb. The
+TACZ double-hurt property is *"the second hurt event adds no wounds"*, measured as a before/after
+delta. Asserting "exactly one wound" tests an unrelated tuning value and reports a coalescing bug that
+isn't there.
+
 **The rig is built in the victim's local frame.** The OBBs are identical at every yaw; `HitGeometry`
 rotates the incoming ray into that frame instead. So asserting "the boxes move when the player turns"
 fails, and any yaw test that asserts on box geometry is testing the wrong thing. Assert on
