@@ -5,8 +5,9 @@ Two suites, split by what they need rather than by what they cover.
 | | `./gradlew test` | `./gradlew runGameTestServer` |
 |---|---|---|
 | What it is | JUnit 5 on a bootstrapped Minecraft | Vanilla GameTest in a real world |
-| Needs | registries only | a server, entities, mixins, TACZ |
-| Runtime | ~8s | ~30s (most of it server boot) |
+| Needs | registries and the config spec | a server, entities, mixins, TACZ |
+| Count | 391 | 104 |
+| Runtime | ~10s | ~30s (most of it server boot) |
 | Lives in | `src/test/java` | `src/main/java/com/warfactory/medical/gametest` |
 
 `./gradlew checkAll` runs both. `check`/`build` run only the unit tests, so the inner loop stays fast.
@@ -15,10 +16,35 @@ Two suites, split by what they need rather than by what they cover.
 
 `neoForge.unitTest` in `build.gradle` puts `src/test/java` on the full Minecraft classpath and runs
 FML's JUnit bootstrap first, so `Vec3`, `AABB` and the registries all exist without a server. That
-covers everything that is a pure function — the OBB slab test, the rig spec, the TACZ hit cache.
+covers everything that is a pure function — physiology, the limb/trauma model and its NBT, the wire
+protocol, treatment resolution, the wound table, the definitions parser.
 
-Anything that needs a posed `LivingEntity`, an applied mixin, or the damage pipeline cannot be a unit
-test and belongs in a gametest.
+`support/TestConfig` extends that reach considerably: it binds `MedicalConfig.SPEC` to an in-memory
+config corrected against the spec defaults. Without it every `MedicalConfig.x()` throws
+`IllegalStateException: Config not loaded`, which put most of the mod out of a unit test's reach —
+`TraumaGenerator` reads `fallFractureMinBlocks`, `TreatmentService` reads
+`clottingAgentDurationTicks`, `ClientMedicalCache` reads `logMedicalSync`. `TestConfig.set(path,
+value)` overrides one key for the length of a test, which is what lets a threshold test prove the
+threshold is actually the configured one rather than a hardcoded constant.
+
+Anything that needs a posed `LivingEntity`, an applied mixin, an attribute map, a damage-type *tag*,
+or the damage pipeline cannot be a unit test and belongs in a gametest. `gametest/TestBodies` holds
+the shared fixtures for that suite.
+
+### What each gametest holder covers
+
+| Holder | Covers |
+|---|---|
+| `HitLocationGameTest`, `LimbRigGameTest`, `RigYawGameTest` | geometric limb classification, at every yaw |
+| `HitLocationFallbackGameTest` | the weighted sampler used when a hit has no traceable direction |
+| `ArmorEvaluationGameTest` | BLOCKED/PARTIAL/FULL, category effectiveness, per-slot durability |
+| `DamageClassifierGameTest` | the tag-driven half of classification, over the real registry |
+| `RigCacheGameTest` | per-tick rig memoisation, pose-hint validation, the hit envelope |
+| `TraumaPipelineGameTest` | a real TACZ bullet, end to end, to a wound on a named limb |
+| `DamagePipelineVariantsGameTest` | falls, fire, blasts, arrows, melee, suffocation, regen clamping |
+| `SubstanceServiceGameTest` | analgesia, stimulants, overdose, antidote reversal |
+| `MedicalAttachmentGameTest` | who carries medical state, and respawn copying |
+| `TaczMixinContractGameTest` | that the four TACZ mixins actually attached |
 
 ## Traps that have already bitten
 
@@ -45,13 +71,33 @@ run never fires a gun, so they are otherwise never loaded) and asserts both that
 still exists and that the handler was merged in. Mixin uniquifies merged handlers, so
 `wfmedical$captureHitPos` arrives as `handler$zbb000$wfmedical$captureHitPos` — match on the suffix.
 
-**A test-constructed player cannot be hurt, twice over.** `FakePlayer.isInvulnerableTo` returns `true`
-unconditionally, and a fresh `ServerPlayer` starts with 60 ticks of `spawnInvulnerableTime` that only
-decays in `ServerPlayer.tick` — which `FakePlayer` also no-ops. Both gates sit *before*
-`LivingIncomingDamageEvent` is fired, so a damage test written on a plain FakePlayer passes while
-never invoking a line of WFMedical. `TraumaPipelineGameTest.Victim` overrides the first; the second
-needs the access transformer entry in `META-INF/accesstransformer.cfg` (an AT only widens access, it
-changes no behaviour).
+**A test-constructed player cannot be hurt, three times over.** All three gates sit *before*
+`LivingIncomingDamageEvent` is fired, so a damage test that misses one passes while never invoking a
+line of WFMedical. `TestBodies` handles all three in one place:
+
+1. `FakePlayer.isInvulnerableTo` returns `true` unconditionally. Overridden back in `TestBodies.Victim`.
+2. A fresh `ServerPlayer` starts with 60 ticks of `spawnInvulnerableTime`, which only decays in
+   `ServerPlayer.tick` — which `FakePlayer` also no-ops. It is private, hence the one entry in
+   `META-INF/accesstransformer.cfg` (an AT only widens access; it changes no behaviour).
+3. `FakePlayer.canHarmPlayer` returns `false` unconditionally. This one only bites *player-versus-player*
+   damage, so a suite can pass every fall/fire/arrow test and still never land a melee hit.
+   `TestBodies.Victim` restores the rule `ServerPlayer`/`Player` would have applied, rather than
+   returning a bare `true` — the server PvP flag and the team policy are real gates in front of the mod.
+
+The tell for all three is that `hurt()` returns `false`. **Check that return value first**: a damage
+test that ignores it reports "the mod produced no wound" when the truth is that the mod never ran.
+
+**A gametest server starts with PvP off.** `ServerPlayer.hurt` then refuses all player-dealt damage,
+which looks identical to a hit-registration bug. `TestBodies.attacker` calls `setPvpAllowed(true)`.
+
+**Watch wounds, not the health bar, for "did this hit land?"** The pipeline absorbs the vanilla damage
+amount for every hit it handles, so a landed hit and a cancelled one both leave health untouched. Use
+`hurt()`'s return value (cancellation) or the resulting traumas.
+
+**Melee needs the attacker aimed at the victim.** `HitGeometry.shouldRejectGap` traces the attacker's
+eye ray out to `meleeReach` and discards the hit as a whiff if it clears every limb box. Two players
+constructed at the same spot both look along +Z, so the ray never crosses the victim.
+`TestBodies.attacker(helper, target, distance)` positions and orients one properly.
 
 **Don't assert a fixed wound count.** One ballistic hit legitimately produces several traumas —
 penetration walks every limb the ray crossed and `TraumaGenerator` can emit more than one per limb. The
@@ -63,6 +109,15 @@ isn't there.
 rotates the incoming ray into that frame instead. So asserting "the boxes move when the player turns"
 fails, and any yaw test that asserts on box geometry is testing the wrong thing. Assert on
 classification of a world-space ray instead.
+
+**A probabilistic branch needs a pinned roll or a sample, never one draw.** Armour mitigation, the
+fracture roll and the weighted limb sampler are all dice. `Fixtures.alwaysRolls()`/`neverRolls()` pin a
+branch as a decision; the gametests measure a rate over a fixed seed. A single random outcome asserted
+once is a test that fails on someone else's machine next month.
+
+**A config-threshold test must prove the threshold moved.** `TraumaGeneratorTest` asserts a short fall
+cannot break a leg *and* that raising `fallFractureMinBlocks` makes a long one safe. Without the second
+half the first passes just as well against a hardcoded constant.
 
 ## Running a single test
 

@@ -1,15 +1,10 @@
 package com.warfactory.medical.gametest;
 
-import com.mojang.authlib.GameProfile;
 import com.warfactory.medical.WFMedical;
-import com.warfactory.medical.attachment.IMedicalData;
-import com.warfactory.medical.attachment.MedicalAttachments;
-import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.compat.TaczHitCapture;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -17,23 +12,16 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.Pose;
-import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.fml.loading.LoadingModList;
-import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * The damage -> trauma pipeline end to end: a real {@code hurt()} on a real server player, through
@@ -68,72 +56,26 @@ public class TraumaPipelineGameTest {
     private static final double HEAD_Y = 1.62;
     private static final double TORSO_Y = 0.90;
 
-    /** A server player that can actually be damaged; see the class javadoc. */
-    private static final class Victim extends FakePlayer {
-        private Victim(ServerLevel level, GameProfile profile) {
-            super(level, profile);
-        }
-
-        @Override
-        public boolean isInvulnerableTo(DamageSource source) {
-            return false;
-        }
-    }
-
-    private static Victim victim(GameTestHelper helper) {
-        Victim v = new Victim(helper.getLevel(), new GameProfile(UUID.randomUUID(), "wfmed_victim"));
-        BlockPos abs = helper.absolutePos(new BlockPos(1, 1, 1));
-        v.moveTo(abs.getX() + 0.5, abs.getY(), abs.getZ() + 0.5, 0.0F, 0.0F);
-        v.setYRot(0.0F);
-        v.setXRot(0.0F);
-        v.setYHeadRot(0.0F);
-        v.yBodyRot = 0.0F;
-        v.yBodyRotO = 0.0F;
-        v.yHeadRot = 0.0F;
-        v.yHeadRotO = 0.0F;
-        v.setPose(Pose.STANDING);
-        // Creative/spectator is skipped outright by onLivingHurt when effectImmuneInCreative is on.
-        v.setGameMode(GameType.SURVIVAL);
-        v.setHealth(v.getMaxHealth());
-        v.invulnerableTime = 0;
-        // A fresh ServerPlayer starts with 60 ticks of spawn invulnerability, and ServerPlayer.hurt
-        // refuses everything that does not bypass invulnerability while it lasts. It only decays in
-        // ServerPlayer.tick, which FakePlayer no-ops -- so without this every hurt() below silently
-        // returns false and the tests pass by never testing anything. (Widened by our AT.)
-        v.spawnInvulnerableTime = 0;
-        return v;
+    // The victim, the profile accessor and the TACZ presence check now live in TestBodies, so the
+    // invulnerability workarounds are stated once. See that class for why each of them is needed.
+    private static TestBodies.Victim victim(GameTestHelper helper) {
+        return TestBodies.victim(helper);
     }
 
     private static boolean taczPresent() {
-        return LoadingModList.get().getModFileById(TaczCompat.MOD_ID) != null;
+        return TestBodies.taczPresent();
     }
 
-    private static MedicalProfile profileOf(GameTestHelper helper, Victim v) {
-        IMedicalData data = MedicalAttachments.get(v);
-        if (data == null) {
-            helper.fail("the victim has no medical attachment -- MedicalAttachments.carriesMedical "
-                    + "should be true for any Player");
-        }
-        return data.getProfile();
+    private static MedicalProfile profileOf(GameTestHelper helper, TestBodies.Victim v) {
+        return TestBodies.profileOf(helper, v);
     }
 
     private static List<Trauma> allTraumas(MedicalProfile profile) {
-        List<Trauma> out = new ArrayList<>();
-        for (LimbType limb : LimbType.VALUES) {
-            out.addAll(profile.limb(limb).getTraumas());
-        }
-        return out;
+        return TestBodies.allTraumas(profile);
     }
 
     private static String describe(MedicalProfile profile) {
-        StringBuilder sb = new StringBuilder();
-        for (LimbType limb : LimbType.VALUES) {
-            int n = profile.limb(limb).getTraumas().size();
-            if (n > 0) {
-                sb.append(limb).append('=').append(n).append(' ');
-            }
-        }
-        return sb.length() == 0 ? "(no traumas)" : sb.toString().trim();
+        return TestBodies.describe(profile);
     }
 
     /**
@@ -176,7 +118,7 @@ public class TraumaPipelineGameTest {
     public void aVictimStartsUninjured(GameTestHelper helper) {
         // Baseline. Every assertion below is "a wound appeared", which means nothing unless the
         // starting state is known to be clean.
-        Victim v = victim(helper);
+        TestBodies.Victim v = victim(helper);
         MedicalProfile profile = profileOf(helper, v);
         helper.assertTrue(allTraumas(profile).isEmpty(),
                 "a fresh player should have no traumas; had " + describe(profile));
@@ -189,7 +131,7 @@ public class TraumaPipelineGameTest {
             helper.succeed();
             return;
         }
-        Victim v = victim(helper);
+        TestBodies.Victim v = victim(helper);
         Vec3 feet = v.position();
         Entity bullet = spawnTaczBullet(helper, feet.add(0.0, HEAD_Y, 3.0));
         // A frontal ray at head height, the same geometry the rig tests classify as HEAD.
@@ -210,7 +152,7 @@ public class TraumaPipelineGameTest {
             helper.succeed();
             return;
         }
-        Victim v = victim(helper);
+        TestBodies.Victim v = victim(helper);
         Vec3 feet = v.position();
         Entity bullet = spawnTaczBullet(helper, feet.add(0.0, TORSO_Y, 3.0));
         captureShot(bullet, feet.add(0.0, TORSO_Y, 2.0), feet.add(0.0, TORSO_Y, -2.0), 4.0F);
@@ -239,7 +181,7 @@ public class TraumaPipelineGameTest {
         // ballistic hit legitimately generates more than one trauma (penetration walks the limbs the ray
         // crossed, and TraumaGenerator can emit several per limb), so a fixed expected count would be
         // asserting an unrelated tuning value and would break every time it changed.
-        Victim v = victim(helper);
+        TestBodies.Victim v = victim(helper);
         Vec3 feet = v.position();
         Entity bullet = spawnTaczBullet(helper, feet.add(0.0, TORSO_Y, 3.0));
         captureShot(bullet, feet.add(0.0, TORSO_Y, 2.0), feet.add(0.0, TORSO_Y, -2.0), 4.0F);
@@ -270,7 +212,7 @@ public class TraumaPipelineGameTest {
         }
         // The other half of the claim's contract: it is per bullet, not per tick. A burst puts several
         // rounds in flight on one tick, and if claiming one consumed the tick, only the first would wound.
-        Victim v = victim(helper);
+        TestBodies.Victim v = victim(helper);
         Vec3 feet = v.position();
 
         Entity first = spawnTaczBullet(helper, feet.add(0.0, TORSO_Y, 3.0));
@@ -296,7 +238,7 @@ public class TraumaPipelineGameTest {
         }
         // The wound is not just a marker: the derived per-limb state is what the HUD, the bleed-out
         // timer and the downed threshold all read.
-        Victim v = victim(helper);
+        TestBodies.Victim v = victim(helper);
         Vec3 feet = v.position();
         Entity bullet = spawnTaczBullet(helper, feet.add(0.0, TORSO_Y, 3.0));
         captureShot(bullet, feet.add(0.0, TORSO_Y, 2.0), feet.add(0.0, TORSO_Y, -2.0), 5.0F);
@@ -321,7 +263,7 @@ public class TraumaPipelineGameTest {
         }
         // onLivingHurt zeroes the event amount on an unblocked hit: health is driven by the medical
         // model, not by vanilla subtraction. If this regressed, players would take damage twice.
-        Victim v = victim(helper);
+        TestBodies.Victim v = victim(helper);
         float before = v.getHealth();
         Vec3 feet = v.position();
         Entity bullet = spawnTaczBullet(helper, feet.add(0.0, TORSO_Y, 3.0));

@@ -106,8 +106,13 @@ public final class RigCache {
      * and carry a plausible size. Rejects a client that removed, shrank to nothing, ballooned, or flung away
      * its own hitboxes (invulnerability exploits). It cannot detect a subtle limb-swap &mdash; that residual
      * trust is inherent to {@link HitAuthority#CLIENT_HINT} and is why it is opt-in.
+     *
+     * <p>Public only so the in-world suite can exercise the bound directly: {@link #resolve} consults it
+     * only under {@code hitAuthority = CLIENT_HINT}, which a gametest cannot switch on, and an unchecked
+     * validation predicate on an opt-in trust boundary is not something to leave untested. Pure and
+     * side-effect free.
      */
-    private static boolean plausible(LivingEntity victim, HumanoidRig.LocalRig rig) {
+    public static boolean plausible(LivingEntity victim, HumanoidRig.LocalRig rig) {
         double margin = MedicalConfig.poseHintMargin();
         // A prone/downed body's AABB is short but the rig still spans a full body length from the feet
         // origin, so bound by a fixed body-length floor, never the (possibly short) current AABB height.
