@@ -436,7 +436,12 @@ public final class MedicalEngine {
         return c.state() != HealthState.HEALTHY;
     }
 
-    private static void advanceTrauma(MedicalProfile profile, int interval) {
+    /**
+     * The per-tick wound step: self-heal, worsening, drug/numbing decay. Pure over the profile plus config,
+     * with no entity or level involved -- {@code package-private} rather than {@code private} only so the
+     * unit suite can drive it directly; nothing outside {@link MedicalEngine} calls it.
+     */
+    static void advanceTrauma(MedicalProfile profile, int interval) {
         if (profile.getPainSuppression() > 0.0F) {
             profile.setPainSuppression(profile.getPainSuppression() - PAIN_SUPPRESSION_DECAY_PER_TICK * interval);
         }
@@ -522,7 +527,8 @@ public final class MedicalEngine {
         }
     }
 
-    private static void updateDeathProgress(MedicalProfile profile, PhysiologyParams params) {
+    /** Bleed-out progress, 0..1 across the unconscious..death blood-loss band. See {@link #advanceTrauma}. */
+    static void updateDeathProgress(MedicalProfile profile, PhysiologyParams params) {
         double maxBlood = profile.getMaxBloodMl();
         double lossFraction = maxBlood <= 0.0D ? 0.0D : 1.0D - (profile.getBloodMl() / maxBlood);
         double start = params.bloodUnconsciousLossFraction();
