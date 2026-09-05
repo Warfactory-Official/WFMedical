@@ -298,3 +298,13 @@ tasks.named('test', Test).configure {
         showStandardStreams = project.hasProperty('testOutput')
     }
 }
+
+// One command for both halves of the suite. `check` (and so `build`) only runs the JUnit source set,
+// because the gametest server boots a real Minecraft and is ~30s against the unit tests' ~8s -- fine to
+// ask for, too slow to put in the inner loop.
+tasks.register('checkAll') {
+    group = 'verification'
+    description = 'Run the JUnit unit tests and the in-world gametests.'
+    dependsOn 'test', 'runGameTestServer'
+}
+tasks.named('runGameTestServer').configure { mustRunAfter 'test' }
