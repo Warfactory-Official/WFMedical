@@ -6,7 +6,7 @@ Two suites, split by what they need rather than by what they cover.
 |---|---|---|
 | What it is | JUnit 5 on a bootstrapped Minecraft | Vanilla GameTest in a real world |
 | Needs | registries and the config spec | a server, entities, mixins, TACZ |
-| Count | 391 | 104 |
+| Count | 391 | 130 |
 | Runtime | ~10s | ~30s (most of it server boot) |
 | Lives in | `src/test/java` | `src/main/java/com/warfactory/medical/gametest` |
 
@@ -43,8 +43,24 @@ the shared fixtures for that suite.
 | `TraumaPipelineGameTest` | a real TACZ bullet, end to end, to a wound on a named limb |
 | `DamagePipelineVariantsGameTest` | falls, fire, blasts, arrows, melee, suffocation, regen clamping |
 | `SubstanceServiceGameTest` | analgesia, stimulants, overdose, antidote reversal |
+| `MedicalActionServiceGameTest` | the item-use flow: cast, complete, cancel, item consumption |
+| `CommandGameTest` | the whole `/wfmedical` tree parses, and the state-changing branches work |
+| `MedicalStateApiGameTest` | the `api.MedicalState` surface other mods read |
 | `MedicalAttachmentGameTest` | who carries medical state, and respawn copying |
 | `TaczMixinContractGameTest` | that the four TACZ mixins actually attached |
+
+### What is deliberately not covered
+
+Everything under `client/` — the HUD overlays, the limb wheel and interaction screens, the downed-body
+and tourniquet renderers, the post-processing effects. None of it is reachable from a headless
+gametest server, and the pieces that could be extracted are thin wrappers over `ClientMedicalCache`,
+which is covered. Changes there still need `./gradlew runClient`, or `runAll` for the two-client
+sync check below.
+
+The client-side mixins (`CameraMixin`, `HumanoidModelMixin`, `ItemInHandRendererMixin`,
+`EntityDownedLookMixin`) are in the same position. The server-side ones need no contract test: unlike
+the TACZ config, `wfmedical.mixins.json` is `required: true` with `defaultRequire: 1`, so a failed
+injector is a hard crash at load rather than a silent no-op.
 
 ## Traps that have already bitten
 
@@ -114,6 +130,19 @@ classification of a world-space ray instead.
 fracture roll and the weighted limb sampler are all dice. `Fixtures.alwaysRolls()`/`neverRolls()` pin a
 branch as a decision; the gametests measure a rate over a fixed seed. A single random outcome asserted
 once is a test that fails on someone else's machine next month.
+
+**Adding a real player to the player list runs the full login sequence.**
+`GameTestHelper.makeMockServerPlayerInLevel()` does that, and any mod with a login-time sync packet
+(TACZ has one) throws in the middle of an unrelated test. `CommandGameTest` builds a
+`CommandSourceStack.withEntity(victim)` instead, so `@s` resolves without going near the player list.
+
+**Brigadier "parses" a command that cannot run.** `/wfmedical blood` consumes every character and
+reports no error while stopping on an intermediate literal with no `Command` attached. A parse check
+has to assert `parse.getContext().getLastChild().getCommand() != null` as well, or it passes for
+half the tree.
+
+**`/wfmedical reset` swaps the profile object.** It installs a fresh `MedicalProfile` rather than
+clearing the existing one, so anything holding the old reference keeps reading pre-reset values.
 
 **A config-threshold test must prove the threshold moved.** `TraumaGeneratorTest` asserts a short fall
 cannot break a leg *and* that raising `fallFractureMinBlocks` makes a long one safe. Without the second
