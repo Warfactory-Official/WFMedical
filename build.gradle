@@ -29,6 +29,20 @@ neoForge {
         }
     }
 
+    // JUnit against a bootstrapped Minecraft. MDG puts the `test` source set on the full MC classpath
+    // and runs FML's JUnit bootstrap before the first test, so Bootstrap.bootStrap() has happened and
+    // registries/DamageTypes/EntityTypes exist. That is what makes the hit-geometry maths testable
+    // without launching a server -- the OBB slab test and the rig builder are pure functions of Vec3,
+    // but they still need the Minecraft classes on the classpath to link.
+    //
+    // Split of responsibilities with the gametests in src/main/java/.../gametest:
+    //   `./gradlew test`            -- geometry//maths that needs no world. Seconds, run on every change.
+    //   `./gradlew runGameTestServer` -- anything needing a real LivingEntity, pose, or damage pipeline.
+    unitTest {
+        enable()
+        testedMod = mods."${mod_id}"
+    }
+
     runs {
         configureEach {
             gameDirectory = project.file('run')
@@ -224,6 +238,12 @@ repositories {
 }
 
 dependencies {
+    // JUnit 5 for the unit-test source set. MDG supplies the Minecraft classpath and the FML
+    // bootstrap; the engine itself is ours to declare.
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
     // LDLib2 – UI framework used for the character sheet, radial menu and HUD overlays.
     // The `all` classifier is the shaded jar LDLib2 documents for consumers.
     implementation "com.lowdragmc.ldlib2:ldlib2-neoforge-1.21.1:${ldlib_version}:all"
@@ -267,4 +287,14 @@ publishing {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat = 'full'
+        // -PtestOutput surfaces System.out from a test; off by default because the FML bootstrap is loud.
+        showStandardStreams = project.hasProperty('testOutput')
+    }
 }
