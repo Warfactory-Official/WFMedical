@@ -284,8 +284,10 @@ public final class MedicalDefinitions {
                 .major(true).severityContribution(0.9F).painPerSeverity(0.4F).bleedingPerSeverity(2.0F)
                 .healSpeedPerTick(0.0F).canReopen(false).permanent(true).movementModifier(1.0F)
                 .healthReductionPerSeverity(5.0F).maxSeverity(1.0F).mergeable(true)
-                // Bandages do nothing to internal bleeding; only a hemostatic (clotting) can slow it.
+                // Bandages do nothing to internal bleeding: a hemostatic only slows it, and only a suture kit
+                // stops it outright. The wound itself is permanent and still needs a medkit to clear.
                 .response(new TraumaResponse(TreatmentAction.BOOST_CLOTTING, TraumaResponse.Effect.REDUCE_BLEED, 0.3F))
+                .response(new TraumaResponse(TreatmentAction.SUTURE_WOUND, TraumaResponse.Effect.SUTURE, 0.0F))
                 .treatments(TreatmentAction.HEAL_TRAUMA).build());
 
         registry.register(TraumaType.builder("puncture", TraumaCategory.PUNCTURE)
@@ -322,7 +324,8 @@ public final class MedicalDefinitions {
         itemTreatments.put("wfmedical:splint", new Treatment(TreatmentAction.STABILIZE_FRACTURE,
                 EnumSet.of(TraumaCategory.FRACTURE), 1.0F, 0.0D, 60, false));
         itemTreatments.put("wfmedical:suture_kit", new Treatment(TreatmentAction.SUTURE_WOUND,
-                EnumSet.of(TraumaCategory.LACERATION, TraumaCategory.PUNCTURE), 1.0F, 0.0D, 60, false));
+                EnumSet.of(TraumaCategory.LACERATION, TraumaCategory.PUNCTURE, TraumaCategory.INTERNAL_BLEEDING),
+                1.0F, 0.0D, 60, false));
         itemTreatments.put("wfmedical:blood_bag", new Treatment(TreatmentAction.RESTORE_BLOOD,
                 Collections.emptySet(), 0.0F, 1000.0D, 120, false));
         itemTreatments.put("wfmedical:painkillers", new Treatment(TreatmentAction.REDUCE_PAIN,

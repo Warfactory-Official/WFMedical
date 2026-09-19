@@ -113,6 +113,11 @@ public final class Physiology {
             bloodLossFraction = 0.0D;
         }
 
+        double bloodRatio = maxBlood <= 0.0D ? 1.0D : bloodMl / maxBlood;
+        float heartRate = cfg.heartRateEnabled() ? p.getHeartRate() : (float) cfg.heartRateResting();
+        double cardiacOutput = Cardio.cardiacOutput(bloodRatio, heartRate, cfg);
+        double bleedScale = Cardio.bleedScale(bloodRatio, heartRate, cfg);
+
         double lowMl = cfg.bloodLowFraction() * cfg.maxBloodMl();
         double deathMl = cfg.bloodDeathMl();
         float bloodLossPenalty = 0.0F;
@@ -172,7 +177,11 @@ public final class Physiology {
         boolean vitalInstakill = (headDestroyed && cfg.headDepletionInstakill())
                 || (torsoDestroyed && cfg.torsoDepletionInstakill());
         boolean bloodDeath = bloodLossFraction >= cfg.bloodDeathLossFraction();
-        boolean unconsciousTrigger = koScore >= 1.0F || effectiveMaxHealth <= 0.0F || vitalDestroyed;
+        // A casualty brought round by CPR is still, by the numbers, down: they came up at the very threshold
+        // that downed them. The grace window is what stops them folding again on the next recompute and gives
+        // the medic time to actually treat them. It never blocks bleed-out death or a destroyed vital.
+        boolean unconsciousTrigger = (koScore >= 1.0F && !p.isReviveGraceActive())
+                || effectiveMaxHealth <= 0.0F || vitalDestroyed;
 
         HealthState state;
         if (bloodDeath || vitalInstakill) {
@@ -263,7 +272,7 @@ public final class Physiology {
                 effectiveMaxHealth,
                 healthModifier,
                 effectiveCurrentHealth,
-                bleeding * cfg.bleedingRateMultiplier(),
+                bleeding * cfg.bleedingRateMultiplier() * bleedScale,
                 totalPain,
                 systemicPain,
                 movement,
@@ -276,7 +285,9 @@ public final class Physiology {
                 painKoPending,
                 bothArmsDisabled,
                 bothLegsDisabled,
-                anyArmTourniquet
+                anyArmTourniquet,
+                cardiacOutput,
+                heartRate
         );
     }
 

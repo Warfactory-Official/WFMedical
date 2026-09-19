@@ -231,6 +231,33 @@ public class TraumaPipelineGameTest {
     }
 
     @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
+    public void oneRoundLeavesAShortReadableInjuryListOnTheLimbItHit(GameTestHelper helper) {
+        if (!taczPresent()) {
+            helper.succeed();
+            return;
+        }
+        // The count is the point here, not the contents: a casualty whose chest carries five entries from
+        // one round cannot be triaged, and the treatment UI becomes a wall. Asserted through the real
+        // pipeline rather than on TraumaGenerator alone, because the escalation and depletion steps that
+        // run after generation can add wounds of their own.
+        TestBodies.Victim v = victim(helper);
+        Vec3 feet = v.position();
+        Entity bullet = spawnTaczBullet(helper, feet.add(0.0, TORSO_Y, 3.0));
+        captureShot(bullet, feet.add(0.0, TORSO_Y, 2.0), feet.add(0.0, TORSO_Y, -2.0), 9.0F);
+        MedicalProfile profile = profileOf(helper, v);
+
+        v.hurt(taczDamage(helper, bullet, null), 9.0F);
+
+        int cap = com.warfactory.medical.config.MedicalConfig.maxTraumasPerHit();
+        int torso = profile.limb(LimbType.TORSO).getTraumas().size();
+        helper.assertTrue(torso > 0, "the round should have wounded the torso; got " + describe(profile));
+        helper.assertTrue(torso <= cap,
+                "one round left " + torso + " separate wounds in one limb, over the cap of " + cap
+                        + ": " + describe(profile));
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public void aBallisticWoundBleedsAndHurts(GameTestHelper helper) {
         if (!taczPresent()) {
             helper.succeed();

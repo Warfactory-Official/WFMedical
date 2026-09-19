@@ -44,6 +44,8 @@ public final class MedicalNetworking {
                 (packet, ctx) -> packet.handleClient());
         registrar.playToServer(RemoveTourniquetPacket.TYPE, RemoveTourniquetPacket.STREAM_CODEC,
                 (packet, ctx) -> packet.handleServer(sender(ctx)));
+        registrar.playToServer(ResuscitatePacket.TYPE, ResuscitatePacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleServer(sender(ctx)));
         registrar.playToClient(MedicalDeltaPacket.TYPE, MedicalDeltaPacket.STREAM_CODEC,
                 (packet, ctx) -> packet.handleClient());
         registrar.playToServer(PoseStreamPacket.TYPE, PoseStreamPacket.STREAM_CODEC,

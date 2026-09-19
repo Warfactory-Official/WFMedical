@@ -268,12 +268,66 @@ class MedicalEngineTest {
     }
 
     @Nested
+    class HeartRate {
+
+        private void beat(int seconds) {
+            for (int i = 0; i < seconds * 2; i++) {
+                MedicalEngine.advanceHeartRate(profile, PARAMS, 10);
+            }
+        }
+
+        @Test
+        void anUninjuredPlayersHeartStaysAtRestingAndDoesNotDirtyTheProfile() {
+            profile.recompute(PARAMS);
+            beat(30);
+            assertEquals(PARAMS.heartRateResting(), profile.getHeartRate(), 1.0e-3D);
+            assertFalse(profile.isDirty(), "a resting heart must not force a recompute every tick");
+        }
+
+        @Test
+        void aCasualtyWhoHasLostBloodGoesTachycardicOverSeconds() {
+            profile.setBloodMl(PARAMS.maxBloodMl() * (PARAMS.heartRateCompensationRatio() - 0.03D));
+            profile.recompute(PARAMS);
+            beat(30);
+            assertTrue(profile.getHeartRate() > PARAMS.heartRateResting() * 1.2D,
+                    "the rate should have climbed, got " + profile.getHeartRate());
+        }
+
+        @Test
+        void thatSameCasualtyThenBleedsFasterThanACalmOneWouldHave() {
+            Fixtures.wound(profile, registry, LimbType.TORSO, "laceration_large", 1.0F);
+            profile.setBloodMl(PARAMS.maxBloodMl() * (PARAMS.heartRateCompensationRatio() - 0.03D));
+            double calm = profile.recompute(PARAMS).totalBleeding();
+
+            beat(30);
+            double racing = profile.recompute(PARAMS).totalBleeding();
+
+            assertTrue(racing > calm, "a racing heart must push blood out faster: " + calm + " -> " + racing);
+        }
+
+        @Test
+        void topplingBackToFullVolumeBringsTheRateBackDown() {
+            profile.setBloodMl(PARAMS.maxBloodMl() * 0.62D);
+            profile.recompute(PARAMS);
+            beat(30);
+            float peak = profile.getHeartRate();
+
+            profile.setBloodMl(PARAMS.maxBloodMl());
+            profile.recompute(PARAMS);
+            beat(60);
+
+            assertTrue(profile.getHeartRate() < peak, peak + " -> " + profile.getHeartRate());
+            assertEquals(PARAMS.heartRateResting(), profile.getHeartRate(), 0.5D);
+        }
+    }
+
+    @Nested
     class WakeUp {
 
         private DerivedStats stats(float systemicPain, double bleeding) {
             return new DerivedStats(30.0F, 0.0F, 30.0F, bleeding, systemicPain, systemicPain, 1.0F, false,
                     1.0F, com.warfactory.medical.core.HealthState.UNCONSCIOUS,
-                    false, false, false, false, false, false, false);
+                    false, false, false, false, false, false, false, 1.0D, 80.0F);
         }
 
         @Test

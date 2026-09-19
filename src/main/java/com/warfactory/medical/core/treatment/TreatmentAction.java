@@ -11,7 +11,9 @@ public enum TreatmentAction {
     APPLY_TOURNIQUET(false),
     HEAL_TRAUMA(false),
     TREAT_BURN(false),
-    TREAT_RADIATION(false);
+    TREAT_RADIATION(false),
+    /** Manual resuscitation of a downed casualty. Whole-body, needs no item. */
+    RESUSCITATE(true);
 
     private final boolean global;
 

@@ -104,6 +104,29 @@ public final class MedicalConfig {
     private static final ModConfigSpec.DoubleValue HEALTH_SHARE_LEG;
     private static final ModConfigSpec.DoubleValue TOURNIQUET_BLEED_MULTIPLIER;
     private static final ModConfigSpec.DoubleValue BLEEDING_RATE_MULTIPLIER;
+    private static final ModConfigSpec.IntValue RESUSCITATE_DURATION_TICKS;
+    private static final ModConfigSpec.IntValue RESUSCITATE_GRACE_TICKS;
+    private static final ModConfigSpec.DoubleValue RESUSCITATE_CHANCE_MIN;
+    private static final ModConfigSpec.DoubleValue RESUSCITATE_CHANCE_MAX;
+    private static final ModConfigSpec.DoubleValue RESUSCITATE_BLEED_REFERENCE;
+    private static final ModConfigSpec.DoubleValue INTERNAL_BLEEDING_CHANCE;
+    private static final ModConfigSpec.DoubleValue INTERNAL_BLEEDING_MIN_ENERGY;
+    private static final ModConfigSpec.DoubleValue INTERNAL_BLEEDING_LIMB_MULTIPLIER;
+    private static final ModConfigSpec.DoubleValue INTERNAL_BLEEDING_EXPLOSION_MULTIPLIER;
+    private static final ModConfigSpec.BooleanValue CARDIAC_OUTPUT_ENABLED;
+    private static final ModConfigSpec.DoubleValue CARDIAC_VENOUS_RETURN_FLOOR;
+    private static final ModConfigSpec.DoubleValue CARDIAC_OUTPUT_FLOOR;
+    private static final ModConfigSpec.IntValue MAX_TRAUMAS_PER_HIT;
+    private static final ModConfigSpec.BooleanValue HEART_RATE_ENABLED;
+    private static final ModConfigSpec.DoubleValue HEART_RATE_RESTING;
+    private static final ModConfigSpec.DoubleValue HEART_RATE_MAX;
+    private static final ModConfigSpec.DoubleValue HEART_RATE_BLEED_INFLUENCE;
+    private static final ModConfigSpec.DoubleValue HEART_RATE_COMPENSATION_RATIO;
+    private static final ModConfigSpec.DoubleValue HEART_RATE_DECOMPENSATION_RATIO;
+    private static final ModConfigSpec.DoubleValue HEART_RATE_PAIN_THRESHOLD;
+    private static final ModConfigSpec.DoubleValue HEART_RATE_PAIN_GAIN;
+    private static final ModConfigSpec.DoubleValue HEART_RATE_STIMULANT_BONUS;
+    private static final ModConfigSpec.DoubleValue HEART_RATE_OPIOID_DROP;
     private static final ModConfigSpec.DoubleValue TOURNIQUET_LEG_SPEED_MULTIPLIER;
     private static final ModConfigSpec.DoubleValue TOURNIQUET_ARM_SPEED_MULTIPLIER;
     private static final ModConfigSpec.DoubleValue TOURNIQUET_ARM_SWAY;
@@ -253,6 +276,125 @@ public final class MedicalConfig {
                         + "drains from every wound at once. 1.0 = raw per-wound rates; 0.5 = bleed out half as fast. "
                         + "Default 0.50.")
                 .defineInRange("bleedingRateMultiplier", 0.50D, 0.0D, 10.0D);
+        RESUSCITATE_DURATION_TICKS = b
+                .comment("How long one manual resuscitation attempt takes, in ticks (20 = 1s). It needs no item, so "
+                        + "this is the whole cost of an attempt. Default 80 (4s).")
+                .defineInRange("resuscitateDurationTicks", 80, 1, 12000);
+        RESUSCITATE_GRACE_TICKS = b
+                .comment("Ticks a just-revived casualty is held conscious even though their blood loss and pain would "
+                        + "still put them down. Without this they fold again immediately, because they came up at the "
+                        + "exact threshold that downed them. It never prevents bleeding out. Default 200 (10s).")
+                .defineInRange("resuscitateGraceTicks", 200, 0, 12000);
+        RESUSCITATE_CHANCE_MIN = b
+                .comment("Chance one resuscitation attempt succeeds on a casualty who is at death's door (blood loss "
+                        + "at bloodDeathLossFraction). Low: pumping a patient who has bled out rarely works. "
+                        + "Default 0.10.")
+                .defineInRange("resuscitateChanceMin", 0.10D, 0.0D, 1.0D);
+        RESUSCITATE_CHANCE_MAX = b
+                .comment("Chance one resuscitation attempt succeeds on a casualty who only just went down (blood loss "
+                        + "at bloodUnconsciousLossFraction). Default 0.70.")
+                .defineInRange("resuscitateChanceMax", 0.70D, 0.0D, 1.0D);
+        RESUSCITATE_BLEED_REFERENCE = b
+                .comment("Bleeding rate (ml/tick) at which resuscitation is hopeless: the success chance is scaled "
+                        + "by (1 - bleeding/this). This is what makes stopping the haemorrhage the first job rather "
+                        + "than an optional extra. Default 2.0.")
+                .defineInRange("resuscitateBleedReference", 2.0D, 0.0D, 1000.0D);
+        INTERNAL_BLEEDING_CHANCE = b
+                .comment("Chance (0..1) that a penetrating hit to the TRUNK also causes INTERNAL BLEEDING. This is "
+                        + "the one wound no bandage or tourniquet reaches (a suture kit stops it; a medkit clears "
+                        + "it), so it should be the exception that makes a casualty a real emergency, not the "
+                        + "default outcome of every bullet. Default 0.15.")
+                .defineInRange("internalBleedingChance", 0.15D, 0.0D, 1.0D);
+        INTERNAL_BLEEDING_MIN_ENERGY = b
+                .comment("Minimum hit ENERGY (roughly the raw damage that got through armour) for internal bleeding "
+                        + "to be possible at all: the penetration threshold. Below it a hit bruises and lacerates but "
+                        + "does not reach anything vital. Default 4.0.")
+                .defineInRange("internalBleedingMinEnergy", 4.0D, 0.0D, 100.0D);
+        INTERNAL_BLEEDING_LIMB_MULTIPLIER = b
+                .comment("Multiplier on the internal-bleeding chance when the hit lands on an ARM or LEG rather than "
+                        + "the head/torso. There is far less to rupture in a limb. Default 0.20.")
+                .defineInRange("internalBleedingLimbMultiplier", 0.20D, 0.0D, 1.0D);
+        INTERNAL_BLEEDING_EXPLOSION_MULTIPLIER = b
+                .comment("Multiplier on the internal-bleeding chance for EXPLOSION damage, which causes blast injury "
+                        + "to organs without needing to penetrate. Default 1.5.")
+                .defineInRange("internalBleedingExplosionMultiplier", 1.5D, 0.0D, 5.0D);
+        CARDIAC_OUTPUT_ENABLED = b
+                .comment("Scale every wound's bleeding by CIRCULATION, so blood loss decelerates as the patient "
+                        + "empties: a wound can only bleed as fast as the heart pushes blood past it. This is what "
+                        + "gives a downed casualty a long, workable window instead of a short fuse. Turn off for a "
+                        + "flat rate that ignores how much blood is left.")
+                .define("cardiacOutputEnabled", true);
+        CARDIAC_VENOUS_RETURN_FLOOR = b
+                .comment("Blood volume RATIO (remaining/max) at which venous return, and so cardiac output, reaches "
+                        + "zero: the ventricle no longer fills enough to pump. Output ramps linearly from 1.0 at full "
+                        + "volume down to 0 here (then the floor below applies). Higher = circulation collapses "
+                        + "sooner, so bleeding slows earlier. Default 0.50.")
+                .defineInRange("cardiacVenousReturnFloor", 0.50D, 0.0D, 0.95D);
+        CARDIAC_OUTPUT_FLOOR = b
+                .comment("Lower bound on the cardiac-output factor. Even with no effective circulation a wound still "
+                        + "seeps under gravity, so bleeding never stops entirely from blood loss alone; this is what "
+                        + "stops an untreated casualty from stabilising themselves by bleeding out. Default 0.05.")
+                .defineInRange("cardiacOutputFloor", 0.05D, 0.0D, 1.0D);
+        MAX_TRAUMAS_PER_HIT = b
+                .comment("Hard cap on how many separate wounds one hit may open IN A SINGLE LIMB. Every damage "
+                        + "path lists its primary wounds first and its rolled complications (internal bleeding, a "
+                        + "fracture) last, so the cap drops the third thing piled on top rather than the wound "
+                        + "itself. Keeping this low is what makes a casualty's injury list readable and treatable "
+                        + "instead of a wall of entries. Note a round that PIERCES (penetrationEnabled) can still "
+                        + "wound each limb its path crossed, which is a through-and-through rather than clutter. "
+                        + "0 disables the cap. Default 3.")
+                .defineInRange("maxTraumasPerHit", 3, 0, 16);
+        HEART_RATE_ENABLED = b
+                .comment("Model HEART RATE as a real vital. The body raises it to defend blood pressure as volume "
+                        + "falls, and because circulation scales the bleed rate, a racing heart pushes blood out of "
+                        + "wounds faster: bleeding becomes a spiral you have to interrupt rather than a flat drain. "
+                        + "Turn off to pin the rate at resting, which is exactly how the model behaved before heart "
+                        + "rate existed.")
+                .define("heartRateEnabled", true);
+        HEART_RATE_RESTING = b
+                .comment("Resting heart rate in bpm. This is also the rate at which circulation counts as 1.0, so "
+                        + "changing it rescales nothing else. Default 80.")
+                .defineInRange("heartRateResting", 80.0D, 20.0D, 200.0D);
+        HEART_RATE_MAX = b
+                .comment("Ceiling on heart rate in bpm, however hard the body is compensating. Default 220.")
+                .defineInRange("heartRateMax", 220.0D, 60.0D, 400.0D);
+        HEART_RATE_BLEED_INFLUENCE = b
+                .comment("How much heart rate scales the BLEED RATE. 1.0 is ACE3 "
+                        + "exactly: fully linear in bpm, so a heart at 160 pushes twice the blood out of a wound "
+                        + "as one at 80. 0.0 ignores rate entirely, leaving it a readout with no mechanical bite. "
+                        + "Blood pressure and the rate the body settles at are unaffected either way, so this is a "
+                        + "balance lever rather than a change to the physiology. The default "
+                        + "is half, because ACE3 hands a patient to its cardiac-arrest timer at the volume where "
+                        + "this mod simply kills them, so the undiluted coupling compresses the whole endgame "
+                        + "into the last minute or so. At 0.5 a racing heart still roughly halves the window a "
+                        + "medic has. Default 0.50.")
+                .defineInRange("heartRateBleedInfluence", 0.50D, 0.0D, 2.0D);
+        HEART_RATE_COMPENSATION_RATIO = b
+                .comment("Blood RATIO (remaining/max) below which the body starts raising the heart rate to hold "
+                        + "its blood pressure up. At the default blood settings this is the same volume at which a "
+                        + "casualty goes down, so the tachycardia starts exactly when they collapse. Default 0.70.")
+                .defineInRange("heartRateCompensationRatio", 0.70D, 0.0D, 1.0D);
+        HEART_RATE_DECOMPENSATION_RATIO = b
+                .comment("Blood RATIO below which compensation gives out and the rate falls away toward zero. At "
+                        + "the default blood settings this is the volume at which a casualty bleeds out, so it is "
+                        + "the tail of the curve; raise bloodDeathLossFraction past it to make the full bradycardic "
+                        + "collapse something a patient can actually sit in. Default 0.60.")
+                .defineInRange("heartRateDecompensationRatio", 0.60D, 0.0D, 1.0D);
+        HEART_RATE_PAIN_THRESHOLD = b
+                .comment("Perceived pain (0..1) above which pain alone drives the heart rate up. Default 0.20.")
+                .defineInRange("heartRatePainThreshold", 0.20D, 0.0D, 1.0D);
+        HEART_RATE_PAIN_GAIN = b
+                .comment("Bpm added above resting by fully saturated pain. This is why painkillers are also a way "
+                        + "to slow someone's bleeding, not only to keep them conscious. Default 50.")
+                .defineInRange("heartRatePainGain", 50.0D, 0.0D, 200.0D);
+        HEART_RATE_STIMULANT_BONUS = b
+                .comment("Bpm added by a full stimulant dose. Default 40.")
+                .defineInRange("heartRateStimulantBonus", 40.0D, 0.0D, 200.0D);
+        HEART_RATE_OPIOID_DROP = b
+                .comment("Bpm removed by full opioid pain suppression. This is what makes an over-medicated patient "
+                        + "read as dangerously slow on the vitals readout before the overdose itself bites. "
+                        + "Default 30.")
+                .defineInRange("heartRateOpioidDrop", 30.0D, 0.0D, 200.0D);
         TOURNIQUET_BLEED_MULTIPLIER = b
                 .comment("Multiplier applied to a limb's bleeding while a TOURNIQUET is on it (arms/legs only). "
                         + "Lower = a tourniquet slows blood loss more; it never fully stops it and does NOT treat "
@@ -844,6 +986,98 @@ public final class MedicalConfig {
         return BLEEDING_RATE_MULTIPLIER.get();
     }
 
+    public static int resuscitateDurationTicks() {
+        return RESUSCITATE_DURATION_TICKS.get();
+    }
+
+    public static int resuscitateGraceTicks() {
+        return RESUSCITATE_GRACE_TICKS.get();
+    }
+
+    public static double resuscitateChanceMin() {
+        return RESUSCITATE_CHANCE_MIN.get();
+    }
+
+    public static double resuscitateChanceMax() {
+        return RESUSCITATE_CHANCE_MAX.get();
+    }
+
+    public static double resuscitateBleedReference() {
+        return RESUSCITATE_BLEED_REFERENCE.get();
+    }
+
+    public static double internalBleedingChance() {
+        return INTERNAL_BLEEDING_CHANCE.get();
+    }
+
+    public static double internalBleedingMinEnergy() {
+        return INTERNAL_BLEEDING_MIN_ENERGY.get();
+    }
+
+    public static double internalBleedingLimbMultiplier() {
+        return INTERNAL_BLEEDING_LIMB_MULTIPLIER.get();
+    }
+
+    public static double internalBleedingExplosionMultiplier() {
+        return INTERNAL_BLEEDING_EXPLOSION_MULTIPLIER.get();
+    }
+
+    public static boolean cardiacOutputEnabled() {
+        return CARDIAC_OUTPUT_ENABLED.get();
+    }
+
+    public static double cardiacVenousReturnFloor() {
+        return CARDIAC_VENOUS_RETURN_FLOOR.get();
+    }
+
+    public static double cardiacOutputFloor() {
+        return CARDIAC_OUTPUT_FLOOR.get();
+    }
+
+    public static int maxTraumasPerHit() {
+        return MAX_TRAUMAS_PER_HIT.get();
+    }
+
+    public static boolean heartRateEnabled() {
+        return HEART_RATE_ENABLED.get();
+    }
+
+    public static double heartRateResting() {
+        return HEART_RATE_RESTING.get();
+    }
+
+    public static double heartRateMax() {
+        return HEART_RATE_MAX.get();
+    }
+
+    public static double heartRateBleedInfluence() {
+        return HEART_RATE_BLEED_INFLUENCE.get();
+    }
+
+    public static double heartRateCompensationRatio() {
+        return HEART_RATE_COMPENSATION_RATIO.get();
+    }
+
+    public static double heartRateDecompensationRatio() {
+        return HEART_RATE_DECOMPENSATION_RATIO.get();
+    }
+
+    public static float heartRatePainThreshold() {
+        return HEART_RATE_PAIN_THRESHOLD.get().floatValue();
+    }
+
+    public static float heartRatePainGain() {
+        return HEART_RATE_PAIN_GAIN.get().floatValue();
+    }
+
+    public static float heartRateStimulantBonus() {
+        return HEART_RATE_STIMULANT_BONUS.get().floatValue();
+    }
+
+    public static float heartRateOpioidDrop() {
+        return HEART_RATE_OPIOID_DROP.get().floatValue();
+    }
+
     public static float tourniquetLegSpeedMultiplier() {
         return TOURNIQUET_LEG_SPEED_MULTIPLIER.get().floatValue();
     }
@@ -1365,7 +1599,20 @@ public final class MedicalConfig {
                 tourniquetArmSpeedMultiplier(),
                 headDepletionInstakill(),
                 torsoDepletionInstakill(),
-                bleedingRateMultiplier()
+                bleedingRateMultiplier(),
+                cardiacOutputEnabled(),
+                cardiacVenousReturnFloor(),
+                cardiacOutputFloor(),
+                heartRateEnabled(),
+                heartRateResting(),
+                heartRateMax(),
+                heartRateBleedInfluence(),
+                heartRateCompensationRatio(),
+                heartRateDecompensationRatio(),
+                heartRatePainThreshold(),
+                heartRatePainGain(),
+                heartRateStimulantBonus(),
+                heartRateOpioidDrop()
         );
     }
 }

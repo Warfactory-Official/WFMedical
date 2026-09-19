@@ -47,7 +47,7 @@ class MedicalDeltaPacketTest {
 
     private static DerivedStats stats(float maxHealth, HealthState state) {
         return new DerivedStats(maxHealth, 30.0F - maxHealth, maxHealth, 0.0D, 0.0F, 0.0F, 1.0F, false, 1.0F,
-                state, false, false, false, false, false, false, false);
+                state, false, false, false, false, false, false, false, 1.0D, 80.0F);
     }
 
     private static LimbSummary limb(LimbType lt, float health) {

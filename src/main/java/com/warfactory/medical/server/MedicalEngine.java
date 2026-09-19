@@ -5,6 +5,7 @@ import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
+import com.warfactory.medical.core.Cardio;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.damage.HitDetectionDebug;
 import com.warfactory.medical.core.PhysiologyParams;
@@ -96,6 +97,13 @@ public final class MedicalEngine {
             profile.setBloodMl(profile.getBloodMl() + bloodRegenPerSecond / 20.0D * interval);
         }
 
+        advanceHeartRate(profile, params, interval);
+
+        if (profile.isReviveGraceActive() && nowTick >= profile.getReviveGraceUntilTick()) {
+            profile.setReviveGraceUntilTick(0L);
+            profile.markDirty();
+        }
+
         advanceTrauma(profile, interval);
 
         advanceSubstances(player, profile, nowTick, interval);
@@ -155,6 +163,24 @@ public final class MedicalEngine {
         }
 
         reconcileDownedBroadcast(player, profile);
+    }
+
+    /**
+     * The one stateful step of the circulatory model: everything else about circulation is derived, but the
+     * heart rate carries over from the last interval and chases its target. It runs after blood loss and
+     * regen so it reacts to the volume the patient actually has now. {@code package-private} rather than
+     * {@code private} only so the unit suite can drive it, as with {@link #advanceTrauma}.
+     */
+    static void advanceHeartRate(MedicalProfile profile, PhysiologyParams params, int interval) {
+        if (!params.heartRateEnabled()) {
+            return;
+        }
+        double maxBlood = profile.getMaxBloodMl();
+        double ratio = maxBlood <= 0.0D ? 1.0D : profile.getBloodMl() / maxBlood;
+        DerivedStats stats = profile.cached();
+        float next = Cardio.advanceHeartRate(profile.getHeartRate(), ratio, stats.totalPain(),
+                profile.getStimulant(), profile.getPainSuppression(), interval / 20.0D, params);
+        profile.setHeartRate(next);
     }
 
     private static void reconcileDownedBroadcast(ServerPlayer player, MedicalProfile profile) {
@@ -426,6 +452,11 @@ public final class MedicalEngine {
             return true;
         }
         if (profile.getBloodMl() < MedicalConfig.bloodLowFraction() * profile.getMaxBloodMl()) {
+            return true;
+        }
+        // A heart that has not settled back to resting still has to be brought down, and it drives the
+        // bleed rate while it is up.
+        if (Math.abs(profile.getHeartRate() - (float) MedicalConfig.heartRateResting()) > 0.5F) {
             return true;
         }
         // Keep ticking a not-yet-full player so natural blood regen can top them back up to max (the

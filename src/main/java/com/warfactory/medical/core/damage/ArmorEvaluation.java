@@ -86,7 +86,14 @@ public final class ArmorEvaluation {
         return clampF(remaining, 0.0F, 1.0F);
     }
 
-    private static EquipmentSlot slotFor(LimbType limb) {
+    /**
+     * Which worn piece answers for a limb. Arms are covered by the chestplate and there is nothing else
+     * for them; that is vanilla's slot layout, not a simplification made here.
+     *
+     * <p>Public because it is the whole of what a per-limb armour resolver needs from this mod: it picks
+     * the limb, this says which piece is in front of it.
+     */
+    public static EquipmentSlot slotFor(LimbType limb) {
         switch (limb) {
             case HEAD:
                 return EquipmentSlot.HEAD;

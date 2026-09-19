@@ -14,10 +14,14 @@ import java.util.UUID;
 
 public final class MedicalProfile {
 
+    /** Starting bpm for a fresh profile; a live one converges on the configured resting rate within seconds. */
+    public static final float DEFAULT_HEART_RATE = 80.0F;
+
     private final EnumMap<LimbType, Limb> limbs = new EnumMap<>(LimbType.class);
     private double bloodMl;
     private double maxBloodMl;
     private HealthState state = HealthState.HEALTHY;
+    private float heartRate = DEFAULT_HEART_RATE;
     private long bleedoutSinceTick = -1L;
     private float painSuppression;
     private float drugLoad;
@@ -48,6 +52,8 @@ public final class MedicalProfile {
 
     private transient long painKoSince;
     private transient boolean adrenalineExhausted;
+    /** Game tick until which a just-resuscitated casualty is held conscious; 0 = no grace. Engine-cleared. */
+    private transient long reviveGraceUntilTick;
 
     private transient long blackoutGraceUntil;
     private transient boolean unconsciousLatched;
@@ -88,6 +94,22 @@ public final class MedicalProfile {
 
     public double getMaxBloodMl() {
         return maxBloodMl;
+    }
+
+    public float getHeartRate() {
+        return heartRate;
+    }
+
+    /**
+     * Beats per minute. Advanced once per engine interval by {@link Cardio}; it feeds cardiac output, so a
+     * change has to dirty the profile for the bleed rate to follow it.
+     */
+    public void setHeartRate(float bpm) {
+        float clamped = bpm < 0.0F ? 0.0F : bpm;
+        if (clamped != this.heartRate) {
+            this.heartRate = clamped;
+            this.dirty = true;
+        }
     }
 
     public void setMaxBloodMl(double maxBloodMl) {
@@ -272,6 +294,18 @@ public final class MedicalProfile {
         this.painKoSince = tick;
     }
 
+    public long getReviveGraceUntilTick() {
+        return reviveGraceUntilTick;
+    }
+
+    public void setReviveGraceUntilTick(long tick) {
+        this.reviveGraceUntilTick = tick;
+    }
+
+    public boolean isReviveGraceActive() {
+        return reviveGraceUntilTick > 0L;
+    }
+
     public boolean isAdrenalineExhausted() {
         return adrenalineExhausted;
     }
@@ -443,6 +477,7 @@ public final class MedicalProfile {
         tag.putDouble("BloodMl", bloodMl);
         tag.putDouble("MaxBloodMl", maxBloodMl);
         tag.putString("State", state.name());
+        tag.putFloat("HeartRate", heartRate);
         tag.putLong("BleedoutSince", bleedoutSinceTick);
         tag.putFloat("PainSuppression", painSuppression);
         tag.putFloat("DrugLoad", drugLoad);
@@ -467,6 +502,7 @@ public final class MedicalProfile {
         double loadedBlood = tag.getDouble("BloodMl");
         this.bloodMl = Math.max(0.0D, Math.min(loadedBlood, this.maxBloodMl));
         this.state = HealthState.byName(tag.getString("State"), HealthState.HEALTHY);
+        this.heartRate = tag.contains("HeartRate") ? Math.max(0.0F, tag.getFloat("HeartRate")) : DEFAULT_HEART_RATE;
         if (tag.contains("BleedoutSince")) {
             this.bleedoutSinceTick = tag.getLong("BleedoutSince");
         } else {

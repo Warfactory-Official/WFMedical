@@ -48,11 +48,13 @@ Controls default major/minor status and is used to filter which items can treat 
 | `laceration_large` | LACERATION | yes | 1.2 | 0.6 | 4.0 | no |
 | `fracture` | FRACTURE | yes | 0.0 | 0.5 | 3.0 | no |
 | `burn` | BURN | yes | 0.1 | 0.55 | 3.0 | no |
-| `internal_bleeding` | INTERNAL_BLEEDING | yes | 2.0 | 0.4 | 5.0 | yes |
+| `internal_bleeding` | INTERNAL_BLEEDING | yes | 2.0 | 0.4 | 5.0 | yes |¹
 | `puncture` | PUNCTURE | yes | 0.9 | 0.5 | 3.5 | no |
 | `crush_injury` | CRUSH_INJURY | yes | 0.3 | 0.6 | 4.0 | no |
 | `radiation_burn` | RADIATION_BURN | yes | 0.0 | 0.45 | 4.0 | yes |
 | `chemical_burn` | CHEMICAL_BURN | yes | 0.2 | 0.5 | 3.5 | no |
+
+¹ `internal_bleeding` is the only wound no dressing reaches. A hemostatic slows it to 30%; a **suture kit stops it outright**; only a medkit removes the injury itself. Because blood regeneration is gated on bleeding reaching zero, nothing else in the kit lets a casualty rebuild volume while they have one. It is generated as a **roll**, not as a guaranteed part of every hit: see [Internal bleeding](#internal-bleeding).
 
 ### Trauma status flags
 
@@ -61,6 +63,14 @@ A `Trauma` has three boolean flags that modify its contribution:
 - `treated` – reduces bleeding to 25% of base (bandage applied); does not close the wound.
 - `sutured` – zeroes bleeding completely (wound closed); implies `treated`.
 - `stabilized` – reduces pain to 50% of base (splint applied to a fracture); does not zero it.
+
+### Wounds per hit
+
+`maxTraumasPerHit` (default 3) caps how many separate wounds one hit may open **in a single limb**. Every damage path in `TraumaGenerator` lists its primary wounds first and its rolled complications (internal bleeding, a fracture) last, so the cap is an ordering rule rather than a lottery: a hit never loses its wound channel, only the third thing piled on top of it.
+
+In practice a rifle round leaves **two** wounds in the limb it hit: a `puncture` for the entry and a `laceration_large` for the tear it opens on the way through, plus at most one rolled complication. The extra `laceration_small` that used to ride along on the ballistic and heavy-sharp paths was the same wound counted a third time and is gone; it carried about 7% of a round's bleeding.
+
+A round that pierces (`penetrationEnabled`) can still wound each limb its path crossed, with energy falling off per limb. That is a through-and-through rather than clutter.
 
 ### Per-limb cap
 
@@ -126,7 +136,81 @@ When `adrenalineEnabled` is true, a **purely pain-driven** knockout (one that bl
 
 ## Blood loss and bleeding
 
-Each `Trauma` contributes `type.bleedingPerSeverity * severity` ml/tick to the limb's cached bleed aggregate (0 if sutured; ×0.25 if treated-but-not-sutured). The engine drains `totalBleeding * interval` ml from `bloodMl` every engine pass when `enableBleeding` is on.
+Each `Trauma` contributes `type.bleedingPerSeverity * severity` ml/tick to the limb's cached bleed aggregate (0 if sutured; ×0.25 if treated-but-not-sutured). The limb totals are summed, scaled by `bleedingRateMultiplier` and then by the **cardiac output factor** below. The engine drains `totalBleeding * interval` ml from `bloodMl` every engine pass when `enableBleeding` is on.
+
+### Cardiac output
+
+A wound can only bleed as fast as the heart pushes blood past it, so the bleed rate is scaled by a dimensionless circulation factor:
+
+```
+ratio    = bloodMl / maxBloodMl
+entering = clamp((ratio - cardiacVenousReturnFloor) / (1 - cardiacVenousReturnFloor), 0, 1)
+cardiacOutput = max(entering, cardiacOutputFloor)
+```
+
+`entering` models venous return: below `cardiacVenousReturnFloor` (default 0.50) the ventricle no longer fills enough to pump. `cardiacOutputFloor` (default 0.05) is the residual seep under gravity, so a casualty can never stabilise themselves by bleeding out.
+
+The consequence is that **blood loss is self-decelerating**. Losing blood weakens the pump, which slows the loss. At 25% lost the bleed rate is already halved; at 40% lost (the death threshold) it is a fifth of nominal. This is what converts the window between going down and dying from a short fuse into something a medic can work in, and it is why the raw per-wound `bleedingPerSeverity` numbers can stay aggressive without being unsurvivable.
+
+`cardiacOutput` is exposed on `DerivedStats` and synced. Set `cardiacOutputEnabled = false` for a flat rate that ignores remaining volume.
+
+### Heart rate
+
+Heart rate is the one stateful part of the circulatory model: a bpm value on `MedicalProfile`, saved to NBT, advanced once per engine interval by `Cardio.advanceHeartRate` and synced on `DerivedStats`. Ported from ACE3's `ace_medical_vitals_fnc_updateHeartRate`.
+
+It multiplies into circulation, so the full chain is:
+
+```
+cardiacOutput = max(entering * heartRate / heartRateResting, cardiacOutputFloor)
+bleedScale    = max(entering * (1 + heartRateBleedInfluence * (heartRate/heartRateResting - 1)),
+                    cardiacOutputFloor)
+```
+
+`cardiacOutput` is the physiological quantity, and blood pressure is read off it (`120/80` at a healthy rest, scaling linearly). `bleedScale` is what a wound's bleed rate is actually multiplied by; `heartRateBleedInfluence` (default 0.50) dilutes how much the rate contributes. The dilution is deliberately kept off the pressure, so the body is never steering by a target its own balance knob puts out of reach. At 1.0 the two are identical and the coupling is exactly ACE3's.
+
+The rate chases a target, closing half the remaining gap per second and never overshooting:
+
+| Driver | Effect on the target |
+|---|---|
+| blood ratio < `heartRateCompensationRatio` (0.70) | `resting * ratio / entering`: enough beats to hold the pressure the body is defending |
+| perceived pain > `heartRatePainThreshold` (0.20) | floor of `resting + heartRatePainGain * pain` (+50 bpm at full) |
+| stimulant | `+ heartRateStimulantBonus * dose` (+40 bpm) |
+| opioid suppression | `- heartRateOpioidDrop * suppression` (−30 bpm) |
+| blood ratio < `heartRateDecompensationRatio` (0.60) | none: compensation gives out and the rate decays at 10%/s toward zero |
+
+The compensation term is ACE3's `targetHR = hr * targetBP / meanBP` loop solved for its fixed point. Iterating it converges to the same rate, but the closed form cannot run away when the measured pressure is near zero, and a stopped heart cannot get stuck at zero when volume recovers.
+
+What this buys, with everything else unchanged:
+
+| blood lost | settled HR | systolic | bleed × | |
+|---|---|---|---|---|
+| 0% | 80 | 120 | 1.00 | |
+| 20% | 80 | 72 | 0.60 | |
+| 30% | 80 | 48 | 0.40 | goes down |
+| 33% | 158 | 80 | 0.50 | compensating |
+| 39% | 220 | 73 | 0.41 | |
+| 40% | — | — | — | bleeds out |
+
+So the bleed rate falls as the casualty empties, then **turns back up the moment they collapse**, because the heart starts hammering to hold their pressure. On the reference casualty (one rifle round to the torso, bandaged, internal bleeding present) the window from down to dead goes from 3.3 min to 2.1 min. Pain feeds the same loop, which makes painkillers a way to slow someone's bleeding and not only a way to keep them conscious.
+
+The decompensation branch is the tail of the curve at default settings, because `bloodDeathLossFraction` (0.40) and `heartRateDecompensationRatio` (0.60) are the same volume: a patient dies at the point where ACE3 would hand them to its cardiac-arrest timer. Raise `bloodDeathLossFraction` past it and the full bradycardic collapse becomes a state a patient can sit in. **Cardiac arrest itself is not modelled yet**; when it is, `Cardio` already has the shape for it (ACE3 holds the rate at 25–35 bpm while CPR is being given) and `TreatmentAction.RESUSCITATE` is already the action that would answer it.
+
+Set `heartRateEnabled = false` to pin the rate at resting, which is exactly how the model behaved before it existed.
+
+### Internal bleeding
+
+Internal bleeding is a deep organ or vessel injury, not the default result of being shot. It is rolled per hit:
+
+| Condition | Effect |
+|---|---|
+| hit energy < `internalBleedingMinEnergy` (4.0) | impossible: nothing penetrated deep enough |
+| base chance | `internalBleedingChance` (0.15) |
+| arm or leg rather than head/torso | × `internalBleedingLimbMultiplier` (0.20) |
+| explosion | × `internalBleedingExplosionMultiplier` (1.5) |
+
+It was previously generated by *every* unblocked ballistic hit, which made a medkit mandatory in every engagement and meant a bandaged casualty was still bleeding, still unable to regenerate blood, and therefore unwakeable.
+
+Internal bleeding is rolled *after* a fracture on the ballistic and heavy-sharp paths, so on a limb, where both are possible, the broken bone is the complication that survives the per-hit cap below. There is no bone in the torso rig box, so on the trunk the order changes nothing.
 
 `bloodMl` starts at `maxBloodMl` (default 5000 ml). Loss fraction = `1 - (bloodMl / maxBloodMl)`.
 
@@ -288,6 +372,26 @@ When `enableBleedout = true` (default), a lethal condition derived purely from a
 When `enableBleedout = false`, the same conditions map directly to `DEAD`.
 
 A downed player can be killed instantly by any subsequent real damage if `finishDownedOnHit = true` (default), without going through the blood-loss progression.
+
+### Resuscitation
+
+A downed casualty has no way back on their own: they passed out at `bloodUnconsciousLossFraction` blood loss, and the wake-up score weights blood loss at 1.0 against a 0.5 threshold, so they cannot roll to wake until volume is well back up. `RESUSCITATE` is the medic's lever on that.
+
+- Needs **no item** and no limb selection; it is channelled through the normal progress bar for `resuscitateDurationTicks` (default 80 = 4 s) and consumes nothing, so it can be attempted repeatedly.
+- Offered in the treatment grid only while the target reads as unconscious.
+- Refused outright on a conscious target, and it can never lift an engine-locked blackout: a severe overdose needs naloxone and a drowning needs air first.
+
+Success is a roll:
+
+```
+t      = clamp((bloodDeathLossFraction - lossFraction) / (bloodDeathLossFraction - bloodUnconsciousLossFraction), 0, 1)
+chance = resuscitateChanceMin + (resuscitateChanceMax - resuscitateChanceMin) * t
+chance *= 1 - clamp(totalBleeding / resuscitateBleedReference, 0, 1)
+```
+
+So it runs from `resuscitateChanceMax` (0.70) on someone who only just went down to `resuscitateChanceMin` (0.10) at death's door, and is scaled to nothing by an open haemorrhage. The order of work it teaches is the intended one: **stop the bleeding, replace volume, then work the chest.**
+
+On success the patient wakes and is held conscious for `resuscitateGraceTicks` (default 200 = 10 s) by `MedicalProfile.reviveGraceUntilTick`. Without that grace they fold again on the very next recompute, because they came up at the exact threshold that downed them. The grace suppresses only the score-driven knockout: it never prevents bleeding out, and never protects a destroyed vital.
 
 ---
 

@@ -48,6 +48,57 @@ public final class Fixtures {
         return PhysiologyParams.defaults();
     }
 
+    /** The same params with the circulation model toggled, for testing the deceleration in isolation. */
+    public static PhysiologyParams paramsWith(PhysiologyParams base, boolean cardiacOutputEnabled) {
+        return copy(base, base.bleedoutEnabled(), base.torsoDepletionInstakill(), cardiacOutputEnabled,
+                base.heartRateEnabled());
+    }
+
+    /** The same params with bleeding out toggled: off means a lethal condition kills outright. */
+    public static PhysiologyParams paramsWithBleedout(PhysiologyParams base, boolean bleedoutEnabled) {
+        return copy(base, bleedoutEnabled, base.torsoDepletionInstakill(), base.cardiacOutputEnabled(),
+                base.heartRateEnabled());
+    }
+
+    /** The same params with a destroyed torso set to kill outright rather than down the player. */
+    public static PhysiologyParams paramsWithTorsoInstakill(PhysiologyParams base, boolean instakill) {
+        return copy(base, base.bleedoutEnabled(), instakill, base.cardiacOutputEnabled(),
+                base.heartRateEnabled());
+    }
+
+    /** The same params with the heart rate toggled; off pins it at resting, as before it was modelled. */
+    public static PhysiologyParams paramsWithHeartRate(PhysiologyParams base, boolean heartRateEnabled) {
+        return copy(base, base.bleedoutEnabled(), base.torsoDepletionInstakill(), base.cardiacOutputEnabled(),
+                heartRateEnabled);
+    }
+
+    /**
+     * The one place in the test tree that spells out every component of {@link PhysiologyParams}, so growing
+     * the record is a one-site edit rather than a hunt through the suites.
+     */
+    private static PhysiologyParams copy(PhysiologyParams base, boolean bleedoutEnabled, boolean torsoInstakill,
+                                         boolean cardiacOutputEnabled, boolean heartRateEnabled) {
+        return new PhysiologyParams(
+                base.maxHealthPoints(), base.maxBloodMl(), base.bloodLowFraction(),
+                base.bloodCriticalFraction(), base.bloodDeathMl(), base.painShockThreshold(),
+                base.painMaxHealthPenalty(), base.legFractureSpeedMultiplier(), base.painSpeedFloor(),
+                bleedoutEnabled, base.bleedoutTicks(), base.bloodDeathLossFraction(),
+                base.bloodUnconsciousLossFraction(), base.painUnconsciousThreshold(),
+                base.painUnconsciousWeight(), base.bloodMovementPenaltyLossFraction(),
+                base.painShareHead(), base.painShareTorso(), base.painShareArm(), base.painShareLeg(),
+                base.painSaturationK(), base.adrenalineEnabled(), base.asphyxiaMoveMultiplier(),
+                base.stimulantSpeedBonus(), base.healthShareHead(), base.healthShareTorso(),
+                base.healthShareArm(), base.healthShareLeg(), base.tourniquetBleedMultiplier(),
+                base.tourniquetLegSpeedMultiplier(), base.tourniquetArmSpeedMultiplier(),
+                base.headDepletionInstakill(), torsoInstakill,
+                base.bleedingRateMultiplier(), cardiacOutputEnabled,
+                base.cardiacVenousReturnFloor(), base.cardiacOutputFloor(),
+                heartRateEnabled, base.heartRateResting(), base.heartRateMax(),
+                base.heartRateBleedInfluence(), base.heartRateCompensationRatio(),
+                base.heartRateDecompensationRatio(), base.heartRatePainThreshold(),
+                base.heartRatePainGain(), base.heartRateStimulantBonus(), base.heartRateOpioidDrop());
+    }
+
     /** A fresh, uninjured profile at full blood. */
     public static MedicalProfile profile() {
         return new MedicalProfile(params().maxBloodMl());

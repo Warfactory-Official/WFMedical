@@ -291,6 +291,7 @@ class MedicalProfileTest {
             profile.setStimulant(0.9F);
             profile.setStimulantEndTick(5555L);
             profile.setState(HealthState.CRITICAL);
+            profile.setHeartRate(143.0F);
             profile.setBleedoutSinceTick(88L);
             UUID killer = UUID.randomUUID();
             profile.setLastDamagingPlayer(killer, 1000L);
@@ -309,6 +310,8 @@ class MedicalProfileTest {
             assertEquals(0.9F, loaded.getStimulant());
             assertEquals(5555L, loaded.getStimulantEndTick());
             assertEquals(HealthState.CRITICAL, loaded.getState());
+            assertEquals(143.0F, loaded.getHeartRate(),
+                    "a casualty who logs out mid-crisis must not come back with a resting pulse");
             assertEquals(88L, loaded.getBleedoutSinceTick());
             assertEquals(killer, loaded.getLastDamagingPlayer());
             assertEquals(1000L, loaded.getLastDamageTick());
@@ -336,6 +339,15 @@ class MedicalProfileTest {
             assertFalse(loaded.isAdrenalineExhausted());
             assertFalse(loaded.isUnconsciousLatched());
             assertEquals(0.0F, loaded.getDeathProgress());
+        }
+
+        @Test
+        void aProfileSavedBeforeHeartRateExistedLoadsAtResting() {
+            CompoundTag tag = profile.save();
+            tag.remove("HeartRate");
+            MedicalProfile loaded = new MedicalProfile();
+            loaded.load(tag, registry);
+            assertEquals(MedicalProfile.DEFAULT_HEART_RATE, loaded.getHeartRate());
         }
 
         @Test

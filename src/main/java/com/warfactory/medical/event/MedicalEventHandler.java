@@ -6,6 +6,7 @@ import com.warfactory.medical.attachment.IMedicalData;
 import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.compat.OpenPersistenceCompat;
 import com.warfactory.medical.compat.TaczCompat;
+import com.warfactory.medical.compat.wfballistics.WfBallisticsArmorCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
@@ -133,6 +134,12 @@ public final class MedicalEventHandler {
         }
     }
 
+    /**
+     * Armour is resolved here now, not separately by WF-Ballistics, because two subsystems each doing
+     * part of one job is worse than either doing all of it. This mod claims players from WF-Ballistics
+     * on startup, so any hit {@link #handleMedicalHit} declines still has to have its armour answered
+     * for, or a player this mod is configured to ignore would be the only unarmoured thing in the world.
+     */
     @SubscribeEvent
     public static void onLivingHurt(LivingIncomingDamageEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
@@ -141,24 +148,31 @@ public final class MedicalEventHandler {
         if (player.level().isClientSide) {
             return;
         }
+        if (!handleMedicalHit(event, player)) {
+            WfBallisticsArmorCompat.resolveWhole(event);
+        }
+    }
+
+    /** @return true if the medical model took this hit, so nothing else needs to answer for it */
+    private static boolean handleMedicalHit(LivingIncomingDamageEvent event, ServerPlayer player) {
         if ((player.isCreative() || player.isSpectator()) && MedicalConfig.effectImmuneInCreative()) {
-            return;
+            return false;
         }
 
         DamageSource src = event.getSource();
         if (src != null && src.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
-            return;
+            return false;
         }
 
         IMedicalData data = MedicalAttachments.get(player);
         if (data == null) {
-            return;
+            return false;
         }
         MedicalProfile profile = data.getProfile();
 
         float amount = event.getAmount();
         if (amount <= 0.0F) {
-            return;
+            return false;
         }
 
         // A TACZ bullet lands as two hurt events (a non-armor-piercing and an armor-piercing portion, with
@@ -168,7 +182,7 @@ public final class MedicalEventHandler {
         if (taczTotal.isPresent()) {
             if (!TaczCompat.claimBulletHit(src, player.level().getGameTime())) {
                 event.setAmount(0.0F);
-                return;
+                return true;
             }
             effectiveAmount = (float) taczTotal.getAsDouble();
         }
@@ -182,14 +196,14 @@ public final class MedicalEventHandler {
         if (finishDowned || (res != null && res.majorTrauma())) {
             markDead(player, data, profile);
             event.setAmount(Math.max(effectiveAmount, player.getHealth() + 1.0F));
-            return;
+            return true;
         }
 
         if (profile.hasActiveTreatment()) {
             MedicalActionService.cancel(player, "damaged");
         }
         if (!res.traumaAdded()) {
-            return;
+            return true;
         }
         profile.markDirty();
         // Reconcile (recompute derived stats, apply effects, broadcast downed state) immediately rather
@@ -205,6 +219,7 @@ public final class MedicalEventHandler {
         } else {
             event.setAmount(0.0F);
         }
+        return true;
     }
 
     /**
@@ -261,23 +276,44 @@ public final class MedicalEventHandler {
         }
 
         LimbType primary = limbs.get(0);
-        ArmorEvaluation.Outcome primaryOutcome = ArmorEvaluation.evaluate(victim, primary, cat, amount, rand);
+        // The piece on the limb that was hit, resolved once, deterministically. Without WF-Ballistics
+        // this falls back to the old roll, which is the same three values decided by dice instead.
+        WfBallisticsArmorCompat.Resolved resolved =
+                WfBallisticsArmorCompat.resolve(victim, primary, src, amount, true);
+        ArmorEvaluation.Outcome primaryOutcome = resolved != null
+                ? resolved.outcome()
+                : ArmorEvaluation.evaluate(victim, primary, cat, amount, rand);
+        // Wound energy is what got through the armour, not what was aimed at it. Everything downstream
+        // is gated on this number: internal bleeding, fracture chance, severity, and the instakill below.
+        float throughEnergy = resolved != null ? resolved.through() : amount;
 
         boolean majorTrauma = primaryOutcome != ArmorEvaluation.Outcome.BLOCKED
                 && MedicalConfig.canInstakillOnImpact(cat)
-                && amount >= MedicalConfig.maxHealthPoints() * (float) MedicalConfig.majorTraumaFraction(cat);
+                && throughEnergy >= MedicalConfig.maxHealthPoints() * (float) MedicalConfig.majorTraumaFraction(cat);
         if (majorTrauma) {
             return new HurtResolution(true, false, primaryOutcome);
         }
 
         boolean addedAny = false;
         double falloff = MedicalConfig.penetrationEnergyFalloff();
-        float energy = amount;
+        float energy = throughEnergy;
         for (int i = 0; i < limbs.size(); i++) {
             LimbType limb = limbs.get(i);
-            ArmorEvaluation.Outcome outcome = (i == 0)
-                    ? primaryOutcome
-                    : ArmorEvaluation.evaluate(victim, limb, cat, energy, rand);
+            ArmorEvaluation.Outcome outcome;
+            if (i == 0) {
+                outcome = primaryOutcome;
+            } else {
+                // No wear on the way through: one bullet is one impact, and a torso shot that carries on
+                // into an arm would otherwise charge the chestplate twice for it.
+                WfBallisticsArmorCompat.Resolved onward =
+                        WfBallisticsArmorCompat.resolve(victim, limb, src, energy, false);
+                if (onward != null) {
+                    outcome = onward.outcome();
+                    energy = onward.through();
+                } else {
+                    outcome = ArmorEvaluation.evaluate(victim, limb, cat, energy, rand);
+                }
+            }
             addedAny |= applyLimbTrauma(cat, outcome, limb, energy, profile, registry, nowTick, rand);
             energy = (float) (energy * falloff);
         }

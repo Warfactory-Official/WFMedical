@@ -66,6 +66,96 @@ public class MedicalActionServiceGameTest {
         MedicalActionService.tick(actor, p, done);
     }
 
+    /** Drop the patient by bleeding them past the pass-out threshold, the way the engine would. */
+    private static MedicalProfile downedPatient(GameTestHelper helper, TestBodies.Victim patient,
+                                                double lossFraction) {
+        MedicalProfile p = TestBodies.profileOf(helper, patient);
+        p.setBloodMl(p.getMaxBloodMl() * (1.0D - lossFraction));
+        p.markDirty();
+        p.recompute(MedicalConfig.toPhysiologyParams());
+        p.setUnconsciousLatched(true);
+        p.recompute(MedicalConfig.toPhysiologyParams());
+        return p;
+    }
+
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
+    public void resuscitationChannelsAndThenBringsAStabilisedCasualtyRound(GameTestHelper helper) {
+        TestBodies.Victim patient = TestBodies.spawn(helper, TestBodies.victim(helper));
+        TestBodies.Victim medic = TestBodies.spawn(helper, TestBodies.attacker(helper, patient, 1.0D));
+        MedicalProfile patientProfile = downedPatient(helper, patient, 0.31D);
+        MedicalProfile medicProfile = TestBodies.profileOf(helper, medic);
+
+        if (!patientProfile.cached().unconscious()) {
+            helper.fail("the patient was not down, so there is nothing to test");
+            return;
+        }
+        if (!MedicalActionService.startResuscitation(medic, patient.getId())) {
+            helper.fail("resuscitation was refused on a downed, reachable casualty");
+            return;
+        }
+        if (medicProfile.getActiveAction() != TreatmentAction.RESUSCITATE) {
+            helper.fail("wrong action recorded: " + medicProfile.getActiveAction());
+        }
+
+        // The roll can fail; that is the mechanic. Work at it the way a medic would.
+        for (int attempt = 0; attempt < 40 && patientProfile.cached().unconscious(); attempt++) {
+            complete(helper, medic);
+            if (medicProfile.hasActiveTreatment()) {
+                helper.fail("the resuscitation channel never cleared, locking the medic out");
+                return;
+            }
+            patientProfile.recompute(MedicalConfig.toPhysiologyParams());
+            if (!patientProfile.cached().unconscious()) {
+                break;
+            }
+            MedicalActionService.startResuscitation(medic, patient.getId());
+        }
+
+        if (patientProfile.cached().unconscious()) {
+            helper.fail("40 attempts on a stabilised casualty never once succeeded");
+            return;
+        }
+        if (!patientProfile.isReviveGraceActive()) {
+            helper.fail("no grace was set, so the patient folds again on the next recompute");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
+    public void resuscitationIsRefusedOnSomeoneWhoIsStillStanding(GameTestHelper helper) {
+        TestBodies.Victim patient = TestBodies.spawn(helper, TestBodies.victim(helper));
+        TestBodies.Victim medic = TestBodies.spawn(helper, TestBodies.attacker(helper, patient, 1.0D));
+
+        if (MedicalActionService.startResuscitation(medic, patient.getId())) {
+            helper.fail("a conscious player should not be a resuscitation target");
+            return;
+        }
+        if (TestBodies.profileOf(helper, medic).hasActiveTreatment()) {
+            helper.fail("a refused resuscitation still locked the medic into a channel");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
+    public void resuscitationNeedsNoItemAndConsumesNothing(GameTestHelper helper) {
+        TestBodies.Victim patient = TestBodies.spawn(helper, TestBodies.victim(helper));
+        TestBodies.Victim medic = TestBodies.spawn(helper, TestBodies.attacker(helper, patient, 1.0D));
+        downedPatient(helper, patient, 0.31D);
+        hold(medic, ModItems.BANDAGE.get());
+
+        if (!MedicalActionService.startResuscitation(medic, patient.getId())) {
+            helper.fail("resuscitation was refused");
+            return;
+        }
+        complete(helper, medic);
+
+        if (medic.getInventory().getItem(0).getCount() != 2) {
+            helper.fail("resuscitation ate an item it should never have touched: "
+                    + medic.getInventory().getItem(0));
+        }
+        helper.succeed();
+    }
+
     @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public void usingABandageOnYourselfLocksInATreatmentAndThenAppliesIt(GameTestHelper helper) {
         TestBodies.Victim v = TestBodies.victim(helper);

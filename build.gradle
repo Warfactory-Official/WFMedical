@@ -255,6 +255,22 @@ dependencies {
     // Soft TACZ compat only – no hard dependency, but the mixins need the classes at compile time.
     compileOnly "curse.maven:tacz-1-21-1-${tacz_curse_project}:${tacz_curse_file}"
     runtimeOnly "curse.maven:tacz-1-21-1-${tacz_curse_project}:${tacz_curse_file}"
+
+    // WF-Ballistics owns the armour model: one DT/DR resolver per protection type, per equipment slot,
+    // which this mod asks about the limb it has already picked. compileOnly only, because
+    // com.warfactory.medical.compat.wfballistics guards every call behind ModList and the mod still
+    // loads and plays without it (ArmorEvaluation's roll is the fallback). Local jar because
+    // WF-Ballistics is not published anywhere yet; rebuild it and re-copy when it moves.
+    compileOnly files('libs/wfballistics-1.2.0.jar')
+
+    // ...and on the run classpath for -PwithBallistics, which is how the integration gets exercised at
+    // all: without it every one of those methods correctly falls back. Off by default because it puts a
+    // second mod's content, mixins and event handlers into the environment every other test runs in.
+    // Its Flywheel and GemRender dependencies are declared side = "CLIENT", so a server or gametest run
+    // needs neither; a client run does.
+    if (project.hasProperty('withBallistics')) {
+        runtimeOnly files('libs/wfballistics-1.2.0.jar')
+    }
 }
 
 tasks.named('processResources', ProcessResources).configure {

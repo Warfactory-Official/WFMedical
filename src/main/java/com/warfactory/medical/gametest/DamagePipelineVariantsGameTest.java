@@ -253,12 +253,18 @@ public class DamagePipelineVariantsGameTest {
         TestBodies.Victim v = TestBodies.victim(helper);
         MedicalProfile profile = TestBodies.profileOf(helper, v);
 
-        // Open a real wound so the effective cap drops below full health, then try to heal past it.
+        // Open a real wound so the effective MAX drops below full health, then take a fall on top of it:
+        // blunt trauma costs CURRENT health without lowering the max, which is what leaves a gap for regen
+        // to try to close. A penetrating wound alone lowers both together and leaves nothing to observe.
         v.hurt(source(helper, DamageTypes.ARROW), 10.0F);
+        v.invulnerableTime = 0;
+        v.spawnInvulnerableTime = 0;
+        v.hurt(source(helper, DamageTypes.FALL), 8.0F);
         profile.recompute(MedicalConfig.toPhysiologyParams());
         float cap = profile.cached().effectiveCurrentHealth();
         if (cap >= v.getMaxHealth()) {
-            helper.fail("the wound did not lower the health cap, so the clamp cannot be observed");
+            helper.fail("the wounds did not lower the health cap, so the clamp cannot be observed: "
+                    + TestBodies.describe(profile));
             return;
         }
 

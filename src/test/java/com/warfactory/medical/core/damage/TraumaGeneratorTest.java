@@ -1,5 +1,6 @@
 package com.warfactory.medical.core.damage;
 
+import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
 import com.warfactory.medical.core.trauma.TraumaCategory;
@@ -46,6 +47,10 @@ class TraumaGeneratorTest {
         return gen(cat, ArmorEvaluation.Outcome.FULL, limb, energy, Fixtures.neverRolls());
     }
 
+    private static String ids(List<Trauma> out) {
+        return out.stream().map(t -> t.getType().getId()).toList().toString();
+    }
+
     private static boolean has(List<Trauma> out, String id) {
         return out.stream().anyMatch(t -> t.getType().getId().equals(id));
     }
@@ -58,12 +63,46 @@ class TraumaGeneratorTest {
     class Ballistic {
 
         @Test
-        void aBulletLeavesAPunctureALacerationAndInternalBleeding() {
+        void aBulletLeavesAPunctureAndALaceration() {
             List<Trauma> out = gen(DamageCategory.BALLISTIC, LimbType.TORSO, 10.0F);
             assertTrue(has(out, "puncture"), "a bullet must leave an entry wound");
             assertTrue(has(out, "laceration_large"));
-            assertTrue(has(out, "internal_bleeding"));
-            assertTrue(out.size() >= 3, "one bullet legitimately makes several wounds");
+            assertEquals(2, out.size(), "one round is one wound channel, not a pile of separate injuries");
+        }
+
+        @Test
+        void aRoundThatDoesEverythingStillFitsUnderTheCap() {
+            // Every roll passing is the worst case: the two wounds of the channel plus one complication.
+            List<Trauma> out = gen(DamageCategory.BALLISTIC, ArmorEvaluation.Outcome.FULL, LimbType.LEFT_LEG,
+                    12.0F, Fixtures.alwaysRolls());
+            assertTrue(out.size() <= MedicalConfig.maxTraumasPerHit(),
+                    "a single hit produced " + out.size() + " wounds: " + ids(out));
+            assertTrue(has(out, "puncture"), "the cap must never cost a hit its primary wound");
+            assertTrue(has(out, "laceration_large"));
+        }
+
+        @Test
+        void internalBleedingIsARollAndNotTheDefaultOutcomeOfBeingShot() {
+            // No field dressing reaches internal bleeding, so making it certain turns every bullet into an
+            // emergency that only a suture kit or medkit can answer.
+            assertFalse(has(gen(DamageCategory.BALLISTIC, LimbType.TORSO, 10.0F), "internal_bleeding"),
+                    "a failed roll must leave no internal bleeding");
+            assertTrue(has(gen(DamageCategory.BALLISTIC, ArmorEvaluation.Outcome.FULL, LimbType.TORSO, 10.0F,
+                    Fixtures.alwaysRolls()), "internal_bleeding"), "a passed roll must produce it");
+        }
+
+        @Test
+        void aShallowHitCannotCauseInternalBleedingAtAll() {
+            // Below the penetration threshold there is nothing deep enough to rupture.
+            assertFalse(has(gen(DamageCategory.BALLISTIC, ArmorEvaluation.Outcome.FULL, LimbType.TORSO, 1.0F,
+                    Fixtures.alwaysRolls()), "internal_bleeding"));
+        }
+
+        @Test
+        void aLimbIsFarLessLikelyToBleedInternallyThanTheTrunk() {
+            assertTrue(TraumaGenerator.internalBleedingChanceFor(DamageCategory.BALLISTIC, LimbType.TORSO, 10.0F)
+                            > TraumaGenerator.internalBleedingChanceFor(DamageCategory.BALLISTIC, LimbType.LEFT_ARM, 10.0F),
+                    "there is less to rupture in an arm");
         }
 
         @Test
@@ -278,7 +317,8 @@ class TraumaGeneratorTest {
 
             List<Trauma> heavy = gen(DamageCategory.SLASHING, LimbType.TORSO, 10.0F);
             assertTrue(has(heavy, "laceration_large"));
-            assertTrue(has(heavy, "internal_bleeding"));
+            assertTrue(has(gen(DamageCategory.SLASHING, ArmorEvaluation.Outcome.FULL, LimbType.TORSO, 10.0F,
+                    Fixtures.alwaysRolls()), "internal_bleeding"), "a deep cut can still reach something vital");
         }
 
         @Test

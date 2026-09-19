@@ -125,6 +125,19 @@ public final class TestBodies {
     }
 
     /**
+     * Put {@code v} into the level's entity index so it can be found by id.
+     *
+     * <p>A bare {@link #victim} is constructed but never added to the world: it has an entity id, but
+     * {@code level.getEntity(id)} does not know it. Anything server-side that resolves a target by id
+     * (every treat-someone-else path) then silently sees no target, and the test reads as a flat refusal
+     * rather than a missing fixture. Self-treatment tests pass {@code -1} and never hit this.
+     */
+    public static Victim spawn(GameTestHelper helper, Victim v) {
+        helper.getLevel().addFreshEntity(v);
+        return v;
+    }
+
+    /**
      * Point every rotation field at {@code yaw}. Body rotation is the one that matters for the rig: set
      * only {@code yRot} and the limb boxes stay where they were, so a yaw sweep becomes a no-op.
      */

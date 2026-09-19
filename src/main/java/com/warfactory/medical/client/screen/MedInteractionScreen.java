@@ -66,6 +66,7 @@ public final class MedInteractionScreen {
     private static final int GRID_BG_COLOR = 0xC0202020;
     private static final int GRID_HOVER_COLOR = 0xFFFFDD55;
     private static final int TQ_REMOVE_BG_COLOR = 0xD0B02020;
+    private static final int RESUSCITATE_BG_COLOR = 0xD02060B0;
 
     private record LimbTile(LimbType limb, int x, int y, int w, int h) {
     }
@@ -341,7 +342,8 @@ public final class MedInteractionScreen {
         LimbType limb = MedicalUIParts.selectedLimb();
         StringBuilder sb = new StringBuilder();
         sb.append(targetId).append('|').append(ClientMedicalCache.hasActiveTreatment()).append('|')
-                .append(limb).append('|').append(tourniquetApplied(limb)).append('|');
+                .append(limb).append('|').append(tourniquetApplied(limb)).append('|')
+                .append(targetDowned()).append('|');
         for (ItemStack stack : MedicalUIParts.availableMedicalItems()) {
             sb.append(stack.getItem().getDescriptionId()).append(',');
         }
@@ -358,6 +360,10 @@ public final class MedInteractionScreen {
         boolean tqApplied = tourniquetApplied(limb);
 
         int idx = 0;
+        if (targetDowned()) {
+            addResuscitateButton(group, cellX(idx), cellY(idx));
+            idx++;
+        }
         if (tqApplied) {
             addTourniquetRemoveButton(group, cellX(idx), cellY(idx));
             idx++;
@@ -400,6 +406,27 @@ public final class MedInteractionScreen {
         group.addChild(MedUi.iconButton(x, y, GRID_CELL, GRID_CELL, face, hover,
                 itemTooltip(stack),
                 () -> MedicalUIParts.requestAction(stack, MedicalUIParts.selectedLimb(), targetId)));
+    }
+
+    /** A downed casualty is the one case where the medic has something to do with no item at all. */
+    private static boolean targetDowned() {
+        if (targetId < 0) {
+            return false;
+        }
+        MedicalSyncPacket snap = sheetSnapshot();
+        return snap != null && snap.stats() != null && snap.stats().unconscious();
+    }
+
+    private static void addResuscitateButton(UIElement group, int x, int y) {
+        GuiTextureGroup face = new GuiTextureGroup(
+                SDFRectTexture.of(RESUSCITATE_BG_COLOR).setRadius(GRID_RADIUS));
+        GuiTextureGroup hover = new GuiTextureGroup(face,
+                SDFRectTexture.of(0x00000000).setRadius(GRID_RADIUS)
+                        .setBorderColor(GRID_HOVER_COLOR).setStroke(2));
+        group.addChild(MedUi.iconButton(x, y, GRID_CELL, GRID_CELL, face, hover,
+                List.of(Component.translatable("gui.wfmedical.resuscitate"),
+                        Component.translatable("gui.wfmedical.resuscitate.tooltip")),
+                () -> MedicalUIParts.requestResuscitate(targetId)));
     }
 
     private static void addTourniquetRemoveButton(UIElement group, int x, int y) {

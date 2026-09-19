@@ -136,6 +136,19 @@ class TreatmentServiceTest {
         }
 
         @Test
+        void aSutureIsTheOnlyThingThatStopsInternalBleeding() {
+            Trauma internal = wound(LimbType.TORSO, "internal_bleeding", 0.9F);
+            assertTrue(internal.bleeding() > 0.0F);
+
+            assertTrue(apply(item("wfmedical:suture_kit"), LimbType.TORSO));
+
+            assertEquals(0.0F, internal.bleeding(), EPS,
+                    "with nothing able to stop it, blood volume can never recover and the casualty cannot wake");
+            assertEquals(0.9F, internal.getSeverity(), EPS,
+                    "the injury itself is still there; it still needs a medkit");
+        }
+
+        @Test
         void aSuturedWoundIsStillThereJustNoLongerBleeding() {
             Trauma cut = wound(LimbType.TORSO, "laceration_large", 0.8F);
             apply(item("wfmedical:suture_kit"), LimbType.TORSO);

@@ -2,6 +2,7 @@ package com.warfactory.medical.client.overlay;
 
 import com.lowdragmc.lowdraglib2.gui.texture.ColorRectTexture;
 import com.lowdragmc.lowdraglib2.gui.texture.TextTexture;
+import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.network.ClientMedicalCache;
 import com.warfactory.medical.network.MedicalSyncPacket;
@@ -36,6 +37,13 @@ public final class VitalsOverlay implements LayeredDraw.Layer {
             .setType(TextTexture.TextType.LEFT).setColor(0xFF88AAFF).setDropShadow(true);
     private static final TextTexture PAIN_LABEL = new TextTexture("")
             .setType(TextTexture.TextType.LEFT).setColor(0xFFFF8888).setDropShadow(true);
+    private static final TextTexture HEART_LABEL = new TextTexture("")
+            .setType(TextTexture.TextType.LEFT).setColor(0xFFFF8888).setDropShadow(true);
+    private static final TextTexture HEART_VALUE = new TextTexture("")
+            .setType(TextTexture.TextType.LEFT).setDropShadow(true);
+
+    /** How far off resting the rate has to be before it is worth putting on screen. */
+    private static final float HEART_RATE_NOTICEABLE = 8.0F;
 
     private VitalsOverlay() {
     }
@@ -72,9 +80,14 @@ public final class VitalsOverlay implements LayeredDraw.Layer {
             pain = 1.0F;
         }
 
+        float heartRate = stats.heartRate();
+        float resting = (float) MedicalConfig.heartRateResting();
+
         boolean showBlood = bloodFraction < 0.999F;
         boolean showPain = pain > 0.001F;
-        if (!showBlood && !showPain) {
+        boolean showHeart = MedicalConfig.heartRateEnabled()
+                && Math.abs(heartRate - resting) >= HEART_RATE_NOTICEABLE;
+        if (!showBlood && !showPain && !showHeart) {
             return;
         }
 
@@ -94,6 +107,29 @@ public final class VitalsOverlay implements LayeredDraw.Layer {
             BACKGROUND.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT, partialTick);
             PAIN_FILL.setProgress(pain);
             PAIN_FILL.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT, partialTick);
+            y += BAR_HEIGHT + 2;
         }
+        if (showHeart) {
+            HEART_LABEL.updateText(Component.translatable("gui.wfmedical.heart_rate").getString());
+            HEART_LABEL.draw(graphics, -1, -1, MARGIN_X, y, LABEL_WIDTH, BAR_HEIGHT, partialTick);
+            HEART_VALUE.setColor(heartRateColor(heartRate, resting));
+            HEART_VALUE.updateText(Component.translatable("gui.wfmedical.heart_rate.bpm",
+                    Math.round(heartRate)).getString());
+            HEART_VALUE.draw(graphics, -1, -1, barX, y, BAR_WIDTH, BAR_HEIGHT, partialTick);
+        }
+    }
+
+    /** Amber once the heart is clearly compensating, red when it is racing, blue when it has been slowed. */
+    private static int heartRateColor(float heartRate, float resting) {
+        if (heartRate >= resting * 1.75F) {
+            return 0xFFFF4040;
+        }
+        if (heartRate >= resting * 1.30F) {
+            return 0xFFFFAA40;
+        }
+        if (heartRate <= resting * 0.70F) {
+            return 0xFF60A0FF;
+        }
+        return 0xFFDDDDDD;
     }
 }

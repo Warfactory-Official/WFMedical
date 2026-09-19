@@ -1,6 +1,7 @@
 package com.warfactory.medical.core;
 
 import com.warfactory.medical.core.limb.Limb;
+import com.warfactory.medical.server.MedicalActionService;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.TraumaCategory;
 import com.warfactory.medical.core.trauma.TraumaRegistry;
@@ -122,6 +123,165 @@ class PhysiologyTest {
             t.setBleedFactor(0.0F);
             profile.limb(LimbType.TORSO).markDirty();
             assertEquals(0.0D, compute().totalBleeding(), EPS);
+        }
+    }
+
+    @Nested
+    class CardiacOutput {
+
+        /** Full volume must leave the raw rate alone, or every existing wound number silently changes. */
+        @Test
+        void aFullPatientBleedsAtTheRawRate() {
+            Fixtures.wound(profile, registry, LimbType.TORSO, "laceration_large", 1.0F);
+            assertEquals(1.2D * params.bleedingRateMultiplier(), compute().totalBleeding(), 1.0e-3D);
+            assertEquals(1.0D, compute().cardiacOutput(), 1.0e-3D);
+        }
+
+        @Test
+        void losingBloodSlowsTheBleedBecauseThereIsLessToPump() {
+            Fixtures.wound(profile, registry, LimbType.TORSO, "laceration_large", 1.0F);
+            double full = compute().totalBleeding();
+
+            profile.setBloodMl(params.maxBloodMl() * 0.75D);
+            double halfWay = compute().totalBleeding();
+
+            assertTrue(halfWay < full, full + " -> " + halfWay);
+            // Venous return is linear from the floor (0.5) to full, so 0.75 volume is half output.
+            assertEquals(full * 0.5D, halfWay, 1.0e-3D);
+        }
+
+        @Test
+        void anEmptyPatientStillSeepsAtTheFloorRatherThanStoppingDead() {
+            Fixtures.wound(profile, registry, LimbType.TORSO, "laceration_large", 1.0F);
+            double full = compute().totalBleeding();
+            profile.setBloodMl(0.0D);
+
+            DerivedStats drained = compute();
+            assertEquals(params.cardiacOutputFloor(), drained.cardiacOutput(), 1.0e-6D);
+            assertEquals(full * params.cardiacOutputFloor(), drained.totalBleeding(), 1.0e-3D);
+            assertTrue(drained.totalBleeding() > 0.0D,
+                    "a casualty must not stabilise themselves by bleeding out");
+        }
+
+        @Test
+        void theDecelerationCanBeTurnedOff() {
+            Fixtures.wound(profile, registry, LimbType.TORSO, "laceration_large", 1.0F);
+            PhysiologyParams flat = Fixtures.paramsWith(params, false);
+            profile.setBloodMl(params.maxBloodMl() * 0.7D);
+            compute(); // build the limb caches the way the engine would before comparing params
+            assertTrue(compute().totalBleeding() < 1.2D * params.bleedingRateMultiplier(),
+                    "the enabled model must be decelerating here for the comparison to mean anything");
+
+            assertEquals(1.2D * params.bleedingRateMultiplier(),
+                    Physiology.compute(profile, flat).totalBleeding(), 1.0e-3D);
+        }
+    }
+
+    @Nested
+    class HeartRateCoupling {
+
+        @Test
+        void aRestingHeartLeavesEveryExistingNumberWhereItWas() {
+            Fixtures.wound(profile, registry, LimbType.TORSO, "laceration_large", 1.0F);
+            profile.setHeartRate((float) params.heartRateResting());
+            assertEquals(1.2D * params.bleedingRateMultiplier(), compute().totalBleeding(), 1.0e-3D);
+            assertEquals(1.0D, compute().cardiacOutput(), 1.0e-3D);
+        }
+
+        @Test
+        void aRacingHeartPushesBloodOutOfTheWoundFaster() {
+            Fixtures.wound(profile, registry, LimbType.TORSO, "laceration_large", 1.0F);
+            double calm = compute().totalBleeding();
+
+            profile.setHeartRate((float) params.heartRateResting() * 2.0F);
+            double racing = compute().totalBleeding();
+
+            assertTrue(racing > calm, calm + " -> " + racing);
+        }
+
+        @Test
+        void theRateIsCarriedThroughToTheClientAlongWithThePressureItProduces() {
+            profile.setHeartRate(150.0F);
+            DerivedStats stats = compute();
+            assertEquals(150.0F, stats.heartRate());
+            assertTrue(stats.systolic() > 120, "a racing heart at full volume reads high: " + stats.systolic());
+
+            profile.setBloodMl(params.maxBloodMl() * 0.6D);
+            assertTrue(compute().systolic() < 120, "and a drained one reads low");
+        }
+
+        @Test
+        void turningTheRateOffIgnoresWhateverTheProfileIsCarrying() {
+            Fixtures.wound(profile, registry, LimbType.TORSO, "laceration_large", 1.0F);
+            profile.setHeartRate(200.0F);
+            PhysiologyParams off = Fixtures.paramsWithHeartRate(params, false);
+            compute(); // build the limb caches the way the engine would before comparing params
+
+            DerivedStats flat = Physiology.compute(profile, off);
+            assertEquals(params.heartRateResting(), flat.heartRate(), EPS);
+            assertEquals(1.2D * params.bleedingRateMultiplier(), flat.totalBleeding(), 1.0e-3D);
+        }
+    }
+
+    @Nested
+    class Resuscitation {
+
+        /** The odds must reward the medic for stopping the bleed and replacing volume, in that order. */
+        @Test
+        void theOddsFallAsThePatientEmpties() {
+            profile.setBloodMl(params.maxBloodMl() * (1.0D - params.bloodUnconsciousLossFraction()));
+            compute();
+            float justDown = MedicalActionService.resuscitateChance(profile);
+
+            profile.setBloodMl(params.maxBloodMl() * (1.0D - params.bloodDeathLossFraction()));
+            compute();
+            float nearlyGone = MedicalActionService.resuscitateChance(profile);
+
+            assertTrue(justDown > nearlyGone, justDown + " -> " + nearlyGone);
+            assertTrue(nearlyGone > 0.0F, "a long shot is still a shot");
+        }
+
+        @Test
+        void aHaemorrhagingPatientCannotBeBroughtRoundAtAll() {
+            profile.setBloodMl(params.maxBloodMl() * (1.0D - params.bloodUnconsciousLossFraction()));
+            compute();
+            assertTrue(MedicalActionService.resuscitateChance(profile) > 0.0F);
+
+            float dry = MedicalActionService.resuscitateChance(profile);
+
+            // An open haemorrhage cuts the odds: stop the bleed before working the chest.
+            Fixtures.wound(profile, registry, LimbType.TORSO, "internal_bleeding", 1.0F);
+            compute();
+            float bleeding = MedicalActionService.resuscitateChance(profile);
+            assertTrue(bleeding < dry, dry + " -> " + bleeding);
+
+            // Past the reference rate it is hopeless outright.
+            for (LimbType lt : LimbType.VALUES) {
+                Fixtures.wound(profile, registry, lt, "internal_bleeding", 1.0F);
+            }
+            compute();
+            assertEquals(0.0F, MedicalActionService.resuscitateChance(profile), EPS);
+        }
+    }
+
+    @Nested
+    class ReviveGrace {
+
+        @Test
+        void aRevivedCasualtyStaysUpThroughTheGraceDespiteTheNumbersSayingOtherwise() {
+            profile.setBloodMl(params.maxBloodMl() * (1.0D - params.bloodUnconsciousLossFraction() - 0.02D));
+            assertEquals(HealthState.UNCONSCIOUS, compute().state());
+
+            profile.setReviveGraceUntilTick(1000L);
+            assertTrue(compute().state() != HealthState.UNCONSCIOUS,
+                    "without the grace a revive folds again on the very next recompute");
+        }
+
+        @Test
+        void theGraceDoesNotHoldOffBleedingOut() {
+            profile.setReviveGraceUntilTick(1000L);
+            profile.setBloodMl(params.maxBloodMl() * (1.0D - params.bloodDeathLossFraction() - 0.01D));
+            assertEquals(HealthState.DEAD, compute().state(), "CPR must not make anyone unkillable");
         }
     }
 
@@ -300,20 +460,7 @@ class PhysiologyTest {
 
         @Test
         void withBleedoutDisabledTheSameLossIsFatal() {
-            PhysiologyParams noBleedout = new PhysiologyParams(
-                    params.maxHealthPoints(), params.maxBloodMl(), params.bloodLowFraction(),
-                    params.bloodCriticalFraction(), params.bloodDeathMl(), params.painShockThreshold(),
-                    params.painMaxHealthPenalty(), params.legFractureSpeedMultiplier(), params.painSpeedFloor(),
-                    false, params.bleedoutTicks(), params.bloodDeathLossFraction(),
-                    params.bloodUnconsciousLossFraction(), params.painUnconsciousThreshold(),
-                    params.painUnconsciousWeight(), params.bloodMovementPenaltyLossFraction(),
-                    params.painShareHead(), params.painShareTorso(), params.painShareArm(), params.painShareLeg(),
-                    params.painSaturationK(), params.adrenalineEnabled(), params.asphyxiaMoveMultiplier(),
-                    params.stimulantSpeedBonus(), params.healthShareHead(), params.healthShareTorso(),
-                    params.healthShareArm(), params.healthShareLeg(), params.tourniquetBleedMultiplier(),
-                    params.tourniquetLegSpeedMultiplier(), params.tourniquetArmSpeedMultiplier(),
-                    params.headDepletionInstakill(), params.torsoDepletionInstakill(),
-                    params.bleedingRateMultiplier());
+            PhysiologyParams noBleedout = Fixtures.paramsWithBleedout(params, false);
             profile.setBloodMl(params.maxBloodMl() * (1.0D - params.bloodUnconsciousLossFraction() - 0.02D));
             assertEquals(HealthState.DEAD, profile.recompute(noBleedout).state());
         }
@@ -511,19 +658,7 @@ class PhysiologyTest {
         }
 
         private PhysiologyParams withTorsoInstakill(boolean on) {
-            return new PhysiologyParams(
-                    params.maxHealthPoints(), params.maxBloodMl(), params.bloodLowFraction(),
-                    params.bloodCriticalFraction(), params.bloodDeathMl(), params.painShockThreshold(),
-                    params.painMaxHealthPenalty(), params.legFractureSpeedMultiplier(), params.painSpeedFloor(),
-                    params.bleedoutEnabled(), params.bleedoutTicks(), params.bloodDeathLossFraction(),
-                    params.bloodUnconsciousLossFraction(), params.painUnconsciousThreshold(),
-                    params.painUnconsciousWeight(), params.bloodMovementPenaltyLossFraction(),
-                    params.painShareHead(), params.painShareTorso(), params.painShareArm(), params.painShareLeg(),
-                    params.painSaturationK(), params.adrenalineEnabled(), params.asphyxiaMoveMultiplier(),
-                    params.stimulantSpeedBonus(), params.healthShareHead(), params.healthShareTorso(),
-                    params.healthShareArm(), params.healthShareLeg(), params.tourniquetBleedMultiplier(),
-                    params.tourniquetLegSpeedMultiplier(), params.tourniquetArmSpeedMultiplier(),
-                    params.headDepletionInstakill(), on, params.bleedingRateMultiplier());
+            return Fixtures.paramsWithTorsoInstakill(params, on);
         }
     }
 

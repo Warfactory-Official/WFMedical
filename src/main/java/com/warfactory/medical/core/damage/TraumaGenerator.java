@@ -101,11 +101,18 @@ public final class TraumaGenerator {
             }
             default -> {
                 if (category == DamageCategory.BALLISTIC) {
+                    // One round is one wound channel: the puncture is the entry and the large laceration is the
+                    // tear it opens on the way through. The extra small laceration that used to ride along was
+                    // the same wound counted a third time, so a single hit now reads as two wounds plus at most
+                    // one complication (see the cap in add()).
                     add(out, registry, PUNCTURE, TraumaCategory.PUNCTURE, limb, 0.9F * energyFactor, nowTick);
                     add(out, registry, LACERATION_LARGE, TraumaCategory.LACERATION, limb, 0.7F * energyFactor, nowTick);
-                    add(out, registry, INTERNAL_BLEEDING, TraumaCategory.INTERNAL_BLEEDING, limb, 0.6F * energyFactor, nowTick);
-                    add(out, registry, LACERATION_SMALL, TraumaCategory.LACERATION, limb, 0.5F, nowTick);
+                    // Bone before organs: a broken limb is the characteristic complication of a hit to one,
+                    // and internal bleeding there is already a long shot. On the trunk there is no bone in the
+                    // rig to break, so the order only decides which one survives the cap on a limb.
                     maybeFracture(out, registry, limb, nowTick, rand, fractureChance(category, limb, energyFactor));
+                    maybeInternalBleeding(out, registry, limb, nowTick, rand, e, 0.6F * energyFactor,
+                            internalBleedingChanceFor(category, limb, e));
                     return out;
                 }
                 boolean impact = category == DamageCategory.BLUNT;
@@ -115,8 +122,10 @@ public final class TraumaGenerator {
                         add(out, registry, BRUISE, TraumaCategory.BRUISE, limb, 0.5F, nowTick);
                     } else {
                         add(out, registry, LACERATION_LARGE, TraumaCategory.LACERATION, limb, 0.8F * energyFactor, nowTick);
-                        add(out, registry, INTERNAL_BLEEDING, TraumaCategory.INTERNAL_BLEEDING, limb, 0.5F * energyFactor, nowTick);
-                        add(out, registry, LACERATION_SMALL, TraumaCategory.LACERATION, limb, 0.5F, nowTick);
+                        maybeFracture(out, registry, limb, nowTick, rand, fractureChance(category, limb, energyFactor));
+                        maybeInternalBleeding(out, registry, limb, nowTick, rand, e, 0.5F * energyFactor,
+                                internalBleedingChanceFor(category, limb, e));
+                        return out;
                     }
                     maybeFracture(out, registry, limb, nowTick, rand, fractureChance(category, limb, energyFactor));
                 } else if (impact) {
@@ -153,6 +162,43 @@ public final class TraumaGenerator {
         return clampF(chance, 0.0F, 0.9F);
     }
 
+    /**
+     * Internal bleeding is a deep organ/vessel injury, not the default outcome of being shot: it is permanent,
+     * bleeds harder than anything else and no field dressing reaches it. It needs a wound deep enough to have
+     * penetrated (energy above the threshold) and is far likelier in the trunk than in a limb.
+     */
+    static float internalBleedingChanceFor(DamageCategory cat, LimbType limb, float energy) {
+        if (energy < (float) MedicalConfig.internalBleedingMinEnergy()) {
+            return 0.0F;
+        }
+        float base = (float) MedicalConfig.internalBleedingChance();
+        if (cat == DamageCategory.EXPLOSION) {
+            base *= (float) MedicalConfig.internalBleedingExplosionMultiplier();
+        }
+        if (!(limb == LimbType.TORSO || limb == LimbType.HEAD)) {
+            base *= (float) MedicalConfig.internalBleedingLimbMultiplier();
+        }
+        return clampF(base, 0.0F, 1.0F);
+    }
+
+    private static void maybeInternalBleeding(List<Trauma> out, TraumaRegistry registry, LimbType limb,
+                                              long nowTick, RandomSource rand, float energy, float severity,
+                                              float chance) {
+        if (chance <= 0.0F) {
+            return;
+        }
+        // No RNG available (deterministic call sites, e.g. tests): fall back to the energy gate alone so the
+        // wound is still reachable rather than silently impossible.
+        if (rand == null) {
+            if (energy < (float) MedicalConfig.internalBleedingMinEnergy()) {
+                return;
+            }
+        } else if (rand.nextFloat() >= chance) {
+            return;
+        }
+        add(out, registry, INTERNAL_BLEEDING, TraumaCategory.INTERNAL_BLEEDING, limb, severity, nowTick);
+    }
+
     private static void maybeFracture(List<Trauma> out, TraumaRegistry registry, LimbType limb,
                                       long nowTick, RandomSource rand, float chance) {
         if (!(limb.isArm() || limb.isLeg())) {
@@ -163,8 +209,17 @@ public final class TraumaGenerator {
         }
     }
 
+    /**
+     * Every wound a hit produces funnels through here, and every damage path lists its primary wounds first
+     * and its rolled complications (internal bleeding, fracture) last. That makes the cap an ordering rule
+     * rather than a lottery: a hit never loses its wound channel, only the third thing piled on top of it.
+     */
     private static void add(List<Trauma> out, TraumaRegistry registry, String id, TraumaCategory category,
                             LimbType limb, float severity, long nowTick) {
+        int cap = MedicalConfig.maxTraumasPerHit();
+        if (cap > 0 && out.size() >= cap) {
+            return;
+        }
         TraumaType type = resolve(registry, id, category);
         if (type == null) {
             return;

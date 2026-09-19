@@ -90,6 +90,13 @@ public final class MedicalUIParts {
         MedicalNetworking.sendToServer(new MedicalActionPacket(id, limb, targetEntityId));
     }
 
+    public static void requestResuscitate(int targetEntityId) {
+        if (targetEntityId < 0) {
+            return;
+        }
+        MedicalNetworking.sendToServer(new ResuscitatePacket(targetEntityId));
+    }
+
     public static void requestRemoveTourniquet(LimbType limb) {
         requestRemoveTourniquet(limb, -1);
     }

@@ -97,6 +97,8 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
         buf.writeBoolean(s.bothArmsDisabled());
         buf.writeBoolean(s.bothLegsDisabled());
         buf.writeBoolean(s.anyArmTourniquet());
+        buf.writeDouble(s.cardiacOutput());
+        buf.writeFloat(s.heartRate());
     }
 
     static DerivedStats readStats(FriendlyByteBuf buf) {
@@ -105,7 +107,8 @@ public record MedicalSyncPacket(DerivedStats stats, LimbSummary[] limbs, double 
                 buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readBoolean(), buf.readFloat(),
                 buf.readEnum(HealthState.class),
                 buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
-                buf.readBoolean(), buf.readBoolean(), buf.readBoolean());
+                buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
+                buf.readDouble(), buf.readFloat());
     }
 
     private static List<WoundView> woundsOf(Limb limb) {

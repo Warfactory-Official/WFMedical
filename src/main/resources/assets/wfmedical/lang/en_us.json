@@ -62,6 +62,13 @@
   "gui.wfmedical.treat.applied": "Treatment applied",
   "gui.wfmedical.treat.busy": "Already being treated",
   "gui.wfmedical.treat.out_of_reach": "Too far away to treat",
+  "gui.wfmedical.treat.target_gone": "Patient is gone",
+  "gui.wfmedical.resuscitate": "Resuscitate",
+  "gui.wfmedical.resuscitate.tooltip": "Attempt to bring a downed casualty round. Works far better once the bleeding is stopped and blood has been replaced.",
+  "gui.wfmedical.resuscitate.not_downed": "Patient is conscious",
+  "gui.wfmedical.resuscitate.failed": "No response",
+  "gui.wfmedical.resuscitate.success": "Patient is breathing",
+  "gui.wfmedical.resuscitate.revived": "You have been resuscitated",
   "gui.wfmedical.wheel.title": "Select Limb",
   "gui.wfmedical.wheel.select": "Select a limb",
   "gui.wfmedical.wheel.self": "Yourself",
@@ -97,13 +104,11 @@
   "death.attack.asphyxiation.player": "%1$s asphyxiated while fighting %2$s",
   "death.attack.overdose": "%1$s died from an overdose",
   "death.attack.overdose.player": "%1$s died from an overdose while fighting %2$s",
-
   "tooltip.wfmedical.treats": "Works on: %s",
   "tooltip.wfmedical.apply_time": "Apply time: %ss",
   "tooltip.wfmedical.blood_restore": "Restores %s mL blood",
   "tooltip.wfmedical.self_only": "Self-use only",
   "tooltip.wfmedical.usable_on_others": "Can be used on others",
-
   "tooltip.wfmedical.category.bruise": "bruises",
   "tooltip.wfmedical.category.laceration": "cuts",
   "tooltip.wfmedical.category.puncture": "punctures",
@@ -113,7 +118,6 @@
   "tooltip.wfmedical.category.chemical_burn": "chemical burns",
   "tooltip.wfmedical.category.radiation_burn": "radiation burns",
   "tooltip.wfmedical.category.internal_bleeding": "internal bleeding",
-
   "tooltip.wfmedical.reduce_bleeding.effect": "Stops the bleeding from an open wound.",
   "tooltip.wfmedical.reduce_bleeding.limit": "Bleed only - crush & blunt wounds keep hurting and won't heal without a medkit.",
   "tooltip.wfmedical.suture_wound.effect": "Stitches a cut or puncture shut so it stops bleeding and can mend.",
@@ -136,11 +140,12 @@
   "tooltip.wfmedical.treat_burn.limit": "Burns and chemical burns only.",
   "tooltip.wfmedical.treat_radiation.effect": "Neutralizes radiation burns.",
   "tooltip.wfmedical.treat_radiation.limit": "Radiation burns only.",
-
   "tooltip.wfmedical.morphine.effect": "Powerful painkiller: near-total pain relief.",
   "tooltip.wfmedical.morphine.limit": "Each dose stacks a drug load; overdosing knocks you out and can be lethal.",
   "tooltip.wfmedical.naloxone.effect": "Opioid antidote: reverses an overdose instantly.",
   "tooltip.wfmedical.naloxone.limit": "Also strips pain relief - the masked pain comes flooding back.",
   "tooltip.wfmedical.combat_stimulant_i.effect": "Combat stimulant: numbs pain, boosts speed and forces clotting for ~3 min.",
-  "tooltip.wfmedical.combat_stimulant_i.limit": "Heavy drug load outlasts the high; a second dose can kill. Reverse with naloxone."
+  "tooltip.wfmedical.combat_stimulant_i.limit": "Heavy drug load outlasts the high; a second dose can kill. Reverse with naloxone.",
+  "gui.wfmedical.heart_rate": "HR",
+  "gui.wfmedical.heart_rate.bpm": "%s bpm"
 }
