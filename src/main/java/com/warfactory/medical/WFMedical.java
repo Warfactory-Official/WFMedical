@@ -60,9 +60,9 @@ public final class WFMedical {
     }
 
     private void onCommonSetup(FMLCommonSetupEvent event) {
-        // Before anything else: tells WF-Ballistics, if it is here, that this mod answers for
+        // Before anything else: tells WFLib, if it is here, that this mod answers for
         // players' armour per limb, so the two do not both reduce the same hit.
-        com.warfactory.medical.compat.wfballistics.WfBallisticsArmorCompat.init();
+        com.warfactory.medical.compat.wflib.WfLibArmorCompat.init();
         event.enqueueWork(() -> {
             TraumaRegistry registry = new TraumaRegistry();
             Map<String, Treatment> itemTreatments = new HashMap<>();

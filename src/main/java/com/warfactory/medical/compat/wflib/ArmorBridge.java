@@ -1,8 +1,8 @@
-package com.warfactory.medical.compat.wfballistics;
+package com.warfactory.medical.compat.wflib;
 
-import com.wf.wfballistics.armor.ArmorOutcome;
-import com.wf.wfballistics.armor.ArmorResult;
-import com.wf.wfballistics.armor.ArmorSystem;
+import com.wf.wflib.armor.ArmorOutcome;
+import com.wf.wflib.armor.ArmorResult;
+import com.wf.wflib.armor.ArmorSystem;
 import com.warfactory.medical.core.damage.ArmorEvaluation;
 import com.warfactory.medical.core.limb.LimbType;
 import net.minecraft.world.damagesource.DamageSource;
@@ -11,8 +11,8 @@ import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 
 /**
- * The half that names WF-Ballistics types. Never loaded unless the mod is there; see
- * {@link WfBallisticsArmorCompat}.
+ * The half that names WFLib types. Never loaded unless the mod is there; see
+ * {@link WfLibArmorCompat}.
  */
 final class ArmorBridge {
 
@@ -27,11 +27,11 @@ final class ArmorBridge {
         return ArmorSystem.playerResolutionClaimed();
     }
 
-    static WfBallisticsArmorCompat.Resolved resolve(LivingEntity victim, LimbType limb,
+    static WfLibArmorCompat.Resolved resolve(LivingEntity victim, LimbType limb,
                                                     DamageSource source, float amount, boolean applyWear) {
         EquipmentSlot slot = ArmorEvaluation.slotFor(limb);
         ArmorResult result = ArmorSystem.resolveSlot(victim, slot, source, amount, applyWear);
-        return new WfBallisticsArmorCompat.Resolved(outcome(result.outcome()), (float) result.through());
+        return new WfLibArmorCompat.Resolved(outcome(result.outcome()), (float) result.through());
     }
 
     static void resolveWhole(LivingIncomingDamageEvent event) {

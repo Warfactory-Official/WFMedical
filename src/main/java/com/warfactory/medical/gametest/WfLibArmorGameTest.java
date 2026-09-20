@@ -1,7 +1,7 @@
 package com.warfactory.medical.gametest;
 
 import com.warfactory.medical.WFMedical;
-import com.warfactory.medical.compat.wfballistics.WfBallisticsArmorCompat;
+import com.warfactory.medical.compat.wflib.WfLibArmorCompat;
 import com.warfactory.medical.core.damage.ArmorEvaluation;
 import com.warfactory.medical.core.limb.LimbType;
 import net.minecraft.core.Holder;
@@ -21,28 +21,28 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
- * The hand-off to WF-Ballistics' armour resolver.
+ * The hand-off to WFLib' armour resolver.
  *
  * <p>What is being pinned is that there is exactly one reduction step with one owner. Before this, both
- * mods reduced the same hit: WF-Ballistics summed DT and DR over every worn piece regardless of where
+ * mods reduced the same hit: WFLib summed DT and DR over every worn piece regardless of where
  * the hit landed, and this mod separately rolled dice off vanilla's armour attributes. Two identical
  * shots on identical armour could produce two different injuries.
  *
- * <p><b>Nothing here names a WF-Ballistics type.</b> Items come out of the registry by id and the
- * resolver is reached through {@code WfBallisticsArmorCompat}, so this class loads whether or not the
+ * <p><b>Nothing here names a WFLib type.</b> Items come out of the registry by id and the
+ * resolver is reached through {@code WfLibArmorCompat}, so this class loads whether or not the
  * mod is installed. That is deliberate: a gametest holder that cannot be loaded takes the whole scan
  * with it.
  *
- * <p>Only the first test runs in the default configuration, where WF-Ballistics is absent and all it can
- * check is that the fallback really is the fallback. Run the suite with {@code -PwithBallistics} to put
+ * <p>Only the first test runs in the default configuration, where WFLib is absent and all it can
+ * check is that the fallback really is the fallback. Run the suite with {@code -PwithWFLib} to put
  * the mod on the classpath and exercise the rest.
  */
 @GameTestHolder(WFMedical.MOD_ID)
 @PrefixGameTestTemplate(false)
-public class WfBallisticsArmorGameTest {
+public class WfLibArmorGameTest {
 
     private static final String TEMPLATE = "empty";
-    private static final String BALLISTICS = "wfballistics";
+    private static final String BALLISTICS = "wflib";
 
     /** A vest: DT 2 and DR 10% against a bullet, which is most of what soft armour is worth. */
     private static final ResourceLocation PLATE_CARRIER =
@@ -57,14 +57,14 @@ public class WfBallisticsArmorGameTest {
     @GameTest(template = TEMPLATE)
     public static void theBridgeAgreesWithTheModList(GameTestHelper helper) {
         boolean present = ModList.get().isLoaded(BALLISTICS);
-        if (present != WfBallisticsArmorCompat.isLoaded()) {
+        if (present != WfLibArmorCompat.isLoaded()) {
             helper.fail("mod list says " + present + " but the compat says "
-                    + WfBallisticsArmorCompat.isLoaded());
+                    + WfLibArmorCompat.isLoaded());
             return;
         }
         TestBodies.Victim victim = TestBodies.victim(helper);
         if (!present) {
-            if (WfBallisticsArmorCompat.resolve(victim, LimbType.TORSO,
+            if (WfLibArmorCompat.resolve(victim, LimbType.TORSO,
                     helper.getLevel().damageSources().cactus(), 10.0F, false) != null) {
                 helper.fail("the compat answered without the mod behind it");
                 return;
@@ -72,8 +72,8 @@ public class WfBallisticsArmorGameTest {
             helper.succeed();
             return;
         }
-        if (!WfBallisticsArmorCompat.claimedPlayers()) {
-            helper.fail("WF-Ballistics was never told this mod owns players, so both will reduce the hit");
+        if (!WfLibArmorCompat.claimedPlayers()) {
+            helper.fail("WFLib was never told this mod owns players, so both will reduce the hit");
             return;
         }
         helper.succeed();
@@ -86,7 +86,7 @@ public class WfBallisticsArmorGameTest {
      */
     @GameTest(template = TEMPLATE)
     public static void theOutcomeComesOffTheArithmeticNotTheDice(GameTestHelper helper) {
-        if (!WfBallisticsArmorCompat.isLoaded()) {
+        if (!WfLibArmorCompat.isLoaded()) {
             helper.succeed();
             return;
         }
@@ -112,7 +112,7 @@ public class WfBallisticsArmorGameTest {
         }
 
         // DT 2, then 10% off the remaining 28.
-        float through = WfBallisticsArmorCompat.resolve(victim, LimbType.TORSO, rifle, 30.0F, false).through();
+        float through = WfLibArmorCompat.resolve(victim, LimbType.TORSO, rifle, 30.0F, false).through();
         if (Math.abs(through - 25.2F) > 1.0E-3F) {
             helper.fail("the wound energy should be what got past the vest, not what was aimed at it: "
                     + through);
@@ -124,7 +124,7 @@ public class WfBallisticsArmorGameTest {
     /** Arms are covered by the chestplate and legs are not, so the answer has to differ between them. */
     @GameTest(template = TEMPLATE)
     public static void itAsksAboutThePieceOnTheLimbThatWasHit(GameTestHelper helper) {
-        if (!WfBallisticsArmorCompat.isLoaded()) {
+        if (!WfLibArmorCompat.isLoaded()) {
             helper.succeed();
             return;
         }
@@ -132,10 +132,10 @@ public class WfBallisticsArmorGameTest {
         victim.setItemSlot(EquipmentSlot.CHEST, carrier(helper));
         DamageSource rifle = kinetic(helper);
 
-        WfBallisticsArmorCompat.Resolved torso =
-                WfBallisticsArmorCompat.resolve(victim, LimbType.TORSO, rifle, 1.5F, false);
-        WfBallisticsArmorCompat.Resolved leg =
-                WfBallisticsArmorCompat.resolve(victim, LimbType.LEFT_LEG, rifle, 1.5F, false);
+        WfLibArmorCompat.Resolved torso =
+                WfLibArmorCompat.resolve(victim, LimbType.TORSO, rifle, 1.5F, false);
+        WfLibArmorCompat.Resolved leg =
+                WfLibArmorCompat.resolve(victim, LimbType.LEFT_LEG, rifle, 1.5F, false);
         if (torso.outcome() != ArmorEvaluation.Outcome.BLOCKED) {
             helper.fail("the vest should have stopped a 1.5 hit to the chest: " + torso.outcome());
             return;
@@ -154,7 +154,7 @@ public class WfBallisticsArmorGameTest {
      */
     @GameTest(template = TEMPLATE)
     public static void absorbingTheHitIsWhatCostsTheVest(GameTestHelper helper) {
-        if (!WfBallisticsArmorCompat.isLoaded()) {
+        if (!WfLibArmorCompat.isLoaded()) {
             helper.succeed();
             return;
         }
@@ -163,13 +163,13 @@ public class WfBallisticsArmorGameTest {
         victim.setItemSlot(EquipmentSlot.CHEST, vest);
         DamageSource rifle = kinetic(helper);
 
-        WfBallisticsArmorCompat.resolve(victim, LimbType.TORSO, rifle, 30.0F, false);
+        WfLibArmorCompat.resolve(victim, LimbType.TORSO, rifle, 30.0F, false);
         ItemStack worn = victim.getItemBySlot(EquipmentSlot.CHEST);
         if (worn.getDamageValue() != 0) {
             helper.fail("a dry run charged the vest " + worn.getDamageValue() + " anyway");
             return;
         }
-        WfBallisticsArmorCompat.resolve(victim, LimbType.TORSO, rifle, 30.0F, true);
+        WfLibArmorCompat.resolve(victim, LimbType.TORSO, rifle, 30.0F, true);
         if (worn.getDamageValue() != 3) {
             helper.fail("expected 3 durability spent on 4.8 absorbed, got " + worn.getDamageValue());
             return;
@@ -181,8 +181,8 @@ public class WfBallisticsArmorGameTest {
 
     private static boolean outcomeIs(GameTestHelper helper, TestBodies.Victim victim, DamageSource source,
                                      float amount, ArmorEvaluation.Outcome expected) {
-        WfBallisticsArmorCompat.Resolved got =
-                WfBallisticsArmorCompat.resolve(victim, LimbType.TORSO, source, amount, false);
+        WfLibArmorCompat.Resolved got =
+                WfLibArmorCompat.resolve(victim, LimbType.TORSO, source, amount, false);
         if (got == null) {
             helper.fail("the compat declined a hit while the mod is loaded");
             return false;
@@ -201,7 +201,7 @@ public class WfBallisticsArmorGameTest {
         // BuiltInRegistries.get hands back the registry default rather than null for an unknown id, so
         // an absent item arrives as an empty stack rather than as an exception.
         if (stack.isEmpty()) {
-            helper.fail("WF-Ballistics is loaded but " + PLATE_CARRIER + " is not registered");
+            helper.fail("WFLib is loaded but " + PLATE_CARRIER + " is not registered");
         }
         return stack;
     }

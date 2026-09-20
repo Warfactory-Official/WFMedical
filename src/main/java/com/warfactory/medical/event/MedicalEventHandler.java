@@ -6,7 +6,7 @@ import com.warfactory.medical.attachment.IMedicalData;
 import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.compat.OpenPersistenceCompat;
 import com.warfactory.medical.compat.TaczCompat;
-import com.warfactory.medical.compat.wfballistics.WfBallisticsArmorCompat;
+import com.warfactory.medical.compat.wflib.WfLibArmorCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
@@ -135,8 +135,8 @@ public final class MedicalEventHandler {
     }
 
     /**
-     * Armour is resolved here now, not separately by WF-Ballistics, because two subsystems each doing
-     * part of one job is worse than either doing all of it. This mod claims players from WF-Ballistics
+     * Armour is resolved here now, not separately by WFLib, because two subsystems each doing
+     * part of one job is worse than either doing all of it. This mod claims players from WFLib
      * on startup, so any hit {@link #handleMedicalHit} declines still has to have its armour answered
      * for, or a player this mod is configured to ignore would be the only unarmoured thing in the world.
      */
@@ -149,7 +149,7 @@ public final class MedicalEventHandler {
             return;
         }
         if (!handleMedicalHit(event, player)) {
-            WfBallisticsArmorCompat.resolveWhole(event);
+            WfLibArmorCompat.resolveWhole(event);
         }
     }
 
@@ -276,10 +276,10 @@ public final class MedicalEventHandler {
         }
 
         LimbType primary = limbs.get(0);
-        // The piece on the limb that was hit, resolved once, deterministically. Without WF-Ballistics
+        // The piece on the limb that was hit, resolved once, deterministically. Without WFLib
         // this falls back to the old roll, which is the same three values decided by dice instead.
-        WfBallisticsArmorCompat.Resolved resolved =
-                WfBallisticsArmorCompat.resolve(victim, primary, src, amount, true);
+        WfLibArmorCompat.Resolved resolved =
+                WfLibArmorCompat.resolve(victim, primary, src, amount, true);
         ArmorEvaluation.Outcome primaryOutcome = resolved != null
                 ? resolved.outcome()
                 : ArmorEvaluation.evaluate(victim, primary, cat, amount, rand);
@@ -305,8 +305,8 @@ public final class MedicalEventHandler {
             } else {
                 // No wear on the way through: one bullet is one impact, and a torso shot that carries on
                 // into an arm would otherwise charge the chestplate twice for it.
-                WfBallisticsArmorCompat.Resolved onward =
-                        WfBallisticsArmorCompat.resolve(victim, limb, src, energy, false);
+                WfLibArmorCompat.Resolved onward =
+                        WfLibArmorCompat.resolve(victim, limb, src, energy, false);
                 if (onward != null) {
                     outcome = onward.outcome();
                     energy = onward.through();

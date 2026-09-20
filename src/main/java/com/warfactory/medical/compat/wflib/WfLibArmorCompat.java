@@ -1,4 +1,4 @@
-package com.warfactory.medical.compat.wfballistics;
+package com.warfactory.medical.compat.wflib;
 
 import com.warfactory.medical.core.damage.ArmorEvaluation;
 import com.warfactory.medical.core.limb.LimbType;
@@ -9,11 +9,11 @@ import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Armour resolution, handed to WF-Ballistics when it is there.
+ * Armour resolution, handed to WFLib when it is there.
  *
  * <p>The point is that there is <b>one</b> reduction step with one owner. Two subsystems each doing
  * part of the job is worse than either doing all of it, and until this existed that was the state of
- * things: WF-Ballistics reduced the damage from a summed DT/DR over every worn piece, and this mod
+ * things: WFLib reduced the damage from a summed DT/DR over every worn piece, and this mod
  * separately rolled dice for blocked/partial/full off vanilla's armour attributes. The same shot
  * could produce two different injuries on two identical hits.
  *
@@ -22,17 +22,17 @@ import org.jetbrains.annotations.Nullable;
  * reads as PARTIAL, barely touched reads as FULL. Without it, {@link ArmorEvaluation} is unchanged
  * and still rolls.
  *
- * <p>Nothing in this class names a WF-Ballistics type, so loading it in a pack without the mod
+ * <p>Nothing in this class names a WFLib type, so loading it in a pack without the mod
  * resolves nothing. Everything that does is in {@link ArmorBridge}, which is only ever reached behind
  * {@link #isLoaded()}.
  */
-public final class WfBallisticsArmorCompat {
+public final class WfLibArmorCompat {
 
-    private static final String MOD_ID = "wfballistics";
+    private static final String MOD_ID = "wflib";
 
     private static boolean loaded;
 
-    private WfBallisticsArmorCompat() {
+    private WfLibArmorCompat() {
     }
 
     /**
@@ -59,7 +59,7 @@ public final class WfBallisticsArmorCompat {
     }
 
     /**
-     * Whether WF-Ballistics has been told this mod answers for players. False without the mod, and
+     * Whether WFLib has been told this mod answers for players. False without the mod, and
      * false before {@link #init}. Exposed so a test can pin the thing that keeps the two from both
      * reducing the same hit.
      */
@@ -73,7 +73,7 @@ public final class WfBallisticsArmorCompat {
      * @param applyWear whether the pieces involved should be charged for what they absorbed. True for
      *                  the limb that was actually hit; false for the further limbs a penetrating round
      *                  carries on into, since a slot reached twice by one bullet is still one impact
-     * @return the outcome and what reached the body, or null when WF-Ballistics is absent
+     * @return the outcome and what reached the body, or null when WFLib is absent
      */
     @Nullable
     public static Resolved resolve(LivingEntity victim, LimbType limb, DamageSource source,
