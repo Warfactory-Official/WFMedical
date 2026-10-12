@@ -28,7 +28,7 @@ import java.util.List;
 /**
  * The damage pipeline for everything that is not a bullet.
  *
- * <p>{@code TraumaPipelineGameTest} proves the TACZ path end to end. This proves the ordinary vanilla
+ * <p>{@code TraumaPipelineGameTest} proves the round path end to end. This proves the ordinary vanilla
  * paths that every player meets far more often -- falling, burning, being punched, being shot with an
  * arrow -- reach the same handler and produce the right kind of wound. Each of these takes a different
  * branch through classification, hit location and the wound table, and every one of those branches can

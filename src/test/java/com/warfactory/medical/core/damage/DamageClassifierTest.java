@@ -155,4 +155,12 @@ class DamageClassifierTest {
             }
         }
     }
+
+    @Test
+    void everyCategoryMapsToTheSameNamedAhfCategory() {
+        for (DamageCategory c : DamageCategory.values()) {
+            assertEquals(c.name(), c.hitCategory().name());
+        }
+        assertEquals(DamageCategory.values().length, com.norwood.ahf.hit.HitCategory.values().length);
+    }
 }

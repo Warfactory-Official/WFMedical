@@ -17,7 +17,6 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
@@ -30,14 +29,9 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
  *
  * <p><b>Nothing here names a WFLib type.</b> Items come out of the registry by id and the
  * resolver is reached through {@code WfLibArmorCompat}, so this class loads whether or not the
- * mod is installed. That is deliberate: a gametest holder that cannot be loaded takes the whole scan
- * with it.
- *
- * <p>Only the first test runs in the default configuration, where WFLib is absent and all it can
- * check is that the fallback really is the fallback. Run the suite with {@code -PwithWFLib} to put
- * the mod on the classpath and exercise the rest.
+ * mod is installed. That is deliberate: a test class that cannot be loaded takes the whole registration
+ * with it. Registered by {@link WfLibGameTests}.
  */
-@GameTestHolder(WFMedical.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class WfLibArmorGameTest {
 
@@ -54,7 +48,7 @@ public class WfLibArmorGameTest {
      * The guard says what is actually there, and says nothing when it is not. This is the one test that
      * means something in both configurations.
      */
-    @GameTest(template = TEMPLATE)
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public static void theBridgeAgreesWithTheModList(GameTestHelper helper) {
         boolean present = ModList.get().isLoaded(BALLISTICS);
         if (present != WfLibArmorCompat.isLoaded()) {
@@ -84,12 +78,9 @@ public class WfLibArmorGameTest {
      * different and entirely predictable answers: under the threshold is stopped, over it but heavily cut
      * is reduced, and far over it is barely touched.
      */
-    @GameTest(template = TEMPLATE)
+    @WfLibMode(true)
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public static void theOutcomeComesOffTheArithmeticNotTheDice(GameTestHelper helper) {
-        if (!WfLibArmorCompat.isLoaded()) {
-            helper.succeed();
-            return;
-        }
         TestBodies.Victim victim = TestBodies.victim(helper);
         victim.setItemSlot(EquipmentSlot.CHEST, carrier(helper));
         DamageSource rifle = kinetic(helper);
@@ -122,12 +113,9 @@ public class WfLibArmorGameTest {
     }
 
     /** Arms are covered by the chestplate and legs are not, so the answer has to differ between them. */
-    @GameTest(template = TEMPLATE)
+    @WfLibMode(true)
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public static void itAsksAboutThePieceOnTheLimbThatWasHit(GameTestHelper helper) {
-        if (!WfLibArmorCompat.isLoaded()) {
-            helper.succeed();
-            return;
-        }
         TestBodies.Victim victim = TestBodies.victim(helper);
         victim.setItemSlot(EquipmentSlot.CHEST, carrier(helper));
         DamageSource rifle = kinetic(helper);
@@ -152,12 +140,9 @@ public class WfLibArmorGameTest {
      * A vest with hardness 1 that ate 4.8 of a 30-point hit owes 3.85 damage of condition, which is 385
      * points, which is three whole durability points and 85 over.
      */
-    @GameTest(template = TEMPLATE)
+    @WfLibMode(true)
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public static void absorbingTheHitIsWhatCostsTheVest(GameTestHelper helper) {
-        if (!WfLibArmorCompat.isLoaded()) {
-            helper.succeed();
-            return;
-        }
         TestBodies.Victim victim = TestBodies.victim(helper);
         ItemStack vest = carrier(helper);
         victim.setItemSlot(EquipmentSlot.CHEST, vest);

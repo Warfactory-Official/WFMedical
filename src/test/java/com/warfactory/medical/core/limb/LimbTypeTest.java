@@ -1,5 +1,6 @@
 package com.warfactory.medical.core.limb;
 
+import com.norwood.ahf.part.HitboxPart;
 import com.warfactory.medical.network.MedicalSyncPacket.LimbSummary;
 import org.junit.jupiter.api.Test;
 
@@ -51,22 +52,19 @@ class LimbTypeTest {
     }
 
     @Test
-    void everyLimbHasADisplayNameAndAPositiveHitWeight() {
+    void everyLimbHasADisplayName() {
         for (LimbType lt : LimbType.VALUES) {
             assertFalse(lt.getDisplayName().isBlank(), lt + " has no display name");
-            assertTrue(lt.getHitWeight() > 0.0F, lt + " would never be picked by the weighted fallback");
         }
     }
 
     @Test
-    void theTorsoIsTheLikeliestRandomHitAndTheHeadTheLeast() {
+    void ahfPartMappingIsABijectionByName() {
         for (LimbType lt : LimbType.VALUES) {
-            if (lt != LimbType.TORSO) {
-                assertTrue(LimbType.TORSO.getHitWeight() >= lt.getHitWeight(),
-                        "the torso should dominate the weighted fallback, not " + lt);
-            }
-            assertTrue(LimbType.HEAD.getHitWeight() <= lt.getHitWeight(), lt + " is rarer than the head");
+            assertEquals(lt.name(), lt.part().name());
+            assertSame(lt, LimbType.of(lt.part()));
         }
+        assertEquals(LimbType.VALUES.length, HitboxPart.VALUES.length);
     }
 
     @Test

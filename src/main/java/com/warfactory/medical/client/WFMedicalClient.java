@@ -5,7 +5,6 @@ import com.warfactory.medical.client.overlay.ActionProgressOverlay;
 import com.warfactory.medical.client.overlay.DamageOutlineOverlay;
 import com.warfactory.medical.client.overlay.HealthBarOverlay;
 import com.warfactory.medical.client.render.TourniquetLayer;
-import com.warfactory.medical.compat.playeranim.PlayerAnimHitbox;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
@@ -14,9 +13,7 @@ import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 
 @EventBusSubscriber(modid = WFMedical.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class WFMedicalClient {
@@ -29,13 +26,6 @@ public final class WFMedicalClient {
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         MedicalKeyMappings.register(event);
-    }
-
-    @SubscribeEvent
-    public static void onClientSetup(FMLClientSetupEvent event) {
-        if (ModList.get().isLoaded("playeranimator")) {
-            event.enqueueWork(PlayerAnimHitbox::register);
-        }
     }
 
     @SubscribeEvent

@@ -1,11 +1,10 @@
 package com.warfactory.medical.client;
 
+import com.norwood.ahf.hook.AhfHooks;
 import com.warfactory.medical.WFMedical;
-import com.warfactory.medical.compat.TaczCompat;
-import com.warfactory.medical.compat.tacz.TaczGunState;
+import com.warfactory.medical.api.MedicalState;
+import com.warfactory.medical.api.MedicalSway;
 import com.warfactory.medical.config.MedicalConfig;
-import com.warfactory.medical.core.HealthState;
-import com.warfactory.medical.network.ClientMedicalCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
@@ -13,17 +12,14 @@ import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.Item;
 import net.neoforged.api.distmarker.Dist;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 @EventBusSubscriber(modid = WFMedical.MOD_ID, value = Dist.CLIENT)
 public final class PainSwayHandler {
 
-    private static final float SWAY_START = 0.15F;
-    private static final float MAX_SWAY_DEG = 2.5F;
     private static final double PHASE_STEP = 0.09;
     private static final float ADS_STEADINESS = 0.35F;
 
@@ -44,23 +40,18 @@ public final class PainSwayHandler {
 
         double targetYaw = 0.0;
         double targetPitch = 0.0;
-        boolean active = MedicalConfig.painSwayEnabled()
-                && !player.isSpectator()
-                && ClientMedicalCache.state() != HealthState.UNCONSCIOUS;
-        if (active) {
-            float intensity = swayIntensity(ClientMedicalCache.stats().totalPain());
-            if (ClientMedicalCache.stats().anyArmTourniquet()) {
-                intensity = Math.max(intensity, (float) MedicalConfig.tourniquetArmSway());
-            }
-            float ads = TaczCompat.isLoaded() ? TaczGunState.aimingProgress(player) : 0.0F;
+        if (!player.isSpectator() && !MedicalSway.suppressed(player)) {
+            float intensity = MedicalState.painSwayIntensity(player);
+            float ads = AhfHooks.gunAimProgress(player);
             if (intensity > 0.0F && ads > 0.0F) {
                 intensity *= Mth.lerp(ads, 1.0F, ADS_STEADINESS);
             }
-            if (ClientMedicalCache.stats().anyArmFracture() && aimingRangedWeapon(player)) {
+            if (MedicalConfig.painSwayEnabled() && MedicalState.hasArmFracture(player)
+                    && !MedicalState.isUnconscious(player) && aimingRangedWeapon(player)) {
                 intensity = Math.max(intensity, (float) MedicalConfig.brokenArmAimSway());
             }
             if (intensity > 0.0F) {
-                float amp = MAX_SWAY_DEG * (float) MedicalConfig.painSwayStrength();
+                float amp = MedicalSway.amplitudeDegrees();
                 swayPhase += PHASE_STEP;
                 targetYaw = intensity * amp * noiseYaw(swayPhase);
                 targetPitch = intensity * amp * noisePitch(swayPhase);
@@ -84,19 +75,6 @@ public final class PainSwayHandler {
         appliedPitch = 0.0;
     }
 
-    private static float swayIntensity(float pain) {
-        if (pain <= SWAY_START) {
-            return 0.0F;
-        }
-        float full = MedicalConfig.painUnconsciousThreshold();
-        float span = full - SWAY_START;
-        if (span <= 0.0F) {
-            return 1.0F;
-        }
-        float t = (pain - SWAY_START) / span;
-        return Math.min(t, 1.0F);
-    }
-
     private static boolean aimingRangedWeapon(LocalPlayer player) {
         if (player.isUsingItem()) {
             Item item = player.getUseItem().getItem();
@@ -104,8 +82,7 @@ public final class PainSwayHandler {
                 return true;
             }
         }
-        return TaczCompat.isLoaded()
-                && (TaczCompat.isHeldGun(player.getMainHandItem()) || TaczCompat.isHeldGun(player.getOffhandItem()));
+        return AhfHooks.isHeldGun(player.getMainHandItem()) || AhfHooks.isHeldGun(player.getOffhandItem());
     }
 
     private static double noiseYaw(double p) {

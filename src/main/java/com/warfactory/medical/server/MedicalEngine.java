@@ -1,5 +1,7 @@
 package com.warfactory.medical.server;
 
+import com.norwood.ahf.config.AhfConfig;
+import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.attachment.IMedicalData;
 import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.config.MedicalConfig;
@@ -7,7 +9,6 @@ import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.Cardio;
 import com.warfactory.medical.core.MedicalProfile;
-import com.warfactory.medical.core.damage.HitDetectionDebug;
 import com.warfactory.medical.core.PhysiologyParams;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
@@ -113,8 +114,10 @@ public final class MedicalEngine {
         boolean wasDirty = profile.isDirty();
         HealthState beforeState = profile.getState();
         DerivedStats stats = wasDirty ? profile.recompute(params) : profile.cached();
-        if (MedicalConfig.logHitDetection() && stats.state() != beforeState) {
-            HitDetectionDebug.logStateTransition(player, beforeState, stats.state(), nowTick);
+        if (AhfConfig.logHitDetection() && stats.state() != beforeState) {
+            WFMedical.LOGGER.info("[{}] state transition: {} {} -> {} at tick {} (health={})", WFMedical.MOD_ID,
+                    player.getName().getString(), beforeState, stats.state(), nowTick,
+                    String.format("%.1f", player.getHealth()));
         }
 
         if (stats.state() == HealthState.UNCONSCIOUS && profile.getForcedState() == null
@@ -188,7 +191,7 @@ public final class MedicalEngine {
         if (nowDowned != profile.isLastBroadcastDowned()) {
             MedicalNetworking.broadcastDowned(player, nowDowned);
             profile.setLastBroadcastDowned(nowDowned);
-            player.refreshDimensions();
+            MedicalStance.downed(player, nowDowned);
         }
     }
 
@@ -588,7 +591,7 @@ public final class MedicalEngine {
         boolean downed = profile.isDowned();
         profile.setLastBroadcastDowned(downed);
         MedicalNetworking.broadcastDowned(player, downed);
-        player.refreshDimensions();
+        MedicalStance.downed(player, downed);
     }
 
     public static void resync(ServerPlayer player) {
@@ -625,6 +628,7 @@ public final class MedicalEngine {
         if (data != null && data.getProfile().isLastBroadcastDowned()) {
             MedicalNetworking.broadcastDowned(player, false);
             data.getProfile().setLastBroadcastDowned(false);
+            MedicalStance.downed(player, false);
         }
     }
 }

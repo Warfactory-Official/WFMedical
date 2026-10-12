@@ -5,7 +5,6 @@ import com.warfactory.medical.network.ClientMedicalCache;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.world.entity.Entity;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
@@ -27,11 +26,6 @@ public final class ClientDownedTracker {
             } else {
                 DOWNED.remove(entityId);
             }
-        }
-        Entity entity = Minecraft.getInstance().level == null ? null
-                : Minecraft.getInstance().level.getEntity(entityId);
-        if (entity != null) {
-            entity.refreshDimensions();
         }
     }
 

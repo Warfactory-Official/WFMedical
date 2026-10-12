@@ -3,7 +3,6 @@ package com.warfactory.medical.gametest;
 import com.mojang.authlib.GameProfile;
 import com.warfactory.medical.attachment.IMedicalData;
 import com.warfactory.medical.attachment.MedicalAttachments;
-import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
@@ -16,7 +15,6 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.fml.loading.LoadingModList;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
 import java.util.ArrayList;
@@ -97,7 +95,7 @@ public final class TestBodies {
     /**
      * An attacker standing {@code distance} blocks in front of {@code target} and looking straight at it.
      *
-     * <p>Position matters for melee: {@code HitGeometry.shouldRejectGap} traces the attacker's eye ray out
+     * <p>Position matters for melee: {@code HitboxApi.shouldRejectGap} traces the attacker's eye ray out
      * to {@code meleeReach} and throws the hit away as a whiff if it clears every limb box. Two players
      * constructed at the same spot both look along +Z, so the ray never crosses the victim and every melee
      * test silently measures a rejected swing instead of a landed one.
@@ -178,10 +176,5 @@ public final class TestBodies {
             }
         }
         return sb.length() == 0 ? "(no traumas)" : sb.toString().trim();
-    }
-
-    /** Whether TACZ is on this run's mod list, without referencing a TACZ class. */
-    public static boolean taczPresent() {
-        return LoadingModList.get().getModFileById(TaczCompat.MOD_ID) != null;
     }
 }

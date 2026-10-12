@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -115,24 +114,6 @@ class MedicalConfigTest {
             } finally {
                 TestConfig.set("compat.damageSourceCategories", prev);
             }
-        }
-    }
-
-    @Nested
-    class PoseAwareLookups {
-
-        @Test
-        void everyPoseHasAnEnvelopeReach() {
-            for (var pose : com.warfactory.medical.core.damage.rig.RigTuning.RigPose.values()) {
-                assertTrue(MedicalConfig.hitEnvelopeReachHorizontal(pose) >= 0.0D, "horizontal for " + pose);
-                assertTrue(MedicalConfig.hitEnvelopeReachVertical(pose) >= 0.0D, "vertical for " + pose);
-            }
-        }
-
-        @Test
-        void hitRegAndAuthorityModesResolve() {
-            assertNotNull(MedicalConfig.hitRegistrationMode());
-            assertNotNull(MedicalConfig.hitAuthority());
         }
     }
 }

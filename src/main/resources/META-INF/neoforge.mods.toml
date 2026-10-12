@@ -1,35 +1,27 @@
-modLoader = "javafml" #mandatory
-loaderVersion = "${loader_version_range}" #mandatory
+modLoader = "javafml"
+loaderVersion = "${loader_version_range}"
 license = "${mod_license}"
 
-[[mods]] #mandatory
-modId = "${mod_id}" #mandatory
-version = "${mod_version}" #mandatory
-displayName = "${mod_name}" #mandatory
-authors = "${mod_authors}" #optional
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "${mod_name}"
+authors = "${mod_authors}"
 description = '''${mod_description}'''
 
-# Mixin configs. NeoForge 1.21.1 runs on official names on both sides, so these carry no refmap.
 [[mixins]]
 config = "${mod_id}.mixins.json"
 
-# TACZ mixins – only applied when TACZ is present (required=false in the config itself).
-[[mixins]]
-config = "${mod_id}.tacz.mixins.json"
-
-# Access transformers.
 [[accessTransformers]]
 file = "META-INF/accesstransformer.cfg"
 
-# NeoForge dependency
 [[dependencies.${ mod_id }]]
-modId = "neoforge" #mandatory
+modId = "neoforge"
 type = "required"
 versionRange = "${neoforge_version_range}"
 ordering = "NONE"
 side = "BOTH"
 
-# Minecraft dependency
 [[dependencies.${ mod_id }]]
 modId = "minecraft"
 type = "required"
@@ -37,8 +29,6 @@ versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "BOTH"
 
-# LDLib2 – MANDATORY. Provides the UI framework used by the client character sheet, radial menu and
-# HUD overlays. Load AFTER it so its GUI types are available on both sides.
 [[dependencies.${ mod_id }]]
 modId = "ldlib2"
 type = "required"
@@ -46,21 +36,16 @@ versionRange = "*"
 ordering = "AFTER"
 side = "BOTH"
 
-# TACZ (Timeless and Classics Zero) – OPTIONAL compatibility. Not required; when present we load
-# AFTER it so our damage->trauma classification can recognise gun/bullet damage sources.
 [[dependencies.${ mod_id }]]
-modId = "tacz"
-type = "optional"
-versionRange = "*"
+modId = "ahf"
+type = "required"
+versionRange = "[1.0.4,2)"
 ordering = "AFTER"
 side = "BOTH"
 
-# PlayerAnimator (KosmX) – OPTIONAL, CLIENT-side. When present the limb hitbox rig reads its animated
-# bone transforms so hitboxes track played animations (see PlayerAnimHitbox). Load AFTER it so its
-# client API is available; absent, hitboxes fall back to the vanilla pose.
 [[dependencies.${ mod_id }]]
-modId = "playeranimator"
+modId = "wflib"
 type = "optional"
-versionRange = "*"
-ordering = "AFTER"
-side = "CLIENT"
+versionRange = "[1.6.3,2)"
+ordering = "NONE"
+side = "BOTH"

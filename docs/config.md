@@ -83,32 +83,36 @@ Registered via `MedicalConfig.register(ModLoadingContext)` during mod constructi
 | `asphyxiaStruggleTicks` | `60` | Ticks (3 s) of the conscious struggle phase before passing out. |
 | `asphyxiaMoveMultiplier` | `0.25` | Speed multiplier during the conscious asphyxia phase. |
 
-### Section: `hitlocation`
+### Section: `sync`
 
 | Key | Default | Description |
 |---|---|---|
-| `geometricHitLocation` | `true` | Master switch for OBB-based hit location. Off = legacy weighted sampler. |
-| `poseAwareArms` | `true` | If true, an actively aiming victim has upper-frontal hits reassigned to the raised arm. |
-| `headBandBottom` | `0.74` | Fraction of body height (from feet) at/above which a hit counts as HEAD. |
-| `legBandTop` | `0.40` | Fraction of body height at/below which a hit counts as a LEG. |
-| `armSideThreshold` | `0.80` | Normalized horizontal offset (|nx|) at/above which a torso-height hit redirects to an arm. |
-| `meleeReach` | `3.0` | Aim-ray length (blocks) for reconstructing melee hit geometry. |
-| `riggedLimbBoxes` | `true` | If true, hits are classified against the server-side pose replica (six OBBs). Off = banded-AABB. |
-| `limbBoxPadding` | `0.02` | OBB inflation (blocks) to absorb pose-replica drift. |
+| `logMedicalSync` | `false` | Trace full/delta syncs, both sides. |
+| `syncFullResyncIntervalTicks` | `40` | Full-sync re-baseline period; 0 = deltas only. |
+
+Moved from `hitlocation` (old values not carried over).
 
 ### Section: `compat`
 
 | Key | Default | Description |
 |---|---|---|
-| `openPersistenceCompat` | `true` | Enable Open Persistence integration (logout body carries medical profile). |
-| `taczArmPose` | `true` | Use synced TACZ aiming progress for arm OBB poses instead of the generic bow-like approximation. |
+| `openPersistenceCompat` | `true` | Open Persistence logout body carries the medical profile; bodies are AHF envelope targets. |
+| `damageSourceCategories` | gtceu entries | `<damage type id or msgId>=<CATEGORY>`; wins over WFLib threats and the built-in classifier. |
 
-### Section: `hitregistration`
+### Dropped keys (hitboxes -> AHF `config/ahf-common.toml`)
 
-| Key | Default | Description |
-|---|---|---|
-| `hitRegistrationMode` | `ENVELOPE` | `OFF` = vanilla tight box; `ENVELOPE` = inflated to model silhouette (registers arm/prone hits); `PRECISE` = ENVELOPE + rig gap-rejection. |
-| `hitEnvelopeInflation` | `0.15` | Blocks the hit-scan box is widened for ENVELOPE/PRECISE modes. |
+| old `wfmedical-common.toml` | AHF |
+|---|---|
+| `hitlocation.{geometricHitLocation, poseAwareArms, headBandBottom, legBandTop, armSideThreshold, meleeReach}` | `hitLocation.*` |
+| `hitlocation.{riggedLimbBoxes, limbBoxPadding}` | `rig.*` |
+| `hitlocation.{hitboxDebug, logHitDetection}` | `debug.*` |
+| `compat.taczArmPose` | none (TACZ dropped); gun arms via `rig.gunArmPose` + `AhfHooks` |
+| `hitregistration.{hitRegistrationMode, hitGapRejectTolerance}` | `hitRegistration.*` (default PRECISE kept) |
+| `hitregistration.envelopeReach.{standing,crouching,prone}*` | `hitRegistration.envelopeReach.*`; `downed*` -> stance envelope |
+| `authority.*` (`hitAuthority`, `poseStream*`, `poseHint*`, `animatedHitboxes`) | `authority.*`, `rig.animatedHitboxes` |
+| `penetration.*` | `penetration.*` |
+
+Old values are not migrated.
 
 ---
 

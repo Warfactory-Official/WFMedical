@@ -38,13 +38,6 @@ public final class MedicalKeyMappings {
             GLFW.GLFW_KEY_J,
             CATEGORY);
 
-    public static final KeyMapping TOGGLE_HITBOX = new KeyMapping(
-            "key.wfmedical.toggle_hitbox",
-            KeyConflictContext.IN_GAME,
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_K,
-            CATEGORY);
-
     public static final KeyMapping TOGGLE_SCREEN_FX = new KeyMapping(
             "key.wfmedical.toggle_screen_fx",
             KeyConflictContext.IN_GAME,
@@ -67,7 +60,6 @@ public final class MedicalKeyMappings {
         event.register(OPEN_RADIAL);
         event.register(GIVE_UP);
         event.register(TOGGLE_DEBUG);
-        event.register(TOGGLE_HITBOX);
         if (MedicalDebug.ENABLED) {
             event.register(TOGGLE_SCREEN_FX);
             event.register(TOGGLE_FX_LOG);

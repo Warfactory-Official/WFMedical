@@ -4,7 +4,7 @@
 
 ```
 com.warfactory.medical
-├── api/                    MedicalState – thin read-only API for other mods / mixins
+├── api/                    MedicalState (read-only), MedicalSway (client sway yield)
 ├── capability/             Forge capability: IMedicalData, MedicalData, MedicalCapabilities, MedicalProvider
 ├── client/
 │   ├── overlay/            HUD overlays (health bar, pain vignette, unconscious, action progress)
@@ -13,14 +13,12 @@ com.warfactory.medical
 │   └── PainSwayHandler     Client-side aim sway from pain
 ├── compat/
 │   ├── OpenPersistenceCompat  Logout body integration
-│   └── TaczCompat             TACZ firearm detection
+│   └── wflib/              Optional WFLib `[1.6.3,2)`: armour claim + strike classification; WFLib types only in `*Bridge`
 ├── config/
 │   ├── MedicalConfig       ForgeConfigSpec (COMMON) – numeric tunables and feature toggles
 │   └── MedicalDefinitions  TOML loader for trauma/treatment/substance tables
 ├── core/
-│   ├── damage/             DamageClassifier, DamageCategory, ArmorEvaluation, HitLocation, HitGeometry,
-│   │                       TraumaGenerator, HitRegMode
-│   │   └── rig/            HumanoidRig, Obb – server-side pose replica for geometric hit location
+│   ├── damage/             DamageClassifier, DamageCategory, ArmorEvaluation, TraumaGenerator
 │   ├── limb/               Limb, LimbType
 │   ├── substance/          Substance record, SubstanceRegistry
 │   ├── trauma/             Trauma, TraumaType, TraumaCategory, TraumaRegistry
@@ -32,7 +30,7 @@ com.warfactory.medical
 │   └── PhysiologyParams    Immutable config-snapshot record consumed by Physiology
 ├── event/                  MedicalEventHandler – Forge bus wiring
 ├── item/                   ModItems, MedicalItem, InjectableItem
-├── mixin/                  Vanilla intercepts (sprint/jump block, camera tilt, hit registration)
+├── mixin/                  Vanilla intercepts (sprint/jump block, downed camera pivot + look lock + hidden hands)
 ├── network/                MedicalSyncPacket, ClientMedicalCache, MedicalNetworking, action packets
 └── server/
     ├── MedicalActionService  Timed-treatment tick driver
@@ -51,15 +49,15 @@ com.warfactory.medical
 
 ### 2. Damage classification – `DamageClassifier.classify`
 
-Inspects the `DamageSource` via damage-type tags, well-known `DamageTypes` keys, and the source `msgId` string. TACZ firearm damage is detected first. Returns a `DamageCategory` enum value (`BALLISTIC`, `SLASHING`, `BLUNT`, `UNARMED`, `PIERCING`, `FIRE`, `EXPLOSION`, `CHEMICAL`, `RADIATION`, `FALL`, `GENERIC`).
+Order: `damageSourceCategories` override -> WFLib `StrikeContext` threat (`SMALL_ARMS`/`KINETIC` -> `BALLISTIC`; `HE`/`HEAT`/`TANDEM_HEAT` -> `EXPLOSION`) -> damage-type tags, `DamageTypes` keys, `msgId`. Returns a `DamageCategory` enum value (`BALLISTIC`, `SLASHING`, `BLUNT`, `UNARMED`, `PIERCING`, `FIRE`, `EXPLOSION`, `CHEMICAL`, `RADIATION`, `FALL`, `GENERIC`).
 
-### 3. Hit location – `HitLocation.pick` / `HumanoidRig`
+### 3. Hit location – AHF
 
-**Geometric path (default, `geometricHitLocation=true`):** `HitGeometry.classifyHit` reconstructs a world-space impact position from the attacker/projectile direction, then projects it onto six oriented bounding boxes (OBBs) built by `HumanoidRig.compute`. The rig is a server-side replica of `HumanoidModel.setupAnim` – it reads `walkAnimation`, arm pose, crouch, swim/elytra state, and (when `taczArmPose` is on) the synced TACZ aiming progress to match what the client renderer draws. OBBs are padded by `limbBoxPadding` to absorb pose-replica drift.
-
-**Weighted fallback:** When geometric reconstruction fails (no traceable direction) or is disabled, `HitLocation.pickWeighted` samples from the six limb hit weights, biased by category (ballistic/piercing skew head+torso, fall skews legs, explosion spreads toward extremities).
-
-**Hit registration:** `HitRegMode` controls the pre-physics collision box used for registering whether a hit counts at all: `OFF` = vanilla tight box; `ENVELOPE` = box inflated by `hitEnvelopeInflation` (default 0.15 blocks) so arm and prone hits register; `PRECISE` = envelope with a rig-gap rejection pass that cancels shots that threaded the gap between limb OBBs.
+- Parts: AHF `HitSampler.pick` / `pickPierced` (`penetrationEnabled`); `HitboxPart` <-> `LimbType`, `HitCategory` <- `DamageCategory` by explicit switch.
+- Gap reject: `onLivingAttackGapReject` (HIGH) -> `HitboxApi.shouldRejectGap` => cancel. Players + Open Persistence bodies.
+- Envelope on vanilla picks: AHF mixin; bodies added via `AhfHooks.addEnvelopeTarget`.
+- Round damage sources implementing `AhfHitSource` => classified + gap-tested on their own segment.
+- WFLib strike with `parts() != null` => those limbs (all only if `penetrationEnabled`, else first); never gap-rejected.
 
 ### 4. Armor evaluation – `ArmorEvaluation.evaluate`
 
@@ -135,7 +133,7 @@ Applies two transient `AttributeModifier`s (fixed UUIDs, so they never stack):
 
 Current health is clamped downward toward the derived target (normal ticking never heals); `allowRaise=true` on join/respawn sets it exactly. Unconscious players are pinned to ≥ 1 HP unless they are already at 0 (death finalized).
 
-Sprint blocking and jump scaling are handled by `LivingEntityMixin` and `PlayerMixin` reading `MedicalState.getCached()`.
+Sprint blocking and jump scaling: `LivingEntityMixin`. Leg crawl (both legs disabled, conscious) -> AHF `AhfStance.setCrawl` via `MedicalStance` (write on change only).
 
 ### 11. Sync – `MedicalSyncPacket` / `ClientMedicalCache`
 
@@ -143,7 +141,7 @@ Sprint blocking and jump scaling are handled by `LivingEntityMixin` and `PlayerM
 
 The client handler (`MedicalSyncPacket.handleClient`) writes the packet into `ClientMedicalCache` (a `volatile` singleton). Overlays and HUD code read from `ClientMedicalCache.stats()` / `ClientMedicalCache.get()`.
 
-A separate `DownedStatePacket` is broadcast to **nearby tracking players** (not just self) whenever the downed predicate changes, so observers can render the prone/unconscious pose.
+`DownedStatePacket` -> trackers + self on downed change (client `MedicalState.isDowned`, camera pivot, look lock, hidden hands). Same transition -> AHF `AhfStance.setDowned`: DOWNED posture (on its back, AHF >= 1.0.4), forced pose, dimensions, rig, render, `weaponsBlocked`.
 
 ### Server-authoritative design
 

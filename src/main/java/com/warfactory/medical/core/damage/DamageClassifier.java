@@ -1,6 +1,6 @@
 package com.warfactory.medical.core.damage;
 
-import com.warfactory.medical.compat.TaczCompat;
+import com.warfactory.medical.compat.wflib.WfLibStrikeCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -28,9 +28,9 @@ public final class DamageClassifier {
         if (configured != null) {
             return configured;
         }
-
-        if (TaczCompat.isGunDamage(source)) {
-            return DamageCategory.BALLISTIC;
+        DamageCategory strike = WfLibStrikeCompat.category(source);
+        if (strike != null) {
+            return strike;
         }
 
         String msg = source.getMsgId();

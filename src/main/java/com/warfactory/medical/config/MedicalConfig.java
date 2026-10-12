@@ -2,9 +2,6 @@ package com.warfactory.medical.config;
 
 import com.warfactory.medical.core.PhysiologyParams;
 import com.warfactory.medical.core.damage.DamageCategory;
-import com.warfactory.medical.core.damage.HitAuthority;
-import com.warfactory.medical.core.damage.HitRegMode;
-import com.warfactory.medical.core.damage.rig.RigTuning;
 import com.warfactory.medical.core.limb.LimbType;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
@@ -63,25 +60,10 @@ public final class MedicalConfig {
     private static final ModConfigSpec.IntValue DEATH_ATTRIBUTION_WINDOW_TICKS;
     private static final ModConfigSpec.DoubleValue TREAT_REACH_BLOCKS;
     private static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> TREAT_SELF_ONLY_OVERRIDES;
-    private static final ModConfigSpec.BooleanValue GEOMETRIC_HIT_LOCATION;
-    private static final ModConfigSpec.BooleanValue POSE_AWARE_ARMS;
-    private static final ModConfigSpec.DoubleValue HEAD_BAND_BOTTOM;
-    private static final ModConfigSpec.DoubleValue LEG_BAND_TOP;
-    private static final ModConfigSpec.DoubleValue ARM_SIDE_THRESHOLD;
-    private static final ModConfigSpec.DoubleValue MELEE_REACH;
-    private static final ModConfigSpec.BooleanValue RIGGED_LIMB_BOXES;
-    private static final ModConfigSpec.DoubleValue LIMB_BOX_PADDING;
-    private static final ModConfigSpec.BooleanValue HITBOX_DEBUG;
-    private static final ModConfigSpec.BooleanValue LOG_HIT_DETECTION;
     private static final ModConfigSpec.BooleanValue LOG_MEDICAL_SYNC;
     private static final ModConfigSpec.IntValue SYNC_FULL_RESYNC_INTERVAL_TICKS;
     private static final ModConfigSpec.BooleanValue OPEN_PERSISTENCE_COMPAT;
-    private static final ModConfigSpec.BooleanValue TACZ_ARM_POSE;
     private static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> DAMAGE_SOURCE_CATEGORIES;
-    private static final ModConfigSpec.EnumValue<HitRegMode> HITREG_MODE;
-    private static final ModConfigSpec.DoubleValue HIT_GAP_REJECT_TOLERANCE;
-    private static final ModConfigSpec.DoubleValue[] ENV_REACH_H;
-    private static final ModConfigSpec.DoubleValue[] ENV_REACH_V;
     private static final ModConfigSpec.DoubleValue BLOOD_MOVEMENT_PENALTY_LOSS_FRACTION;
     private static final ModConfigSpec.DoubleValue BLEEDING_SELF_HEAL_THRESHOLD;
     private static final ModConfigSpec.DoubleValue BLEEDING_SELF_HEAL_RATE;
@@ -141,20 +123,6 @@ public final class MedicalConfig {
     private static final ModConfigSpec.DoubleValue WAKEUP_DRUG_WEIGHT;
     private static final ModConfigSpec.DoubleValue WAKEUP_BLEED_WEIGHT;
     private static final ModConfigSpec.DoubleValue WAKEUP_BLEED_REFERENCE;
-    private static final ModConfigSpec.EnumValue<HitAuthority> HIT_AUTHORITY;
-    private static final ModConfigSpec.IntValue POSE_STREAM_MIN_INTERVAL_TICKS;
-    private static final ModConfigSpec.IntValue POSE_STREAM_MAX_INTERVAL_TICKS;
-    private static final ModConfigSpec.IntValue POSE_HINT_MAX_AGE_TICKS;
-    private static final ModConfigSpec.DoubleValue POSE_HINT_MARGIN;
-    private static final ModConfigSpec.BooleanValue ANIMATED_HITBOXES;
-    private static final ModConfigSpec.DoubleValue POSE_STREAM_CHANGE_EPSILON;
-    private static final ModConfigSpec.BooleanValue PENETRATION_ENABLED;
-    private static final ModConfigSpec.DoubleValue PENETRATION_BUDGET;
-    private static final ModConfigSpec.DoubleValue PENETRATION_ENERGY_FALLOFF;
-    private static final ModConfigSpec.DoubleValue PEN_RESIST_HEAD;
-    private static final ModConfigSpec.DoubleValue PEN_RESIST_TORSO;
-    private static final ModConfigSpec.DoubleValue PEN_RESIST_ARM;
-    private static final ModConfigSpec.DoubleValue PEN_RESIST_LEG;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -568,7 +536,7 @@ public final class MedicalConfig {
                 .comment("Multiplier on the pain aim-sway amplitude (0 = off, 1 = default, higher = shakier).")
                 .defineInRange("painSwayStrength", 1.0D, 0.0D, 5.0D);
         BROKEN_ARM_AIM_SWAY = b
-                .comment("Aim-sway intensity (0..1) forced while aiming a bow / crossbow / TACZ gun with a broken "
+                .comment("Aim-sway intensity (0..1) forced while aiming a bow / crossbow / AHF-hooked gun with a broken "
                         + "arm: a broken arm cannot hold a weapon steady, and ADS does not brace it away. 1.0 = "
                         + "full sway. Default 0.9.")
                 .defineInRange("brokenArmAimSway", 0.90D, 0.0D, 1.0D);
@@ -664,53 +632,7 @@ public final class MedicalConfig {
                 .defineInRange("asphyxiaMoveMultiplier", 0.25D, 0.0D, 1.0D);
         b.pop();
 
-        b.push("hitlocation");
-        GEOMETRIC_HIT_LOCATION = b
-                .comment("Master switch. If true, incoming hits are mapped to a limb by projecting the reconstructed "
-                        + "hit position onto the victim's body geometry (deterministic). Off -> legacy weighted "
-                        + "random sampler everywhere.")
-                .define("geometricHitLocation", true);
-        POSE_AWARE_ARMS = b
-                .comment("If true, a victim actively aiming/using a weapon reassigns frontal-upper hits to the "
-                        + "raised arm instead of the torso.")
-                .define("poseAwareArms", true);
-        HEAD_BAND_BOTTOM = b
-                .comment("Fraction (0..1) of body height, measured from the feet, at/above which a hit counts as the head.")
-                .defineInRange("headBandBottom", 0.74D, 0.0D, 1.0D);
-        LEG_BAND_TOP = b
-                .comment("Fraction (0..1) of body height, measured from the feet, at/below which a hit counts as a leg.")
-                .defineInRange("legBandTop", 0.40D, 0.0D, 1.0D);
-        ARM_SIDE_THRESHOLD = b
-                .comment("Normalized horizontal offset (|nx|, 0..1 of the box half-width) at/above which a "
-                        + "torso-height hit is redirected to an arm.")
-                .defineInRange("armSideThreshold", 0.80D, 0.0D, 1.0D);
-        MELEE_REACH = b
-                .comment("Melee aim-ray length in blocks used when reconstructing the geometric hit location for melee attacks.")
-                .defineInRange("meleeReach", 3.0D, 0.0D, 8.0D);
-        RIGGED_LIMB_BOXES = b
-                .comment("If true, hits on players are classified against a server-side replica of the humanoid pose "
-                        + "(six oriented limb boxes posed as the renderer would pose them), so aiming/crouch/swing "
-                        + "arm positions are exact. Off -> fall back to the banded-AABB hit location.")
-                .define("riggedLimbBoxes", true);
-        LIMB_BOX_PADDING = b
-                .comment("Amount (in blocks) each rigged limb box is inflated to absorb pose-replica drift versus "
-                        + "vanilla/mod animations.")
-                .defineInRange("limbBoxPadding", 0.02D, 0.0D, 0.5D);
-        HITBOX_DEBUG = b
-                .comment("DEBUG/TEST tool. If true, the rigged limb boxes become live-tunable: use",
-                        "'/wfmedical hitbox set|add <limb> <field> <value>' to nudge each box's position/size (in",
-                        "model units, 1/16 block) while watching the hitbox overlay (K key), then bake the dialled-in",
-                        "numbers back into HumanoidRig.BASE with '/wfmedical hitbox export'. Off (the default) has ZERO",
-                        "runtime cost -- the boxes are built straight from their fixed base spec, no tuning applied.",
-                        "The '/wfmedical hitbox debug on|off' command flips this live for a session without a reload.")
-                .define("hitboxDebug", false);
-        LOG_HIT_DETECTION = b
-                .comment("DEBUG/TEST tool. If true, every TACZ bullet's own broad-phase collision test is compared",
-                        "against the rig's per-limb OBBs for nearby players and logged: whether TACZ itself registered",
-                        "a hit, and whether the rig would have classified a limb for that same ray. A 'HITBOX GAP'",
-                        "warning is logged whenever a shot would land on a rig limb box but TACZ's own collision test",
-                        "missed it entirely (so no damage/hurt event ever fired). Off (the default) has ZERO runtime cost.")
-                .define("logHitDetection", false);
+        b.push("sync");
         LOG_MEDICAL_SYNC = b
                 .comment("DEBUG/TEST tool. If true, the whole medical state sync pipeline is traced to the log:",
                         "server-side every full sync and delta sent (with the per-limb health%/bleed/pain/wound",
@@ -737,17 +659,12 @@ public final class MedicalConfig {
                         + "are offline, and the (possibly worse) state is restored to the player on login. The body "
                         + "keeps vanilla health while offline -- there is no live physiology/bleed-out tick on it.")
                 .define("openPersistenceCompat", true);
-        TACZ_ARM_POSE = b
-                .comment("If true and TACZ is installed, a player holding a TACZ gun poses the rig's arms with the "
-                        + "baked TACZ third-person hold/ADS pose (driven by the gun's SYNCED aiming progress) instead "
-                        + "of the generic raised-forward approximation, so arm hits while aiming a gun land correctly.")
-                .define("taczArmPose", true);
         DAMAGE_SOURCE_CATEGORIES = b
                 .comment("Tie specific damage sources to a WFMedical hurt category so modded damage makes the right",
                         "trauma. Each entry is \"<key>=<CATEGORY>\", where <key> is matched against the damage type's",
                         "registry id first (e.g. gtceu:electric) and then its msgId (e.g. mod.something).",
                         "Categories: BALLISTIC, SLASHING, BLUNT, UNARMED, PIERCING, FIRE (burns), EXPLOSION,",
-                        "CHEMICAL (chemical burns), RADIATION, FALL, GENERIC. This wins over the built-in guesser.",
+                        "CHEMICAL (chemical burns), RADIATION, FALL, GENERIC. Wins over WFLib threats and the built-in guesser.",
                         "Defaults cover GregTech CEu (verified ids from GTDamageTypes): electrical shock and hot",
                         "metal/steam are burns; turbine blades cut; chemical and radiation map through.")
                 .defineList("damageSourceCategories", java.util.List.of(
@@ -757,129 +674,6 @@ public final class MedicalConfig {
                         "gtceu:chemical=CHEMICAL",
                         "gtceu:radiation=RADIATION"
                 ), o -> o instanceof String s && s.indexOf('=') > 0);
-        b.pop();
-
-        b.push("hitregistration");
-        HITREG_MODE = b
-                .comment("How incoming attacks are registered against players / persistent bodies:",
-                        "  OFF      - vanilla: the ray clips the tight collision box; arms (which render outside",
-                        "             it) and prone bodies never register.",
-                        "  ENVELOPE - the hit-scan box is widened by a fixed margin (hitEnvelopeReach*) so arm /",
-                        "             prone hits register (forgiving: a shot through the gap between an arm and the",
-                        "             torso still counts). Near-zero cost; collision/physics are unaffected.",
-                        "  PRECISE  - ENVELOPE registration, then a shot that actually threaded a gap between the",
-                        "             rigged limb boxes is rejected (whiffs). A centre-mass hit is a cheap tight-box",
-                        "             fast-path, so only grazing arm-margin shots ever build the rig.")
-                .defineEnum("hitRegistrationMode", HitRegMode.PRECISE);
-        HIT_GAP_REJECT_TOLERANCE = b
-                .comment("PRECISE only: forgiveness (blocks) for the gap-rejection test. A shot is thrown out as a",
-                        "'gap' (whiff between the limb boxes  no damage, no hitmarker) only when its path clears",
-                        "EVERY limb box by more than this margin. It exists because the classifier assigns the nearest",
-                        "limb to any envelope hit, so a grazing shot, or one skimming a limb whose server-side pose",
-                        "drifted slightly from what the shooter saw, would otherwise be silently dropped. Higher =",
-                        "more forgiving (fewer whiffs, but narrow gaps between an arm and the torso start to count);",
-                        "0 = strict, reject unless the ray passes exactly through a limb box. Default 0.2.")
-                .defineInRange("hitGapRejectTolerance", 0.2D, 0.0D, 2.0D);
-        b.comment("Per-STANCE broad-phase envelope: blocks the hit-scan box is widened for each pose so arm /",
-                        "prone hits register. Horizontal = X/Z per side, Vertical = Y top+bottom. Size each to just",
-                        "contain the model in that stance -- the vanilla box already shrinks while crouching/swimming,",
-                        "and the fine-phase per-limb test rejects any surplus, so over-sizing only costs a few extra",
-                        "fine tests while under-sizing drops hits. Tune live with '/wfmedical hitbox envelope ...' and",
-                        "bake the dialled-in numbers back here.")
-                .push("envelopeReach");
-        double[][] envDefaults = {{0.4D, 0.2D}, {0.5D, 0.1D}, {1.0D, 0.3D}, {1.0D, 0.3D}};
-        ModConfigSpec.DoubleValue[] envH = new ModConfigSpec.DoubleValue[RigTuning.RigPose.VALUES.length];
-        ModConfigSpec.DoubleValue[] envV = new ModConfigSpec.DoubleValue[RigTuning.RigPose.VALUES.length];
-        for (RigTuning.RigPose pose : RigTuning.RigPose.VALUES) {
-            int i = pose.ordinal();
-            String n = pose.lower();
-            envH[i] = b.comment("Horizontal (X/Z) envelope reach for the " + n + " stance.")
-                    .defineInRange(n + "Horizontal", envDefaults[i][0], 0.0D, 4.0D);
-            envV[i] = b.comment("Vertical (Y) envelope reach for the " + n + " stance.")
-                    .defineInRange(n + "Vertical", envDefaults[i][1], 0.0D, 4.0D);
-        }
-        ENV_REACH_H = envH;
-        ENV_REACH_V = envV;
-        b.pop();
-        b.pop();
-
-        b.comment("Who computes the posed limb rig used to classify a player hit. Purely a performance /",
-                        "authority trade -- the medical outcome is identical either way.",
-                        "  SERVER      - the server rebuilds the victim's rig itself (authoritative, deterministic).",
-                        "                Backed by a per-tick cache so repeated hits in one tick cost one rebuild.",
-                        "  CLIENT_HINT - the victim's client streams its own posed rig; the server still runs the ray",
-                        "                test ITSELF (an attacker can never pick the limb) but skips the costly rebuild,",
-                        "                validating the supplied pose against a cheap bound and falling back to a server",
-                        "                rebuild whenever the hint is absent, stale, or implausible. Trades a little",
-                        "                per-player bandwidth for server CPU on very large servers.")
-                .push("authority");
-        HIT_AUTHORITY = b
-                .comment("SERVER (default, authoritative) or CLIENT_HINT (victim streams its pose; server validates).")
-                .defineEnum("hitAuthority", HitAuthority.SERVER);
-        POSE_STREAM_MIN_INTERVAL_TICKS = b
-                .comment("CLIENT_HINT only: the victim's client will not send its pose more often than this many "
-                        + "ticks, even while moving (rate limit). Default 2.")
-                .defineInRange("poseStreamMinIntervalTicks", 2, 1, 40);
-        POSE_STREAM_MAX_INTERVAL_TICKS = b
-                .comment("CLIENT_HINT only: the victim's client resends its pose at least this often even when it "
-                        + "has not changed (heartbeat), so the server's copy never goes stale under poseHintMaxAge"
-                        + "Ticks. Keep below poseHintMaxAgeTicks. Default 10.")
-                .defineInRange("poseStreamMaxIntervalTicks", 10, 1, 200);
-        POSE_HINT_MAX_AGE_TICKS = b
-                .comment("CLIENT_HINT only: the server treats a streamed pose older than this (in ticks) as stale "
-                        + "and rebuilds the rig itself for that hit. Default 30 (1.5s).")
-                .defineInRange("poseHintMaxAgeTicks", 30, 1, 200);
-        POSE_HINT_MARGIN = b
-                .comment("CLIENT_HINT only: slack (blocks) added to the victim's bounding box when validating a "
-                        + "streamed pose. A supplied limb box whose centre falls outside the box+margin (or whose "
-                        + "size is implausible) is rejected and the server rebuilds instead. Guards against a client "
-                        + "shrinking/displacing its own hitboxes. Default 0.6.")
-                .defineInRange("poseHintMargin", 0.6D, 0.0D, 4.0D);
-        ANIMATED_HITBOXES = b
-                .comment("Animation-aware hitboxes (PlayerAnimator compat). When ON, a player's limb hitboxes track",
-                        "played animations for HIT REGISTRATION -- not just the client visual. PlayerAnimator applies",
-                        "animations client-side only, so the animated pose reaches the server via the SAME validated",
-                        "pose-stream path as CLIENT_HINT: the victim streams its own posed rig, the server still runs",
-                        "the ray test ITSELF and validates the pose (an attacker can never pick the limb). This turns",
-                        "on pose streaming even under SERVER authority, so it carries the same client-trust caveat as",
-                        "CLIENT_HINT. OFF (default): animations are a client-side visual only; hits use the server's",
-                        "vanilla-pose rebuild. PlayerAnimator itself is NOT required on the server.")
-                .define("animatedHitboxes", false);
-        POSE_STREAM_CHANGE_EPSILON = b
-                .comment("Client-pose streaming sensitivity: the victim resends its pose once any limb-box scalar",
-                        "(position or orientation) drifts more than this many blocks from the last sent pose. Lower =",
-                        "small rotations reach the server sooner (finer tracking) for a little more bandwidth; higher =",
-                        "coarser, small movements ignored. Default 0.0002.")
-                .defineInRange("poseStreamChangeEpsilon", 2.0e-4D, 0.0D, 1.0D);
-        b.pop();
-
-        b.comment("PENETRATION (through-and-through): when on, a traced shot can wound EVERY rigged limb box it",
-                        "passes through (e.g. a raised arm AND the torso behind it), not just the nearest. The nearest",
-                        "limb is still the PRIMARY hit (full damage, can be lethal, identical to penetration-off); each",
-                        "further limb the shot exits into takes a declining share of trauma and never instant-kills.",
-                        "Only ray-like sources (bullets, arrows, melee aim) penetrate; explosions / positional hits do",
-                        "not. Off (default) is byte-identical to the single-limb behaviour.")
-                .push("penetration");
-        PENETRATION_ENABLED = b
-                .comment("Master toggle for through-and-through multi-limb wounding.")
-                .define("penetrationEnabled", false);
-        PENETRATION_BUDGET = b
-                .comment("How much limb resistance one shot can punch through. As the ray crosses each limb it spends "
-                        + "that limb's penetrationResist*; once the budget is used up the shot stops and no deeper "
-                        + "limb is wounded. The first (nearest) limb is always hit regardless of budget. Default 1.0.")
-                .defineInRange("penetrationBudget", 1.0D, 0.0D, 10.0D);
-        PENETRATION_ENERGY_FALLOFF = b
-                .comment("Trauma-energy multiplier applied per limb already pierced: limb N gets energy * "
-                        + "falloff^N. 0.5 -> the second limb takes half, the third a quarter, etc. Default 0.5.")
-                .defineInRange("penetrationEnergyFalloff", 0.5D, 0.0D, 1.0D);
-        PEN_RESIST_HEAD = b.comment("Penetration resistance of the HEAD (budget spent passing through it).")
-                .defineInRange("penetrationResistHead", 0.5D, 0.0D, 10.0D);
-        PEN_RESIST_TORSO = b.comment("Penetration resistance of the TORSO (dense -> stops a shot soonest).")
-                .defineInRange("penetrationResistTorso", 0.8D, 0.0D, 10.0D);
-        PEN_RESIST_ARM = b.comment("Penetration resistance of an ARM (thin -> a shot passes through readily).")
-                .defineInRange("penetrationResistArm", 0.25D, 0.0D, 10.0D);
-        PEN_RESIST_LEG = b.comment("Penetration resistance of a LEG.")
-                .defineInRange("penetrationResistLeg", 0.4D, 0.0D, 10.0D);
         b.pop();
 
         SPEC = b.build();
@@ -1337,46 +1131,6 @@ public final class MedicalConfig {
         return ASPHYXIA_MOVE_MULTIPLIER.get().floatValue();
     }
 
-    public static boolean geometricHitLocation() {
-        return GEOMETRIC_HIT_LOCATION.get();
-    }
-
-    public static boolean poseAwareArms() {
-        return POSE_AWARE_ARMS.get();
-    }
-
-    public static double headBandBottom() {
-        return HEAD_BAND_BOTTOM.get();
-    }
-
-    public static double legBandTop() {
-        return LEG_BAND_TOP.get();
-    }
-
-    public static double armSideThreshold() {
-        return ARM_SIDE_THRESHOLD.get();
-    }
-
-    public static double meleeReach() {
-        return MELEE_REACH.get();
-    }
-
-    public static boolean riggedLimbBoxes() {
-        return RIGGED_LIMB_BOXES.get();
-    }
-
-    public static double limbBoxPadding() {
-        return LIMB_BOX_PADDING.get();
-    }
-
-    public static boolean hitboxDebug() {
-        return HITBOX_DEBUG.get();
-    }
-
-    public static boolean logHitDetection() {
-        return LOG_HIT_DETECTION.get();
-    }
-
     public static boolean logMedicalSync() {
         return LOG_MEDICAL_SYNC.get();
     }
@@ -1387,10 +1141,6 @@ public final class MedicalConfig {
 
     public static boolean openPersistenceCompat() {
         return OPEN_PERSISTENCE_COMPAT.get();
-    }
-
-    public static boolean taczArmPose() {
-        return TACZ_ARM_POSE.get();
     }
 
     private static java.util.List<? extends String> cachedDamageRaw;
@@ -1482,85 +1232,6 @@ public final class MedicalConfig {
             cachedSelfOnlyRaw = raw;
         }
         return cachedSelfOnlyMap;
-    }
-
-    public static HitRegMode hitRegistrationMode() {
-        return HITREG_MODE.get();
-    }
-
-    public static double hitGapRejectTolerance() {
-        return HIT_GAP_REJECT_TOLERANCE.get();
-    }
-
-    public static double hitEnvelopeReachHorizontal(RigTuning.RigPose pose) {
-        return ENV_REACH_H[pose.ordinal()].get();
-    }
-
-    public static double hitEnvelopeReachVertical(RigTuning.RigPose pose) {
-        return ENV_REACH_V[pose.ordinal()].get();
-    }
-
-    public static double[] envelopeReachSnapshot() {
-        double[] a = new double[RigTuning.RigPose.VALUES.length * 2];
-        for (RigTuning.RigPose pose : RigTuning.RigPose.VALUES) {
-            a[pose.ordinal() * 2] = ENV_REACH_H[pose.ordinal()].get();
-            a[pose.ordinal() * 2 + 1] = ENV_REACH_V[pose.ordinal()].get();
-        }
-        return a;
-    }
-
-    public static HitAuthority hitAuthority() {
-        return HIT_AUTHORITY.get();
-    }
-
-    public static int poseStreamMinIntervalTicks() {
-        return POSE_STREAM_MIN_INTERVAL_TICKS.get();
-    }
-
-    public static int poseStreamMaxIntervalTicks() {
-        return POSE_STREAM_MAX_INTERVAL_TICKS.get();
-    }
-
-    public static int poseHintMaxAgeTicks() {
-        return POSE_HINT_MAX_AGE_TICKS.get();
-    }
-
-    public static double poseHintMargin() {
-        return POSE_HINT_MARGIN.get();
-    }
-
-    public static boolean animatedHitboxes() {
-        return ANIMATED_HITBOXES.get();
-    }
-
-    public static double poseStreamChangeEpsilon() {
-        return POSE_STREAM_CHANGE_EPSILON.get();
-    }
-
-    public static boolean useClientPose() {
-        return hitAuthority() == HitAuthority.CLIENT_HINT || animatedHitboxes();
-    }
-
-    public static boolean penetrationEnabled() {
-        return PENETRATION_ENABLED.get();
-    }
-
-    public static double penetrationBudget() {
-        return PENETRATION_BUDGET.get();
-    }
-
-    public static double penetrationEnergyFalloff() {
-        return PENETRATION_ENERGY_FALLOFF.get();
-    }
-
-    public static double penetrationResistance(LimbType lt) {
-        if (lt == LimbType.HEAD) {
-            return PEN_RESIST_HEAD.get();
-        }
-        if (lt == LimbType.TORSO) {
-            return PEN_RESIST_TORSO.get();
-        }
-        return lt.isLeg() ? PEN_RESIST_LEG.get() : PEN_RESIST_ARM.get();
     }
 
     public static PhysiologyParams toPhysiologyParams() {

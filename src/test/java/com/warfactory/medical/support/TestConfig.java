@@ -48,7 +48,7 @@ public final class TestConfig {
     /**
      * Override a single config key for the duration of a test, then put it back.
      *
-     * <p>The path is the dotted spec path, e.g. {@code "hitlocation.geometricHitLocation"}. Returns the
+     * <p>The path is the dotted spec path, e.g. {@code "compat.damageSourceCategories"}. Returns the
      * previous value so a test can restore it in a {@code finally} or an {@code @AfterEach}.
      */
     public static synchronized Object set(String path, Object value) {

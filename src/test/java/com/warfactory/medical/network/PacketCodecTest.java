@@ -2,8 +2,6 @@ package com.warfactory.medical.network;
 
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
-import com.warfactory.medical.core.damage.rig.HumanoidRig;
-import com.warfactory.medical.core.damage.rig.Obb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.treatment.TreatmentAction;
 import com.warfactory.medical.network.MedicalSyncPacket.LimbSummary;
@@ -11,7 +9,6 @@ import com.warfactory.medical.network.MedicalSyncPacket.WoundView;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -184,9 +181,6 @@ class PacketCodecTest {
             DownedStatePacket downed = new DownedStatePacket(77, true);
             assertEquals(downed, roundTrip(downed, downed::encode, DownedStatePacket::decode));
 
-            HitAuthorityPacket auth = new HitAuthorityPacket(true);
-            assertEquals(auth, roundTrip(auth, auth::encode, HitAuthorityPacket::decode));
-
             TourniquetStatePacket tq = new TourniquetStatePacket(9, 0b101010);
             assertEquals(tq, roundTrip(tq, tq::encode, TourniquetStatePacket::decode));
 
@@ -229,89 +223,6 @@ class PacketCodecTest {
             assertEquals(in.itemId(), out.itemId());
             assertEquals(in.treatableMask(), out.treatableMask());
             assertArrayEquals(in.limbs(), out.limbs());
-        }
-    }
-
-    @Nested
-    class Pose {
-
-        /**
-         * Every component is a dyadic rational, so it is exactly representable as a float. The pose wire
-         * format is float-per-component (see {@code poseIsQuantisedToFloatOnTheWire}); using values that
-         * survive that conversion keeps the identity test about slot order rather than about rounding.
-         */
-        private Obb obb(int seed, LimbType limb) {
-            return new Obb(new Vec3(seed, seed + 1, seed + 2),
-                    new Vec3(1.0, 0.0, 0.0), new Vec3(0.0, 1.0, 0.0), new Vec3(0.0, 0.0, 1.0),
-                    new Vec3(0.25 + seed * 0.03125, 0.5, 0.125), limb);
-        }
-
-        @Test
-        void poseIsQuantisedToFloatOnTheWire() {
-            // Halving the pose packet's size is worth a float; the classification tolerance is ~1cm and
-            // float carries ~7 digits, so this is deliberate. Pinned so a later switch to double is a
-            // conscious change rather than a silent bandwidth regression.
-            HumanoidRig.LocalRig rig = new HumanoidRig.LocalRig();
-            for (HumanoidRig.LocalRig.Slot slot : HumanoidRig.LocalRig.SLOTS) {
-                slot.set(rig, new Obb(new Vec3(0.1, 0.2, 0.3),
-                        new Vec3(1.0, 0.0, 0.0), new Vec3(0.0, 1.0, 0.0), new Vec3(0.0, 0.0, 1.0),
-                        new Vec3(0.1, 0.1, 0.1), slot.limb));
-            }
-            PoseStreamPacket out = roundTrip(new PoseStreamPacket(rig),
-                    new PoseStreamPacket(rig)::encode, PoseStreamPacket::decode);
-            Vec3 c = out.rig().head.center();
-            assertEquals(0.1, c.x, 1.0e-6, "float precision should still be well inside a centimetre");
-            assertEquals((double) 0.1F, c.x, "the wire value is the float, not the original double");
-        }
-
-        @Test
-        void aStreamedPoseKeepsItsSlotOrderAndServerAssignedLimbs() {
-            HumanoidRig.LocalRig rig = new HumanoidRig.LocalRig();
-            int i = 0;
-            for (HumanoidRig.LocalRig.Slot slot : HumanoidRig.LocalRig.SLOTS) {
-                slot.set(rig, obb(i++, slot.limb));
-            }
-            PoseStreamPacket in = new PoseStreamPacket(rig);
-            PoseStreamPacket out = roundTrip(in, in::encode, PoseStreamPacket::decode);
-
-            i = 0;
-            for (HumanoidRig.LocalRig.Slot slot : HumanoidRig.LocalRig.SLOTS) {
-                Obb sent = obb(i++, slot.limb);
-                Obb got = slot.get(out.rig());
-                assertEquals(sent.center(), got.center(), "centre for " + slot);
-                assertEquals(sent.half(), got.half(), "half-extent for " + slot);
-                assertEquals(slot.limb, got.limb(),
-                        "the limb tag must come from the slot, never from the client");
-            }
-        }
-
-        @Test
-        void theLimbTagIsIgnoredOnTheWireSoAClientCannotRelabelItsOwnBoxes() {
-            // A malicious client could otherwise send "this box is my left leg" for its head box and take
-            // head shots as leg hits. The encoder writes no limb at all; decode fills it from the slot.
-            HumanoidRig.LocalRig rig = new HumanoidRig.LocalRig();
-            for (HumanoidRig.LocalRig.Slot slot : HumanoidRig.LocalRig.SLOTS) {
-                slot.set(rig, obb(0, LimbType.LEFT_LEG));
-            }
-            PoseStreamPacket out = roundTrip(new PoseStreamPacket(rig),
-                    new PoseStreamPacket(rig)::encode, PoseStreamPacket::decode);
-            assertEquals(LimbType.HEAD, out.rig().head.limb());
-            assertEquals(LimbType.TORSO, out.rig().torso.limb());
-        }
-
-        @Test
-        void theCachedAllArrayIsRebuiltAfterDecode() {
-            HumanoidRig.LocalRig rig = new HumanoidRig.LocalRig();
-            for (HumanoidRig.LocalRig.Slot slot : HumanoidRig.LocalRig.SLOTS) {
-                slot.set(rig, obb(1, slot.limb));
-            }
-            PoseStreamPacket out = roundTrip(new PoseStreamPacket(rig),
-                    new PoseStreamPacket(rig)::encode, PoseStreamPacket::decode);
-            Obb[] all = out.rig().all();
-            assertEquals(6, all.length);
-            for (Obb o : all) {
-                assertTrue(o != null, "a decoded rig must have all six boxes populated");
-            }
         }
     }
 }

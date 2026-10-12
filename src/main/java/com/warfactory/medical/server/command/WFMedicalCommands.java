@@ -10,6 +10,15 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.brigadier.tree.LiteralCommandNode;
+import com.norwood.ahf.config.AhfConfig;
+import com.norwood.ahf.geometry.Obb;
+import com.norwood.ahf.hit.HitboxApi;
+import com.norwood.ahf.hit.RayHit;
+import com.norwood.ahf.part.HitboxPart;
+import com.norwood.ahf.rig.HumanoidRig;
+import com.norwood.ahf.rig.RigSpec;
+import com.norwood.ahf.rig.RigSpecIO;
+import com.norwood.ahf.rig.RigTuning;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.attachment.IMedicalData;
 import com.warfactory.medical.attachment.MedicalAttachments;
@@ -17,12 +26,6 @@ import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.MedicalProfile;
-import com.warfactory.medical.core.damage.HitGeometry;
-import com.warfactory.medical.core.damage.rig.HumanoidRig;
-import com.warfactory.medical.core.damage.rig.Obb;
-import com.warfactory.medical.core.damage.rig.RigSpec;
-import com.warfactory.medical.core.damage.rig.RigSpecIO;
-import com.warfactory.medical.core.damage.rig.RigTuning;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.substance.Substance;
@@ -73,7 +76,7 @@ public final class WFMedicalCommands {
                             .map(RigTuning.HandAction::lower), b);
     private static final SuggestionProvider<CommandSourceStack> HITBOX_ARM_SUGGESTIONS =
             (ctx, b) -> SharedSuggestionProvider.suggest(
-                    Arrays.stream(LimbType.VALUES).filter(LimbType::isArm).map(Enum::name), b);
+                    Arrays.stream(HitboxPart.VALUES).filter(HitboxPart::isArm).map(Enum::name), b);
 
     private static final SuggestionProvider<CommandSourceStack> TRAUMA_SUGGESTIONS =
             (ctx, b) -> SharedSuggestionProvider.suggest(
@@ -425,7 +428,7 @@ public final class WFMedicalCommands {
             return 0;
         }
 
-        LimbType limb = HitGeometry.classifyRay(target, eye, end);
+        HitboxPart limb = part(HitboxApi.classifyRay(target, eye, end));
         Optional<Vec3> worldHit = target.getBoundingBox().clip(eye, end);
         String targetName = target.getName().getString();
         String limbText = (limb != null)
@@ -456,7 +459,7 @@ public final class WFMedicalCommands {
         }
 
         HumanoidRig.LocalRig rig = HumanoidRig.compute(target);
-        LimbType limb = HitGeometry.classifyRay(target, eye, end);
+        HitboxPart limb = part(HitboxApi.classifyRay(target, eye, end));
         String limbText = (limb != null)
                 ? limb.name()
                 : "(none - rig miss / downed -> Tier-1 / weighted-sampler fallback)";
@@ -481,12 +484,12 @@ public final class WFMedicalCommands {
 
 
     private static int cmdHitboxStatus(CommandSourceStack src) {
-        boolean cfg = MedicalConfig.hitboxDebug();
+        boolean cfg = AhfConfig.hitboxDebug();
         boolean active = RigTuning.ACTIVE;
         StringBuilder poses = new StringBuilder();
         for (RigTuning.RigPose p : RigTuning.RigPose.VALUES) {
             int n = 0;
-            for (LimbType lt : LimbType.VALUES) {
+            for (HitboxPart lt : HitboxPart.VALUES) {
                 for (RigTuning.Field f : RigTuning.Field.VALUES) {
                     if (RigTuning.delta(p, lt, f) != 0.0) {
                         n++;
@@ -510,14 +513,14 @@ public final class WFMedicalCommands {
         src.sendSuccess(() -> Component.literal("[wfmedical] hitbox tuning "
                 + (enable ? "ARMED" : "disarmed") + " for this session"
                 + (enable ? " (deltas now applied to the limb boxes)." : " (boxes back to their base spec).")
-                + "  Session-only; set hitlocation.hitboxDebug in the config to persist."), true);
+                + "  Session-only; set debug.hitboxDebug in ahf-common.toml to persist."), true);
         return 1;
     }
 
     private static int cmdHitboxSet(CommandSourceStack src, String poseName, String limbName,
                                     String fieldName, double value) {
         RigTuning.RigPose pose = parsePose(src, poseName);
-        LimbType limb = parseLimb(src, limbName);
+        HitboxPart limb = parsePart(src, limbName);
         RigTuning.Field field = parseField(src, fieldName);
         if (pose == null || limb == null || field == null) {
             return 0;
@@ -531,7 +534,7 @@ public final class WFMedicalCommands {
     private static int cmdHitboxAdd(CommandSourceStack src, String poseName, String limbName,
                                     String fieldName, double amount) {
         RigTuning.RigPose pose = parsePose(src, poseName);
-        LimbType limb = parseLimb(src, limbName);
+        HitboxPart limb = parsePart(src, limbName);
         RigTuning.Field field = parseField(src, fieldName);
         if (pose == null || limb == null || field == null) {
             return 0;
@@ -559,7 +562,7 @@ public final class WFMedicalCommands {
                     + pose.lower() + "."), false);
             return 1;
         }
-        LimbType limb = parseLimb(src, limbName);
+        HitboxPart limb = parsePart(src, limbName);
         if (limb == null) {
             return 0;
         }
@@ -588,7 +591,7 @@ public final class WFMedicalCommands {
             sb.append("\n [").append(pose.lower()).append("]  envelope reach h=")
                     .append(num(RigTuning.envReach(pose, RigTuning.EnvAxis.HORIZONTAL)))
                     .append(" v=").append(num(RigTuning.envReach(pose, RigTuning.EnvAxis.VERTICAL)));
-            for (LimbType lt : LimbType.VALUES) {
+            for (HitboxPart lt : HitboxPart.VALUES) {
                 double[] base = HumanoidRig.baseSpec(lt);
                 double[] adj = HumanoidRig.poseAdjustSpec(pose, lt);
                 double[] eff = new double[RigTuning.FIELDS];
@@ -610,7 +613,7 @@ public final class WFMedicalCommands {
                 if (action == RigTuning.HandAction.NONE) {
                     continue;
                 }
-                for (LimbType arm : LimbType.VALUES) {
+                for (HitboxPart arm : HitboxPart.VALUES) {
                     if (!arm.isArm()) {
                         continue;
                     }
@@ -651,16 +654,16 @@ public final class WFMedicalCommands {
             }
             if (pose == RigTuning.RigPose.STANDING) {
                 sb.append("\n// STANDING -> paste into HumanoidRig.base():");
-                for (LimbType lt : LimbType.VALUES) {
+                for (HitboxPart lt : HitboxPart.VALUES) {
                     double[] base = HumanoidRig.baseSpec(lt);
-                    sb.append("\nb[LimbType.").append(lt.name()).append(".ordinal()] = new double[]{");
+                    sb.append("\nb[HitboxPart.").append(lt.name()).append(".ordinal()] = new double[]{");
                     appendRow(sb, i -> base[i] + RigTuning.delta(pose, lt, RigTuning.Field.VALUES[i]));
                     sb.append("};");
                 }
             } else {
                 sb.append("\n// ").append(pose.name()).append(" -> paste into HumanoidRig.poseAdjust():");
                 boolean any = false;
-                for (LimbType lt : LimbType.VALUES) {
+                for (HitboxPart lt : HitboxPart.VALUES) {
                     double[] adj = HumanoidRig.poseAdjustSpec(pose, lt);
                     boolean nonzero = false;
                     for (RigTuning.Field f : RigTuning.Field.VALUES) {
@@ -673,7 +676,7 @@ public final class WFMedicalCommands {
                         continue;
                     }
                     any = true;
-                    sb.append("\na[RigTuning.RigPose.").append(pose.name()).append(".ordinal()][LimbType.")
+                    sb.append("\na[RigTuning.RigPose.").append(pose.name()).append(".ordinal()][HitboxPart.")
                             .append(lt.name()).append(".ordinal()] = new double[]{");
                     appendRow(sb, i -> adj[i] + RigTuning.delta(pose, lt, RigTuning.Field.VALUES[i]));
                     sb.append("};");
@@ -692,7 +695,7 @@ public final class WFMedicalCommands {
                 if (action == RigTuning.HandAction.NONE) {
                     continue;
                 }
-                for (LimbType arm : LimbType.VALUES) {
+                for (HitboxPart arm : HitboxPart.VALUES) {
                     if (!arm.isArm()) {
                         continue;
                     }
@@ -708,7 +711,7 @@ public final class WFMedicalCommands {
                         continue;
                     }
                     hand.append("\na[RigTuning.RigPose.").append(pose.name()).append(".ordinal()][RigTuning.HandAction.")
-                            .append(action.name()).append(".ordinal()][LimbType.").append(arm.name())
+                            .append(action.name()).append(".ordinal()][HitboxPart.").append(arm.name())
                             .append(".ordinal()] = new double[]{");
                     appendRow(hand, i -> hAdj[i] + RigTuning.handDelta(pose, action, arm, RigTuning.Field.VALUES[i]));
                     hand.append("};");
@@ -718,7 +721,7 @@ public final class WFMedicalCommands {
         if (hand.length() > 0) {
             sb.append("\n// hand-action arm overlays -> paste into HumanoidRig.handAdjust():").append(hand);
         }
-        sb.append("\n// envelope reach -> config [hitregistration.envelopeReach]:");
+        sb.append("\n// envelope reach -> ahf-common.toml [hitRegistration.envelopeReach]:");
         for (RigTuning.RigPose pose : RigTuning.RigPose.VALUES) {
             if (only != null && pose != only) {
                 continue;
@@ -784,7 +787,7 @@ public final class WFMedicalCommands {
         RigTuning.RigPose p = RigTuning.RigPose.fromString(name);
         if (p == null) {
             src.sendFailure(Component.literal("[wfmedical] Unknown pose: " + name
-                    + " (expected one of standing crouching prone downed)"));
+                    + " (expected one of standing crouching prone)"));
         }
         return p;
     }
@@ -808,8 +811,8 @@ public final class WFMedicalCommands {
         return h;
     }
 
-    private static LimbType parseArm(CommandSourceStack src, String name) {
-        LimbType limb = parseLimb(src, name);
+    private static HitboxPart parseArm(CommandSourceStack src, String name) {
+        HitboxPart limb = parsePart(src, name);
         if (limb != null && !limb.isArm()) {
             src.sendFailure(Component.literal("[wfmedical] " + limb.name() + " is not an arm; the hand overlay "
                     + "only applies to LEFT_ARM / RIGHT_ARM."));
@@ -822,7 +825,7 @@ public final class WFMedicalCommands {
                                         String armName, String fieldName, double value) {
         RigTuning.RigPose pose = parsePose(src, poseName);
         RigTuning.HandAction action = parseHandAction(src, actionName);
-        LimbType arm = parseArm(src, armName);
+        HitboxPart arm = parseArm(src, armName);
         RigTuning.Field field = parseField(src, fieldName);
         if (pose == null || action == null || arm == null || field == null) {
             return 0;
@@ -837,7 +840,7 @@ public final class WFMedicalCommands {
                                         String armName, String fieldName, double amount) {
         RigTuning.RigPose pose = parsePose(src, poseName);
         RigTuning.HandAction action = parseHandAction(src, actionName);
-        LimbType arm = parseArm(src, armName);
+        HitboxPart arm = parseArm(src, armName);
         RigTuning.Field field = parseField(src, fieldName);
         if (pose == null || action == null || arm == null || field == null) {
             return 0;
@@ -861,7 +864,7 @@ public final class WFMedicalCommands {
                     + " " + action.lower() + "."), false);
             return 1;
         }
-        LimbType arm = parseArm(src, armName);
+        HitboxPart arm = parseArm(src, armName);
         if (arm == null) {
             return 0;
         }
@@ -896,9 +899,18 @@ public final class WFMedicalCommands {
     }
 
     private static int cmdHitboxEnvReset(CommandSourceStack src) {
-        RigTuning.seedEnvelope(MedicalConfig.envelopeReachSnapshot());
+        RigTuning.seedEnvelope(AhfConfig.envelopeReachSnapshot());
         src.sendSuccess(() -> Component.literal("[wfmedical] envelope reach reset to the config values."), false);
         return 1;
+    }
+
+    private static HitboxPart parsePart(CommandSourceStack src, String name) {
+        LimbType limb = parseLimb(src, name);
+        return limb == null ? null : limb.part();
+    }
+
+    private static HitboxPart part(RayHit hit) {
+        return hit == null ? null : hit.part();
     }
 
     private static String num(double v) {

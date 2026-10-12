@@ -256,7 +256,8 @@ Fractures use `TraumaCategory.FRACTURE` and `Trauma.isFracture()`. The feature c
 ### Arm fractures
 
 - `Weakness` effect at level `brokenArmMeleeWeaknessLevel` (default 1 = Weakness I) re-applied with 60-tick duration every engine pass while any arm is fractured.
-- Aim sway floor: `brokenArmAimSway` (default 0.9) – forced even when aiming down sights with a bow/crossbow/TACZ gun.
+- Aim sway floor: `brokenArmAimSway` (default 0.9) while drawing a bow/crossbow or holding an `AhfHooks.isHeldGun` item; ADS steadiness (`AhfHooks.gunAimProgress`) does not lower it.
+- Sway yield: any `MedicalSway.suppress` predicate true => no medical sway; the suppressor reads `MedicalState.painSwayIntensity` / `hasArmFracture` / `hasArmTourniquet` + `MedicalSway.amplitudeDegrees`.
 
 ### Fracture self-healing
 

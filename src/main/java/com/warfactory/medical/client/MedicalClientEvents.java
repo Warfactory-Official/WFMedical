@@ -4,10 +4,7 @@ import com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.api.MedicalState;
 import com.warfactory.medical.config.MedicalConfig;
-import com.warfactory.medical.client.render.HitboxDebugRenderer;
 import com.warfactory.medical.client.screen.MedInteractionScreen;
-import com.warfactory.medical.compat.TaczCompat;
-import com.warfactory.medical.compat.tacz.TaczPoseCaptureClient;
 import com.warfactory.medical.network.ClientMedicalCache;
 import com.warfactory.medical.network.MedicalNetworking;
 import com.warfactory.medical.network.TargetSheetRequestPacket;
@@ -17,13 +14,11 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
-import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
 import net.neoforged.neoforge.client.event.RenderHandEvent;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
@@ -52,7 +47,6 @@ public final class MedicalClientEvents {
             drain(MedicalKeyMappings.OPEN_SHEET);
             drain(MedicalKeyMappings.OPEN_RADIAL);
             drain(MedicalKeyMappings.TOGGLE_DEBUG);
-            drain(MedicalKeyMappings.TOGGLE_HITBOX);
             if (MedicalDebug.ENABLED) {
                 drain(MedicalKeyMappings.TOGGLE_SCREEN_FX);
                 drain(MedicalKeyMappings.TOGGLE_FX_LOG);
@@ -71,11 +65,6 @@ public final class MedicalClientEvents {
         while (MedicalKeyMappings.TOGGLE_DEBUG.consumeClick()) {
             ClientMedicalCache.toggleDebug();
         }
-        while (MedicalKeyMappings.TOGGLE_HITBOX.consumeClick()) {
-            HitboxDebugRenderer.toggle();
-            mc.player.displayClientMessage(Component.literal("Hitbox overlay: "
-                    + (HitboxDebugRenderer.enabled ? "on (" + HitboxDebugRenderer.style + ", scroll to change)" : "off")), true);
-        }
         if (MedicalDebug.ENABLED) {
             while (MedicalKeyMappings.TOGGLE_SCREEN_FX.consumeClick()) {
                 boolean on = MedicalDebug.toggleScreenEffects();
@@ -88,24 +77,6 @@ public final class MedicalClientEvents {
                         + (on ? "ON (see log)" : "OFF")), true);
             }
         }
-    }
-
-    @SubscribeEvent
-    public static void onMouseScroll(net.neoforged.neoforge.client.event.InputEvent.MouseScrollingEvent event) {
-        if (!HitboxDebugRenderer.enabled) {
-            return;
-        }
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.screen != null) {
-            return;
-        }
-        double delta = event.getScrollDeltaY();
-        if (delta == 0.0) {
-            return;
-        }
-        HitboxDebugRenderer.Style now = HitboxDebugRenderer.cycleStyle(delta > 0.0 ? 1 : -1);
-        mc.player.displayClientMessage(Component.literal("Hitbox overlay: " + now), true);
-        event.setCanceled(true);
     }
 
     private static void drain(net.minecraft.client.KeyMapping key) {
@@ -197,20 +168,5 @@ public final class MedicalClientEvents {
     public static void onLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientMedicalCache.clear();
         MedInteractionScreen.clearTarget();
-    }
-
-
-    @SubscribeEvent
-    public static void onRegisterClientCommands(RegisterClientCommandsEvent event) {
-        if (!TaczCompat.isLoaded()) {
-            return;
-        }
-        event.getDispatcher().register(Commands.literal("wfmedtaczdump").executes(ctx -> {
-            var player = Minecraft.getInstance().player;
-            if (player != null) {
-                TaczPoseCaptureClient.dump(player, s -> player.displayClientMessage(Component.literal(s), false));
-            }
-            return 1;
-        }));
     }
 }

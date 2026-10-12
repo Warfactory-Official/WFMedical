@@ -5,14 +5,17 @@ import com.warfactory.medical.api.MedicalState;
 import com.warfactory.medical.attachment.IMedicalData;
 import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.compat.OpenPersistenceCompat;
-import com.warfactory.medical.compat.TaczCompat;
 import com.warfactory.medical.compat.wflib.WfLibArmorCompat;
+import com.warfactory.medical.compat.wflib.WfLibStrikeCompat;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.DerivedStats;
 import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.MedicalProfile;
+import com.norwood.ahf.config.AhfConfig;
+import com.norwood.ahf.hit.HitSampler;
+import com.norwood.ahf.hit.HitboxApi;
+import com.norwood.ahf.part.HitboxPart;
 import com.warfactory.medical.core.damage.*;
-import com.warfactory.medical.core.damage.rig.RigCache;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
@@ -47,9 +50,9 @@ import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.OptionalDouble;
 import java.util.UUID;
 
 @EventBusSubscriber(modid = WFMedical.MOD_ID)
@@ -64,10 +67,6 @@ public final class MedicalEventHandler {
     private MedicalEventHandler() {
     }
 
-
-    // No attach handler any more: medical state is a data attachment, created lazily on first access.
-    // MedicalAttachments.get() carries the old attach condition (players + OpenPersistence bodies), so
-    // ineligible entities still read back null instead of silently gaining a profile.
 
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
@@ -129,17 +128,12 @@ public final class MedicalEventHandler {
             return;
         }
         DamageCategory cat = DamageClassifier.classify(src);
-        if (HitGeometry.shouldRejectGap(victim, src, cat)) {
+        if (HitboxApi.shouldRejectGap(victim, src, cat.hitCategory())) {
             event.setCanceled(true);
         }
     }
 
-    /**
-     * Armour is resolved here now, not separately by WFLib, because two subsystems each doing
-     * part of one job is worse than either doing all of it. This mod claims players from WFLib
-     * on startup, so any hit {@link #handleMedicalHit} declines still has to have its armour answered
-     * for, or a player this mod is configured to ignore would be the only unarmoured thing in the world.
-     */
+    /** Players are claimed from WFLib armour: a declined hit still gets whole-body armour here. */
     @SubscribeEvent
     public static void onLivingHurt(LivingIncomingDamageEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
@@ -175,27 +169,15 @@ public final class MedicalEventHandler {
             return false;
         }
 
-        // A TACZ bullet lands as two hurt events (a non-armor-piercing and an armor-piercing portion, with
-        // i-frames zeroed between them). It applied damage twice
-        float effectiveAmount = amount;
-        OptionalDouble taczTotal = TaczCompat.bulletTotalDamage(src);
-        if (taczTotal.isPresent()) {
-            if (!TaczCompat.claimBulletHit(src, player.level().getGameTime())) {
-                event.setAmount(0.0F);
-                return true;
-            }
-            effectiveAmount = (float) taczTotal.getAsDouble();
-        }
-
         recordDamagingPlayer(profile, src, player);
 
         boolean alreadyDowned = profile.isDowned() || profile.getState() == HealthState.UNCONSCIOUS;
         boolean finishDowned = alreadyDowned && MedicalConfig.finishDownedOnHit();
 
-        HurtResolution res = finishDowned ? null : resolveHit(player, src, effectiveAmount, profile);
+        HurtResolution res = finishDowned ? null : resolveHit(player, src, amount, profile);
         if (finishDowned || (res != null && res.majorTrauma())) {
             markDead(player, data, profile);
-            event.setAmount(Math.max(effectiveAmount, player.getHealth() + 1.0F));
+            event.setAmount(Math.max(amount, player.getHealth() + 1.0F));
             return true;
         }
 
@@ -206,29 +188,18 @@ public final class MedicalEventHandler {
             return true;
         }
         profile.markDirty();
-        // Reconcile (recompute derived stats, apply effects, broadcast downed state) immediately rather
-        // than waiting for the next throttled MedicalEngine tick (up to updateIntervalTicks ticks later).
-        // Without this, a hit that pushes the victim into UNCONSCIOUS renders them fully upright/mobile
-        // for that whole window before snapping into the downed pose -- most visible on armored hits,
-        // since armor is what most often turns a would-be-lethal (instant markDead, no gap) hit into a
-        // survived-but-downed one.
+        // Now, not next engine pass: else a downing hit leaves the victim upright for updateIntervalTicks.
         MedicalEngine.resync(player, true);
 
         if (res.armor() == ArmorEvaluation.Outcome.BLOCKED) {
-            event.setAmount(Math.min(effectiveAmount * BLOCKED_RESIDUAL_FRACTION, BLOCKED_RESIDUAL_MAX));
+            event.setAmount(Math.min(amount * BLOCKED_RESIDUAL_FRACTION, BLOCKED_RESIDUAL_MAX));
         } else {
             event.setAmount(0.0F);
         }
         return true;
     }
 
-    /**
-     * Consolidates health recovery: when WFMedical manages regen it is the sole authority on a player's
-     * current health (the tick drives it UP to the medical value, see {@link MedicalEngine}). Here we clamp
-     * any vanilla heal (natural regen, regen potions, ...) so it can never push health past that medical
-     * value -- otherwise vanilla natural regen fights the medical clamp every tick, and disabling vanilla
-     * regen would also stop medical recovery.
-     */
+    /** manageNaturalRegen: vanilla heals clamped to the medical health value (else they fight the engine's clamp). */
     @SubscribeEvent
     public static void onLivingHeal(LivingHealEvent event) {
         if (!MedicalConfig.manageNaturalRegen()) {
@@ -268,23 +239,16 @@ public final class MedicalEventHandler {
         TraumaRegistry registry = TraumaRegistry.active();
 
         DamageCategory cat = DamageClassifier.classify(src);
-        List<LimbType> limbs = MedicalConfig.penetrationEnabled()
-                ? HitLocation.pickPierced(victim, src, cat, rand)
-                : List.of(HitLocation.pick(victim, src, cat, rand));
-        if (limbs.isEmpty()) {
-            return new HurtResolution(false, false, ArmorEvaluation.Outcome.FULL);
-        }
+        List<LimbType> limbs = pickLimbs(victim, src, cat, rand);
 
         LimbType primary = limbs.get(0);
-        // The piece on the limb that was hit, resolved once, deterministically. Without WFLib
-        // this falls back to the old roll, which is the same three values decided by dice instead.
+        // No WFLib => ArmorEvaluation roll.
         WfLibArmorCompat.Resolved resolved =
                 WfLibArmorCompat.resolve(victim, primary, src, amount, true);
         ArmorEvaluation.Outcome primaryOutcome = resolved != null
                 ? resolved.outcome()
                 : ArmorEvaluation.evaluate(victim, primary, cat, amount, rand);
-        // Wound energy is what got through the armour, not what was aimed at it. Everything downstream
-        // is gated on this number: internal bleeding, fracture chance, severity, and the instakill below.
+        // Wound energy = armour throughput, not incoming amount.
         float throughEnergy = resolved != null ? resolved.through() : amount;
 
         boolean majorTrauma = primaryOutcome != ArmorEvaluation.Outcome.BLOCKED
@@ -295,7 +259,7 @@ public final class MedicalEventHandler {
         }
 
         boolean addedAny = false;
-        double falloff = MedicalConfig.penetrationEnergyFalloff();
+        double falloff = AhfConfig.penetrationEnergyFalloff();
         float energy = throughEnergy;
         for (int i = 0; i < limbs.size(); i++) {
             LimbType limb = limbs.get(i);
@@ -303,8 +267,7 @@ public final class MedicalEventHandler {
             if (i == 0) {
                 outcome = primaryOutcome;
             } else {
-                // No wear on the way through: one bullet is one impact, and a torso shot that carries on
-                // into an arm would otherwise charge the chestplate twice for it.
+                // No wear: one impact => one wear charge per piece.
                 WfLibArmorCompat.Resolved onward =
                         WfLibArmorCompat.resolve(victim, limb, src, energy, false);
                 if (onward != null) {
@@ -318,6 +281,25 @@ public final class MedicalEventHandler {
             energy = (float) (energy * falloff);
         }
         return new HurtResolution(false, addedAny, primaryOutcome);
+    }
+
+    private static List<LimbType> pickLimbs(LivingEntity victim, DamageSource src, DamageCategory cat,
+                                            RandomSource rand) {
+        List<HitboxPart> parts = WfLibStrikeCompat.parts(src);
+        boolean pierce = AhfConfig.penetrationEnabled();
+        if (parts == null) {
+            if (!pierce) {
+                return List.of(LimbType.of(HitSampler.pick(victim, src, cat.hitCategory(), rand)));
+            }
+            parts = HitSampler.pickPierced(victim, src, cat.hitCategory(), rand);
+        } else if (!pierce) {
+            return List.of(LimbType.of(parts.get(0)));
+        }
+        List<LimbType> limbs = new ArrayList<>(parts.size());
+        for (HitboxPart part : parts) {
+            limbs.add(LimbType.of(part));
+        }
+        return limbs;
     }
 
     private static boolean applyLimbTrauma(DamageCategory cat, ArmorEvaluation.Outcome outcome, LimbType limbType,
@@ -481,7 +463,6 @@ public final class MedicalEventHandler {
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             MedicalEngine.onPlayerJoin(player);
-            MedicalNetworking.sendHitAuthority(player);
             IMedicalData data = MedicalAttachments.get(player);
             if (data != null) {
                 MedicalNetworking.broadcastTourniquets(player, data.getProfile());
@@ -508,7 +489,6 @@ public final class MedicalEventHandler {
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             MedicalEngine.onPlayerLeave(player);
-            RigCache.clearHint(player.getId());
         }
     }
 
@@ -576,26 +556,17 @@ public final class MedicalEventHandler {
         if (amount <= 0.0F) {
             return;
         }
-        float effectiveAmount = amount;
-        OptionalDouble taczTotal = TaczCompat.bulletTotalDamage(src);
-        if (taczTotal.isPresent()) {
-            if (!TaczCompat.claimBulletHit(src, victim.level().getGameTime())) {
-                event.setAmount(0.0F);
-                return;
-            }
-            effectiveAmount = (float) taczTotal.getAsDouble();
-        }
         IMedicalData data = MedicalAttachments.get(victim);
         if (data == null) {
             return;
         }
         MedicalProfile profile = data.getProfile();
 
-        HurtResolution res = resolveHit(victim, src, effectiveAmount, profile);
+        HurtResolution res = resolveHit(victim, src, amount, profile);
         if (res.majorTrauma()) {
             profile.enterDeadState(false);
             data.bumpRevision();
-            event.setAmount(Math.max(effectiveAmount, victim.getHealth() + 1.0F));
+            event.setAmount(Math.max(amount, victim.getHealth() + 1.0F));
             return;
         }
         if (res.traumaAdded()) {

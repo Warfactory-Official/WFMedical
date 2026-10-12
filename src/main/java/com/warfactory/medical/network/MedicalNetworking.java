@@ -3,7 +3,6 @@ package com.warfactory.medical.network;
 import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.MedicalProfile;
-import com.warfactory.medical.core.damage.HitAuthority;
 import com.warfactory.medical.core.limb.LimbType;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
@@ -18,19 +17,13 @@ import java.util.WeakHashMap;
 
 public final class MedicalNetworking {
 
-    private static final String PROTOCOL = "3";
+    private static final String PROTOCOL = "4";
     private static final Map<ServerPlayer, MedicalSyncPacket> LAST_SENT = new WeakHashMap<>();
-    // Last game tick each player was re-baselined with a full authoritative sync (safety net; see syncTo).
     private static final Map<ServerPlayer, Long> LAST_FULL_TICK = new WeakHashMap<>();
 
     private MedicalNetworking() {
     }
 
-    /**
-     * Registers every payload with the play-phase registrar. Replaces the 1.20.1 SimpleChannel: the
-     * numeric message ids are gone, each payload now carries its own namespaced type id, and the
-     * protocol version string is what gates connecting to a mismatched server.
-     */
     public static void register(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar(PROTOCOL);
 
@@ -47,10 +40,6 @@ public final class MedicalNetworking {
         registrar.playToServer(ResuscitatePacket.TYPE, ResuscitatePacket.STREAM_CODEC,
                 (packet, ctx) -> packet.handleServer(sender(ctx)));
         registrar.playToClient(MedicalDeltaPacket.TYPE, MedicalDeltaPacket.STREAM_CODEC,
-                (packet, ctx) -> packet.handleClient());
-        registrar.playToServer(PoseStreamPacket.TYPE, PoseStreamPacket.STREAM_CODEC,
-                (packet, ctx) -> packet.handleServer(sender(ctx)));
-        registrar.playToClient(HitAuthorityPacket.TYPE, HitAuthorityPacket.STREAM_CODEC,
                 (packet, ctx) -> packet.handleClient());
         registrar.playToClient(TourniquetStatePacket.TYPE, TourniquetStatePacket.STREAM_CODEC,
                 (packet, ctx) -> packet.handleClient());
@@ -90,11 +79,6 @@ public final class MedicalNetworking {
 
     public static void sendTourniquetsTo(ServerPlayer viewer, int entityId, int mask) {
         PacketDistributor.sendToPlayer(viewer, new TourniquetStatePacket(entityId, mask));
-    }
-
-    public static void sendHitAuthority(ServerPlayer player) {
-        boolean stream = MedicalConfig.useClientPose();
-        PacketDistributor.sendToPlayer(player, new HitAuthorityPacket(stream));
     }
 
     public static void sendFull(ServerPlayer player, MedicalProfile profile) {

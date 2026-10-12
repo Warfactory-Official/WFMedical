@@ -1,23 +1,23 @@
 package com.warfactory.medical.core.limb;
 
+import com.norwood.ahf.part.HitboxPart;
+
 public enum LimbType {
-    HEAD("Head", 0.10F, true, false, false),
-    TORSO("Torso", 0.40F, true, false, false),
-    LEFT_ARM("Left Arm", 0.12F, false, false, true),
-    RIGHT_ARM("Right Arm", 0.12F, false, false, true),
-    LEFT_LEG("Left Leg", 0.13F, false, true, false),
-    RIGHT_LEG("Right Leg", 0.13F, false, true, false);
+    HEAD("Head", true, false, false),
+    TORSO("Torso", true, false, false),
+    LEFT_ARM("Left Arm", false, false, true),
+    RIGHT_ARM("Right Arm", false, false, true),
+    LEFT_LEG("Left Leg", false, true, false),
+    RIGHT_LEG("Right Leg", false, true, false);
 
     public static final LimbType[] VALUES = values();
     private final String displayName;
-    private final float hitWeight;
     private final boolean vital;
     private final boolean leg;
     private final boolean arm;
 
-    LimbType(String displayName, float hitWeight, boolean vital, boolean leg, boolean arm) {
+    LimbType(String displayName, boolean vital, boolean leg, boolean arm) {
         this.displayName = displayName;
-        this.hitWeight = hitWeight;
         this.vital = vital;
         this.leg = leg;
         this.arm = arm;
@@ -27,12 +27,30 @@ public enum LimbType {
         return (ordinal >= 0 && ordinal < VALUES.length) ? VALUES[ordinal] : TORSO;
     }
 
-    public String getDisplayName() {
-        return displayName;
+    public static LimbType of(HitboxPart part) {
+        return switch (part) {
+            case HEAD -> HEAD;
+            case TORSO -> TORSO;
+            case LEFT_ARM -> LEFT_ARM;
+            case RIGHT_ARM -> RIGHT_ARM;
+            case LEFT_LEG -> LEFT_LEG;
+            case RIGHT_LEG -> RIGHT_LEG;
+        };
     }
 
-    public float getHitWeight() {
-        return hitWeight;
+    public HitboxPart part() {
+        return switch (this) {
+            case HEAD -> HitboxPart.HEAD;
+            case TORSO -> HitboxPart.TORSO;
+            case LEFT_ARM -> HitboxPart.LEFT_ARM;
+            case RIGHT_ARM -> HitboxPart.RIGHT_ARM;
+            case LEFT_LEG -> HitboxPart.LEFT_LEG;
+            case RIGHT_LEG -> HitboxPart.RIGHT_LEG;
+        };
+    }
+
+    public String getDisplayName() {
+        return displayName;
     }
 
     public boolean isVital() {

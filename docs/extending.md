@@ -47,7 +47,7 @@ Edit `core/damage/DamageCategory.java` and add the constant. Then update:
 |---|---|---|
 | `DamageClassifier.java` | `classify()` | Detection rule (tag, key, or msgId substring) |
 | `ArmorEvaluation.java` | `categoryEffectiveness()` | Armor effectiveness factor |
-| `HitLocation.java` | `categoryBias()` | Per-limb hit-probability bias |
+| `DamageCategory.java` | `hitCategory()` | AHF `HitCategory` (new constant there too; AHF `HitSampler.categoryBias`) |
 | `TraumaGenerator.java` | `generate()` | Trauma set to generate |
 | `MedicalConfig.java` | `majorTraumaFraction()` | If you want a per-category instant-kill threshold |
 | `MedicalConfig.java` | `canInstakillOnImpact()` | If this is a DoT category that should never instant-kill |
@@ -144,7 +144,7 @@ When adding new values to any of the key enums, this is the complete list of fil
 - `core/damage/DamageCategory.java` – add constant
 - `core/damage/DamageClassifier.java` – `classify()` detection rules
 - `core/damage/ArmorEvaluation.java` – `categoryEffectiveness()`
-- `core/damage/HitLocation.java` – `categoryBias()`
+- `core/damage/DamageCategory.java` – `hitCategory()`; AHF `HitCategory` + `HitSampler.categoryBias()`
 - `core/damage/TraumaGenerator.java` – `generate()` / `fractureChance()`
 - `config/MedicalConfig.java` – `majorTraumaFraction()` and `canInstakillOnImpact()` if needed
 
@@ -158,7 +158,7 @@ When adding new values to any of the key enums, this is the complete list of fil
 
 This is a significant change affecting serialization contracts. Do not reorder existing constants – they are persisted by both ordinal (limb NBT) and name (profile state).
 
-Files to update: `LimbType.java`, `PhysiologyParams.java` (`painShare()`), `HumanoidRig.java` (OBB part definition), `MedicalSyncPacket.java` (array size assumptions), `HitLocation.java` (`categoryBias()`), and any code that iterates `LimbType.VALUES`.
+Files to update: `LimbType.java`, `PhysiologyParams.java` (`painShare()`), `LimbType.of`/`part()` + AHF `HitboxPart`/`HumanoidRig`, `MedicalSyncPacket.java` (array size assumptions), and any code that iterates `LimbType.VALUES`.
 
 ---
 

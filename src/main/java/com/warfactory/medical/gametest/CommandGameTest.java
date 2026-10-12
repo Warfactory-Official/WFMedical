@@ -172,7 +172,7 @@ public class CommandGameTest {
     public void bloodAndTraumaCommandsChangeTheProfile(GameTestHelper helper) {
         // Driven through a source whose entity is our victim, so `@s` resolves without going near the
         // player list. Adding a real player to the list runs the full login sequence, and any mod with a
-        // login-time sync packet (TACZ has one) blows up in an unrelated test.
+        // login-time sync packet blows up in an unrelated test.
         TestBodies.Victim v = TestBodies.victim(helper);
         MedicalProfile profile = TestBodies.profileOf(helper, v);
         CommandDispatcher<CommandSourceStack> d = dispatcher();

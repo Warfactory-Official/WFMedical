@@ -5,7 +5,6 @@ import com.warfactory.medical.core.HealthState;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -13,8 +12,6 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 
 public final class MedicalEffects {
 
-    // 1.21 replaced UUID-keyed attribute modifiers with ResourceLocation-keyed ones; these ids keep the
-    // same names the old modifiers carried, so the intent is unchanged.
     private static final ResourceLocation MAX_HEALTH_MODIFIER_ID =
             ResourceLocation.fromNamespaceAndPath("wfmedical", "trauma_max_health");
     private static final ResourceLocation MOVEMENT_MODIFIER_ID =
@@ -59,13 +56,7 @@ public final class MedicalEffects {
             }
         }
 
-        boolean forceCrawl = state != HealthState.UNCONSCIOUS && state != HealthState.DEAD
-                && stats.bothLegsDisabled();
-        if (forceCrawl) {
-            player.setForcedPose(Pose.SWIMMING);
-        } else if (player.getForcedPose() == Pose.SWIMMING) {
-            player.setForcedPose(null);
-        }
+        MedicalStance.crawl(player, state != HealthState.UNCONSCIOUS && state != HealthState.DEAD && stats.bothLegsDisabled());
 
         if (state == HealthState.DEAD) {
             return;
@@ -125,8 +116,6 @@ public final class MedicalEffects {
         if (speed != null) {
             speed.removeModifier(MOVEMENT_MODIFIER_ID);
         }
-        if (player.getForcedPose() == Pose.SWIMMING) {
-            player.setForcedPose(null);
-        }
+        MedicalStance.crawl(player, false);
     }
 }

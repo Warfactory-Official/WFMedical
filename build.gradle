@@ -19,8 +19,6 @@ println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty '
 neoForge {
     version = neoforge_version
 
-    // Mixin configs are declared in neoforge.mods.toml; NeoForge 1.21.1 runs on official names in
-    // both dev and production, so no refmap / remapping step is needed any more.
     accessTransformers.from('src/main/resources/META-INF/accesstransformer.cfg')
 
     mods {
@@ -29,15 +27,7 @@ neoForge {
         }
     }
 
-    // JUnit against a bootstrapped Minecraft. MDG puts the `test` source set on the full MC classpath
-    // and runs FML's JUnit bootstrap before the first test, so Bootstrap.bootStrap() has happened and
-    // registries/DamageTypes/EntityTypes exist. That is what makes the hit-geometry maths testable
-    // without launching a server -- the OBB slab test and the rig builder are pure functions of Vec3,
-    // but they still need the Minecraft classes on the classpath to link.
-    //
-    // Split of responsibilities with the gametests in src/main/java/.../gametest:
-    //   `./gradlew test`            -- geometry//maths that needs no world. Seconds, run on every change.
-    //   `./gradlew runGameTestServer` -- anything needing a real LivingEntity, pose, or damage pipeline.
+    // test: no world (see docs/TESTING.md); runGameTestServer: entities, mixins, damage pipeline.
     unitTest {
         enable()
         testedMod = mods."${mod_id}"
@@ -223,53 +213,44 @@ repositories {
         name = 'FirstDarkDev'
         url = 'https://maven.firstdark.dev/snapshots'
     }
-    // PlayerAnimator (KosmX).
     maven {
-        name = 'KosmX'
-        url = 'https://maven.kosmx.dev/'
-    }
-    // CurseForge maven – hosts the unofficial TACZ 1.21.1 NeoForge port.
-    maven {
-        name = 'CurseMaven'
-        url = 'https://cursemaven.com'
-        content { includeGroup 'curse.maven' }
+        name = 'Warfactory Snapshots'
+        url = 'https://repo.warfactory.co/snapshots'
+        content { includeGroup 'com.wf.wflib'; includeGroup 'com.norwood' }
+        // Anonymous reads work on this server; only `publish` needs credentials. A present-but-null
+        // credentials block makes Gradle refuse anonymous reads too, so omit it entirely when unset.
+        def warfactoryUser = project.findProperty('warfactoryUser') ?: System.getenv('WARFACTORY_MAVEN_USER')
+        def warfactoryToken = project.findProperty('warfactoryToken') ?: System.getenv('WARFACTORY_MAVEN_TOKEN')
+        if (warfactoryUser != null && warfactoryToken != null) {
+            credentials {
+                username = warfactoryUser
+                password = warfactoryToken
+            }
+        }
     }
     mavenCentral()
 }
 
+configurations.all {
+    resolutionStrategy.cacheChangingModulesFor(0, 'seconds')
+}
+
 dependencies {
-    // JUnit 5 for the unit-test source set. MDG supplies the Minecraft classpath and the FML
-    // bootstrap; the engine itself is ours to declare.
     testImplementation platform("org.junit:junit-bom:${junit_version}")
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
-    // LDLib2 – UI framework used for the character sheet, radial menu and HUD overlays.
-    // The `all` classifier is the shaded jar LDLib2 documents for consumers.
+    // `all` = shaded consumer jar.
     implementation "com.lowdragmc.ldlib2:ldlib2-neoforge-1.21.1:${ldlib_version}:all"
 
-    // PlayerAnimator (KosmX) – player animation library. The limb hitbox rig reads its animated bone
-    // transforms so hitboxes track played animations instead of only the vanilla pose.
-    implementation "dev.kosmx.player-anim:player-animation-lib-forge:${playeranimator_version}"
+    implementation "com.norwood:ahf-1.21.1-neoforge:${ahf_version}-SNAPSHOT"
 
-    // Soft TACZ compat only – no hard dependency, but the mixins need the classes at compile time.
-    compileOnly "curse.maven:tacz-1-21-1-${tacz_curse_project}:${tacz_curse_file}"
-    runtimeOnly "curse.maven:tacz-1-21-1-${tacz_curse_project}:${tacz_curse_file}"
-
-    // WFLib owns the armour model: one DT/DR resolver per protection type, per equipment slot,
-    // which this mod asks about the limb it has already picked. compileOnly only, because
-    // com.warfactory.medical.compat.wflib guards every call behind ModList and the mod still
-    // loads and plays without it (ArmorEvaluation's roll is the fallback). Local jar because
-    // WFLib is not published anywhere yet; rebuild it and re-copy when it moves.
-    compileOnly files('libs/wflib-1.2.0.jar')
-
-    // ...and on the run classpath for -PwithWFLib, which is how the integration gets exercised at
-    // all: without it every one of those methods correctly falls back. Off by default because it puts a
-    // second mod's content, mixins and event handlers into the environment every other test runs in.
-    // Its Flywheel and GemRender dependencies are declared side = "CLIENT", so a server or gametest run
-    // needs neither; a client run does.
+    // Optional (compat.wflib is ModList-gated). -PwithWFLib puts it on the run classpath; off by
+    // default: its content/mixins/handlers would join every test. Flywheel + GemRender are CLIENT
+    // deps => server/gametest runs need neither.
+    compileOnly "com.wf.wflib:wflib:${wflib_version}-SNAPSHOT"
     if (project.hasProperty('withWFLib')) {
-        runtimeOnly files('libs/wflib-1.2.0.jar')
+        runtimeOnly "com.wf.wflib:wflib:${wflib_version}-SNAPSHOT"
     }
 }
 
@@ -292,11 +273,21 @@ publishing {
     publications {
         register('mavenJava', MavenPublication) {
             artifact jar
+            groupId = mod_group_id
+            artifactId = mod_id
+            version = "${mod_version}-SNAPSHOT"
         }
     }
     repositories {
         maven {
-            url "file://${project.projectDir}/mcmodsrepo"
+            name = 'WarfactorySnapshots'
+            url = 'https://repo.warfactory.co/snapshots'
+            def warfactoryUser = project.findProperty('warfactoryUser') ?: System.getenv('WARFACTORY_MAVEN_USER')
+            def warfactoryToken = project.findProperty('warfactoryToken') ?: System.getenv('WARFACTORY_MAVEN_TOKEN')
+            credentials {
+                username = warfactoryUser
+                password = warfactoryToken
+            }
         }
     }
 }
