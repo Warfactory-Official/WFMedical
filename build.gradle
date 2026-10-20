@@ -213,6 +213,12 @@ repositories {
         name = 'FirstDarkDev'
         url = 'https://maven.firstdark.dev/snapshots'
     }
+    // curse.maven:* transitive from WFLib's POM (spark).
+    maven {
+        name = 'CurseMaven'
+        url = 'https://cursemaven.com'
+        content { includeGroup 'curse.maven' }
+    }
     maven {
         name = 'Warfactory Snapshots'
         url = 'https://repo.warfactory.co/snapshots'
