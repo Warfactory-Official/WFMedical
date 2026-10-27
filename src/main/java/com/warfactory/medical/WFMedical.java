@@ -3,6 +3,7 @@ package com.warfactory.medical;
 import com.mojang.logging.LogUtils;
 import com.warfactory.medical.attachment.MedicalAttachments;
 import com.norwood.ahf.hook.AhfHooks;
+import com.warfactory.medical.item.MedicalPoses;
 import com.warfactory.medical.compat.OpenPersistenceCompat;
 import com.warfactory.medical.config.MedicalClientConfig;
 import com.warfactory.medical.config.MedicalConfig;
@@ -37,6 +38,7 @@ public final class WFMedical {
         MedicalAttachments.register(modBus);
 
         modBus.addListener(MedicalNetworking::register);
+        MedicalPoses.register();
 
         modContainer.registerConfig(ModConfig.Type.COMMON, MedicalConfig.SPEC);
         modContainer.registerConfig(ModConfig.Type.CLIENT, MedicalClientConfig.SPEC);

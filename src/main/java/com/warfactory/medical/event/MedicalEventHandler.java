@@ -526,6 +526,7 @@ public final class MedicalEventHandler {
         MedicalNetworking.sendDownedTo(viewer, target.getId(), data.getProfile().isDowned());
         MedicalNetworking.sendTourniquetsTo(viewer, target.getId(),
                 MedicalNetworking.tourniquetMask(data.getProfile()));
+        MedicalNetworking.sendTreatmentPoseTo(viewer, target);
     }
 
     @SubscribeEvent

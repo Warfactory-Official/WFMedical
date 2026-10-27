@@ -1,9 +1,12 @@
 package com.warfactory.medical.network;
 
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.attachment.IMedicalData;
+import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.limb.LimbType;
+import com.warfactory.medical.item.MedicalPoses;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -32,6 +35,8 @@ public final class MedicalNetworking {
         registrar.playToServer(MedicalActionPacket.TYPE, MedicalActionPacket.STREAM_CODEC,
                 (packet, ctx) -> packet.handleServer(sender(ctx)));
         registrar.playToClient(ActiveTreatmentPacket.TYPE, ActiveTreatmentPacket.STREAM_CODEC,
+                (packet, ctx) -> packet.handleClient());
+        registrar.playToClient(TreatmentPosePacket.TYPE, TreatmentPosePacket.STREAM_CODEC,
                 (packet, ctx) -> packet.handleClient());
         registrar.playToClient(DownedStatePacket.TYPE, DownedStatePacket.STREAM_CODEC,
                 (packet, ctx) -> packet.handleClient());
@@ -157,8 +162,21 @@ public final class MedicalNetworking {
         return sb.append(']').toString();
     }
 
+    /** Also the actor's third-person pose ({@link MedicalPoses}) to it and its trackers. */
     public static void sendActiveTreatment(ServerPlayer player, ActiveTreatmentPacket packet) {
         PacketDistributor.sendToPlayer(player, packet);
+        IMedicalData data = MedicalAttachments.get(player);
+        MedicalPoses.Kind k = packet.active() && data != null
+                ? MedicalPoses.kind(data.getProfile().getActiveItemId()) : MedicalPoses.Kind.NONE;
+        MedicalPoses.server(player, k);
+        PacketDistributor.sendToPlayersTrackingEntityAndSelf(player, new TreatmentPosePacket(player.getId(), k));
+    }
+
+    public static void sendTreatmentPoseTo(ServerPlayer viewer, ServerPlayer target) {
+        MedicalPoses.Kind k = MedicalPoses.server(target);
+        if (k != MedicalPoses.Kind.NONE) {
+            PacketDistributor.sendToPlayer(viewer, new TreatmentPosePacket(target.getId(), k));
+        }
     }
 
     public static void sendTargetInfo(ServerPlayer medic, TreatmentTargetInfoPacket packet) {

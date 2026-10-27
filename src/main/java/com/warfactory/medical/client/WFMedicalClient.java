@@ -1,6 +1,8 @@
 package com.warfactory.medical.client;
 
+import com.norwood.ahf.client.compat.PoseSetLayers;
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.item.MedicalPoses;
 import com.warfactory.medical.client.overlay.ActionProgressOverlay;
 import com.warfactory.medical.client.overlay.DamageOutlineOverlay;
 import com.warfactory.medical.client.overlay.HealthBarOverlay;
@@ -13,7 +15,11 @@ import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+
+import java.util.Set;
 
 @EventBusSubscriber(modid = WFMedical.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class WFMedicalClient {
@@ -21,6 +27,15 @@ public final class WFMedicalClient {
     private static boolean overlaysRegistered;
 
     private WFMedicalClient() {
+    }
+
+    @SubscribeEvent
+    public static void onClientSetup(FMLClientSetupEvent event) {
+        if (ModList.get().isLoaded("playeranimator")) {
+            event.enqueueWork(() -> PoseSetLayers.register(
+                    ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "treatment"), 87,
+                    Set.of(MedicalPoses.MEDKIT, MedicalPoses.BANDAGE)));
+        }
     }
 
     @SubscribeEvent

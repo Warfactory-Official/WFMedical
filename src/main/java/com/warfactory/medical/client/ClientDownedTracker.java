@@ -1,6 +1,7 @@
 package com.warfactory.medical.client;
 
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.item.MedicalPoses;
 import com.warfactory.medical.network.ClientMedicalCache;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import net.minecraft.client.Minecraft;
@@ -57,6 +58,7 @@ public final class ClientDownedTracker {
         @SubscribeEvent
         public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
             clear();
+            MedicalPoses.clearClient();
         }
 
 

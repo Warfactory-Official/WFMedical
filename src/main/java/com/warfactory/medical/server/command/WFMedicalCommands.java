@@ -39,6 +39,9 @@ import com.warfactory.medical.server.MedicalEngine;
 import com.warfactory.medical.server.SubstanceService;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import com.warfactory.medical.server.MedicalActionService;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
@@ -226,6 +229,15 @@ public final class WFMedicalCommands {
                                 .suggests(LIMB_SUGGESTIONS)
                                 .executes(ctx -> cmdFracture(ctx.getSource(), players(ctx),
                                         StringArgumentType.getString(ctx, "limb"))))));
+
+        root.then(Commands.literal("treat")
+                .then(Commands.argument("targets", EntityArgument.players())
+                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("limb", StringArgumentType.word())
+                                        .suggests(LIMB_SUGGESTIONS)
+                                        .executes(ctx -> cmdTreat(ctx.getSource(), players(ctx),
+                                                ResourceLocationArgument.getId(ctx, "item"),
+                                                StringArgumentType.getString(ctx, "limb")))))));
 
         root.then(Commands.literal("bleed")
                 .then(Commands.argument("targets", EntityArgument.players())
@@ -1232,6 +1244,24 @@ public final class WFMedicalCommands {
         });
         src.sendSuccess(() -> Component.literal("[wfmedical] Set state " + target.name() + " on "
                 + n + " player(s)."), true);
+        return n;
+    }
+
+    /** Self-treatment with {@code item} from each target's hotbar, as the item-use flow starts it. */
+    private static int cmdTreat(CommandSourceStack src, Collection<ServerPlayer> targets, ResourceLocation item,
+                                String limbName) {
+        LimbType limb = parseLimb(src, limbName);
+        if (limb == null) {
+            return 0;
+        }
+        int n = 0;
+        for (ServerPlayer p : targets) {
+            if (MedicalActionService.start(p, item, limb, -1)) {
+                n++;
+            }
+        }
+        int started = n;
+        src.sendSuccess(() -> Component.literal("[wfmedical] Treatment started on " + started + " player(s)."), true);
         return n;
     }
 

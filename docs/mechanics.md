@@ -302,6 +302,10 @@ On injection (`SubstanceService.inject`):
 2. `drugLoad += doseLoad`. The load decays at `drugDecayPerTick` (default 0.00035/tick ≈ one morphine dose in ~24 minutes).
 3. Timed effects (stimulant / clotting boost) are activated for `effectTicks` ticks.
 
+### Opioid screen effect
+
+`OpioidHazeEffect`: haze = `max(0.35*painSuppression, (drugLoad-doseLoad)/(overdoseThreshold-doseLoad))` (morphine def, clamped 0..1). Max = overdose: desat 0.75, ghost 1% UV, warm lift. One dose ~0.33; painSuppression 0 => no haze (stimulant alone excluded).
+
 ### Drug load and overdose
 
 When `drugLoad >= overdoseThreshold`:

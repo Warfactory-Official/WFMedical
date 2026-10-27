@@ -39,6 +39,7 @@ the shared fixtures for that suite.
 | `DamageClassifierGameTest` | the tag-driven half of classification, over the real registry |
 | `TraumaPipelineGameTest` | an `AhfHitSource` round, end to end, to a wound on its AHF part; PRECISE gap reject; real bow arrow in flight |
 | `MedicalStanceGameTest` | downed / leg crawl -> AHF posture locks; sway exports |
+| `TreatmentPoseGameTest` | treatment -> AHF pose set on the server rig (`MedicalPoses`); item -> set kind |
 | `DamagePipelineVariantsGameTest` | falls, fire, blasts, arrows, melee, suffocation, regen clamping |
 | `SubstanceServiceGameTest` | analgesia, stimulants, overdose, antidote reversal |
 | `MedicalActionServiceGameTest` | the item-use flow: cast, complete, cancel, item consumption |

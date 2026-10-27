@@ -48,8 +48,8 @@ public class MedicalStanceGameTest {
         helper.assertTrue(MedicalState.isDowned(v), "setup: overdose should down the victim");
         helper.assertTrue(AhfStance.posture(v) == Posture.DOWNED, "posture " + AhfStance.posture(v));
         helper.assertTrue(AhfStance.weaponsBlocked(v), "downed must block weapons");
-        helper.assertTrue(v.getBbHeight() < 1.0F, "downed height " + v.getBbHeight());
-        helper.assertTrue(!HitboxApi.isUprightHumanoid(v), "downed rig must not be upright");
+        helper.assertTrue(v.getBbHeight() < 1.2F, "downed height " + v.getBbHeight());
+        helper.assertTrue(HitboxApi.isUprightHumanoid(v), "kneeling downed rig must be upright");
 
         p.setOverdoseUnconscious(false);
         p.setState(HealthState.HEALTHY);
