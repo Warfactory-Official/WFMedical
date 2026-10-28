@@ -327,7 +327,7 @@ class MedicalEngineTest {
         private DerivedStats stats(float systemicPain, double bleeding) {
             return new DerivedStats(30.0F, 0.0F, 30.0F, bleeding, systemicPain, systemicPain, 1.0F, false,
                     1.0F, com.warfactory.medical.core.HealthState.UNCONSCIOUS,
-                    false, false, false, false, false, false, false, 1.0D, 80.0F);
+                    false, false, false, false, false, false, false, 1.0D, 80.0F, 0.0F);
         }
 
         @Test

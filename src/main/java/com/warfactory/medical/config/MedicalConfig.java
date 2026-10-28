@@ -1,6 +1,7 @@
 package com.warfactory.medical.config;
 
 import com.warfactory.medical.core.PhysiologyParams;
+import com.warfactory.medical.core.Stress;
 import com.warfactory.medical.core.damage.DamageCategory;
 import com.warfactory.medical.core.limb.LimbType;
 import net.neoforged.neoforge.common.ModConfigSpec;
@@ -109,6 +110,16 @@ public final class MedicalConfig {
     private static final ModConfigSpec.DoubleValue HEART_RATE_PAIN_GAIN;
     private static final ModConfigSpec.DoubleValue HEART_RATE_STIMULANT_BONUS;
     private static final ModConfigSpec.DoubleValue HEART_RATE_OPIOID_DROP;
+    private static final ModConfigSpec.BooleanValue STRESS_ENABLED;
+    private static final ModConfigSpec.DoubleValue STRESS_PAIN_THRESHOLD;
+    private static final ModConfigSpec.DoubleValue STRESS_PAIN_GAIN;
+    private static final ModConfigSpec.DoubleValue STRESS_REGEN_BASE;
+    private static final ModConfigSpec.DoubleValue STRESS_REGEN_SCALE;
+    private static final ModConfigSpec.IntValue STRESS_REGEN_DELAY_TICKS;
+    private static final ModConfigSpec.IntValue STRESS_DARK_LIGHT_LEVEL;
+    private static final ModConfigSpec.DoubleValue STRESS_SUPPRESSION_GAIN;
+    private static final ModConfigSpec.DoubleValue STRESS_SUPPRESSION_RANGE;
+    private static final ModConfigSpec.DoubleValue CIGARETTE_STRESS_RELIEF;
     private static final ModConfigSpec.DoubleValue TOURNIQUET_LEG_SPEED_MULTIPLIER;
     private static final ModConfigSpec.DoubleValue TOURNIQUET_ARM_SPEED_MULTIPLIER;
     private static final ModConfigSpec.DoubleValue TOURNIQUET_ARM_SWAY;
@@ -363,6 +374,40 @@ public final class MedicalConfig {
                         + "read as dangerously slow on the vitals readout before the overdose itself bites. "
                         + "Default 30.")
                 .defineInRange("heartRateOpioidDrop", 30.0D, 0.0D, 200.0D);
+        STRESS_ENABLED = b
+                .comment("Model STRESS (fear), 0..1: raised by pain and by rounds passing close (needs WFLib), "
+                        + "recovers while calm and lit. Client effects: weapon shake, vignette at 80%+.")
+                .define("stressEnabled", true);
+        STRESS_PAIN_THRESHOLD = b
+                .comment("Perceived pain (0..1) above which pain raises stress. Default 0.15.")
+                .defineInRange("stressPainThreshold", 0.15D, 0.0D, 0.99D);
+        STRESS_PAIN_GAIN = b
+                .comment("Stress per second at full pain. Default 0.03.")
+                .defineInRange("stressPainGain", 0.03D, 0.0D, 1.0D);
+        STRESS_REGEN_BASE = b
+                .comment("Stress per second recovered while calm, at any stress. Default 0.004.")
+                .defineInRange("stressRegenBase", 0.004D, 0.0D, 1.0D);
+        STRESS_REGEN_SCALE = b
+                .comment("Extra stress per second recovered per unit stress while calm: the higher, the faster. "
+                        + "Default 0.05 (100% -> 0 in about 50 s).")
+                .defineInRange("stressRegenScale", 0.05D, 0.0D, 1.0D);
+        STRESS_REGEN_DELAY_TICKS = b
+                .comment("Calm needs this many ticks since stress last rose. Default 100.")
+                .defineInRange("stressRegenDelayTicks", 100, 0, 12000);
+        STRESS_DARK_LIGHT_LEVEL = b
+                .comment("Light level (0..15) at the head at or below which stress does not recover. Default 4.")
+                .defineInRange("stressDarkLightLevel", 4, 0, 15);
+        STRESS_SUPPRESSION_GAIN = b
+                .comment("Stress added by a round passing at zero distance; falls linearly to 0 at "
+                        + "stressSuppressionRange. Default 0.015.")
+                .defineInRange("stressSuppressionGain", 0.015D, 0.0D, 1.0D);
+        STRESS_SUPPRESSION_RANGE = b
+                .comment("Blocks from the eyes within which a passing round suppresses (capped by WFLib "
+                        + "rounds.nearMissRadius). Default 3.")
+                .defineInRange("stressSuppressionRange", 3.0D, 0.1D, 64.0D);
+        CIGARETTE_STRESS_RELIEF = b
+                .comment("Stress removed by smoking one WFLib cigarette to the end. Default 0.35.")
+                .defineInRange("cigaretteStressRelief", 0.35D, 0.0D, 1.0D);
         TOURNIQUET_BLEED_MULTIPLIER = b
                 .comment("Multiplier applied to a limb's bleeding while a TOURNIQUET is on it (arms/legs only). "
                         + "Lower = a tourniquet slows blood loss more; it never fully stops it and does NOT treat "
@@ -870,6 +915,18 @@ public final class MedicalConfig {
 
     public static float heartRateOpioidDrop() {
         return HEART_RATE_OPIOID_DROP.get().floatValue();
+    }
+
+    public static boolean stressEnabled() {
+        return STRESS_ENABLED.get();
+    }
+
+    public static Stress.Params stressParams() {
+        return new Stress.Params(stressEnabled(), STRESS_PAIN_THRESHOLD.get().floatValue(),
+                STRESS_PAIN_GAIN.get().floatValue(), STRESS_REGEN_BASE.get().floatValue(),
+                STRESS_REGEN_SCALE.get().floatValue(), STRESS_REGEN_DELAY_TICKS.get(),
+                STRESS_DARK_LIGHT_LEVEL.get(), STRESS_SUPPRESSION_GAIN.get().floatValue(),
+                STRESS_SUPPRESSION_RANGE.get().floatValue(), CIGARETTE_STRESS_RELIEF.get().floatValue());
     }
 
     public static float tourniquetLegSpeedMultiplier() {

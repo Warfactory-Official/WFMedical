@@ -11,6 +11,8 @@ public final class MedicalClientConfig {
     private static final ModConfigSpec.IntValue DAMAGE_OUTLINE_OFFSET_X;
     private static final ModConfigSpec.IntValue DAMAGE_OUTLINE_OFFSET_Y;
     private static final ModConfigSpec.DoubleValue DAMAGE_OUTLINE_SCALE;
+    private static final ModConfigSpec.DoubleValue STRESS_SHAKE_STRENGTH;
+    private static final ModConfigSpec.BooleanValue STRESS_VIGNETTE_ENABLED;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -33,6 +35,15 @@ public final class MedicalClientConfig {
         DAMAGE_OUTLINE_SCALE = b
                 .comment("Size multiplier for the body outline (1.0 = the base ~40x64px silhouette).")
                 .defineInRange("scale", 1.0D, 0.25D, 8.0D);
+        b.pop();
+
+        b.comment("Stress effects.").push("stress");
+        STRESS_SHAKE_STRENGTH = b
+                .comment("Multiplier on the weapon shake from stress (aim moves with it). 0 disables.")
+                .defineInRange("shakeStrength", 1.0D, 0.0D, 3.0D);
+        STRESS_VIGNETTE_ENABLED = b
+                .comment("Black vignette from stress, strong from 80%.")
+                .define("vignette", true);
         b.pop();
 
         SPEC = b.build();
@@ -59,6 +70,14 @@ public final class MedicalClientConfig {
 
     public static float damageOutlineScale() {
         return DAMAGE_OUTLINE_SCALE.get().floatValue();
+    }
+
+    public static float stressShakeStrength() {
+        return STRESS_SHAKE_STRENGTH.get().floatValue();
+    }
+
+    public static boolean stressVignetteEnabled() {
+        return STRESS_VIGNETTE_ENABLED.get();
     }
 
     public enum HudAnchor {

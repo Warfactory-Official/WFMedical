@@ -7,12 +7,17 @@ import com.wf.wflib.api.Threat;
 import com.wf.wflib.api.ThreatKind;
 import com.wf.wflib.kinetic.KineticPreset;
 import com.wf.wflib.kinetic.KineticPresetRegistry;
+import com.wf.wflib.item.ModItems;
 import com.wf.wflib.round.Rounds;
+import com.wf.wflib.smoking.CigaretteSmokedEvent;
 import com.wf.wflib.warhead.WarheadRegistry;
 import com.warfactory.medical.WFMedical;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.common.NeoForge;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
@@ -48,6 +53,11 @@ final class WfLibRounds {
         long key = Rounds.launch(level, KineticPresetRegistry.get(ROUND), at, velocity, null, null);
         Rounds.step(level, key);
         Rounds.destroy(level, key);
+    }
+
+    /** {@code player} smoked a cigarette to the end. */
+    static void smoked(ServerPlayer player) {
+        NeoForge.EVENT_BUS.post(new CigaretteSmokedEvent(player, new ItemStack(ModItems.CIGARETTE.get())));
     }
 
     static List<String> threatKinds() {

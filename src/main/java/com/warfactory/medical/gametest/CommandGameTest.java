@@ -108,6 +108,8 @@ public class CommandGameTest {
                 "wfmedical drug set @s 1.5",
                 "wfmedical drug add @s 0.5",
                 "wfmedical drug clear @s",
+                "wfmedical stress set @s 0.5",
+                "wfmedical stress add @s -0.2",
                 "wfmedical unconscious @s",
                 "wfmedical unconscious @s 200",
                 "wfmedical asphyxia @s",
@@ -214,6 +216,14 @@ public class CommandGameTest {
             helper.fail("suppression clear left " + profile.getPainSuppression());
         }
 
+        run(helper, d, src, "wfmedical stress set @s 0.6");
+        if (Math.abs(profile.getStress() - 0.6F) > 1.0e-5F) {
+            helper.fail("stress set left " + profile.getStress());
+        }
+        run(helper, d, src, "wfmedical stress add @s -0.2");
+        if (Math.abs(profile.getStress() - 0.4F) > 1.0e-5F) {
+            helper.fail("stress add left " + profile.getStress());
+        }
         run(helper, d, src, "wfmedical drug set @s 1.5");
         if (Math.abs(profile.getDrugLoad() - 1.5F) > 0.01F) {
             helper.fail("drug set left " + profile.getDrugLoad());

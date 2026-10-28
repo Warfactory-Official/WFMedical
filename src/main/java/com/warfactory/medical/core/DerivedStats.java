@@ -21,12 +21,14 @@ public record DerivedStats(
         /** Circulation factor (1.0 = healthy): bleeding is already scaled by this. */
         double cardiacOutput,
         /** Beats per minute. */
-        float heartRate
+        float heartRate,
+        /** Stress (fear), 0..1. */
+        float stress
 ) {
     private static final DerivedStats HEALTHY = new DerivedStats(
             30.0F, 0.0F, 30.0F, 0.0D, 0.0F, 0.0F, 1.0F, false, 1.0F,
             HealthState.HEALTHY, false, false, false, false, false, false, false, 1.0D,
-            MedicalProfile.DEFAULT_HEART_RATE);
+            MedicalProfile.DEFAULT_HEART_RATE, 0.0F);
 
     public static DerivedStats healthy() {
         return HEALTHY;

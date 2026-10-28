@@ -287,7 +287,8 @@ public final class Physiology {
                 bothLegsDisabled,
                 anyArmTourniquet,
                 cardiacOutput,
-                heartRate
+                heartRate,
+                p.getStress()
         );
     }
 

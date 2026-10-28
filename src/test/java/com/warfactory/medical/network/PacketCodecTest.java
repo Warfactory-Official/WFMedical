@@ -45,7 +45,7 @@ class PacketCodecTest {
 
     private static DerivedStats stats() {
         return new DerivedStats(21.5F, 8.5F, 19.0F, 2.75D, 0.4F, 0.62F, 0.55F, true, 0.3F,
-                HealthState.CRITICAL, true, false, true, false, true, false, true, 0.42D, 80.0F);
+                HealthState.CRITICAL, true, false, true, false, true, false, true, 0.42D, 80.0F, 0.37F);
     }
 
     private static LimbSummary[] limbs() {

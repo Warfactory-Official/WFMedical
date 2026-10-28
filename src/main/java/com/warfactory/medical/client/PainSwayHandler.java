@@ -75,7 +75,7 @@ public final class PainSwayHandler {
         appliedPitch = 0.0;
     }
 
-    private static boolean aimingRangedWeapon(LocalPlayer player) {
+    static boolean aimingRangedWeapon(LocalPlayer player) {
         if (player.isUsingItem()) {
             Item item = player.getUseItem().getItem();
             if (item instanceof BowItem || item instanceof CrossbowItem) {

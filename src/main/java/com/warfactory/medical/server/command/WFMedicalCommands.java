@@ -183,6 +183,18 @@ public final class WFMedicalCommands {
                         .then(Commands.argument("targets", EntityArgument.players())
                                 .executes(ctx -> cmdSuppression(ctx.getSource(), players(ctx), 0.0F)))));
 
+        root.then(Commands.literal("stress")
+                .then(Commands.literal("set")
+                        .then(Commands.argument("targets", EntityArgument.players())
+                                .then(Commands.argument("value", FloatArgumentType.floatArg(0.0F, 1.0F))
+                                        .executes(ctx -> cmdStress(ctx.getSource(), players(ctx),
+                                                FloatArgumentType.getFloat(ctx, "value"), false)))))
+                .then(Commands.literal("add")
+                        .then(Commands.argument("targets", EntityArgument.players())
+                                .then(Commands.argument("value", FloatArgumentType.floatArg(-1.0F, 1.0F))
+                                        .executes(ctx -> cmdStress(ctx.getSource(), players(ctx),
+                                                FloatArgumentType.getFloat(ctx, "value"), true))))));
+
         root.then(Commands.literal("drug")
                 .then(Commands.literal("set")
                         .then(Commands.argument("targets", EntityArgument.players())
@@ -1125,6 +1137,21 @@ public final class WFMedicalCommands {
             return true;
         });
         src.sendSuccess(() -> Component.literal("[wfmedical] Set pain suppression to " + fmt(value)
+                + " for " + n + " player(s)."), true);
+        return n;
+    }
+
+    private static int cmdStress(CommandSourceStack src, Collection<ServerPlayer> targets, float value, boolean add) {
+        int n = forEach(src, targets, (s, p, data, profile) -> {
+            if (add) {
+                profile.addStress(value, p.level().getGameTime());
+            } else {
+                profile.setStress(value);
+            }
+            MedicalEngine.resync(p);
+            return true;
+        });
+        src.sendSuccess(() -> Component.literal("[wfmedical] " + (add ? "Added " : "Set stress to ") + fmt(value)
                 + " for " + n + " player(s)."), true);
         return n;
     }

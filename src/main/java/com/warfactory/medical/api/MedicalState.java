@@ -100,6 +100,12 @@ public final class MedicalState {
         return span <= 0.0F ? 1.0F : Math.min((pain - SWAY_START) / span, 1.0F);
     }
 
+    /** Stress in [0, 1]; 0 for a non-local client player. */
+    public static float stress(Player player) {
+        DerivedStats s = stats(player);
+        return s == null ? 0.0F : s.stress();
+    }
+
     public static boolean isDowned(Player player) {
         if (player == null) {
             return false;

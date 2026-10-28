@@ -10,11 +10,13 @@ import com.warfactory.medical.core.HealthState;
 import com.warfactory.medical.core.Cardio;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.PhysiologyParams;
+import com.warfactory.medical.core.Stress;
 import com.warfactory.medical.core.limb.Limb;
 import com.warfactory.medical.core.limb.LimbType;
 import com.warfactory.medical.core.trauma.Trauma;
 import com.warfactory.medical.damage.DamageSources;
 import com.warfactory.medical.network.MedicalNetworking;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -100,6 +102,8 @@ public final class MedicalEngine {
 
         advanceHeartRate(profile, params, interval);
 
+        advanceStress(player, profile, interval, nowTick);
+
         if (profile.isReviveGraceActive() && nowTick >= profile.getReviveGraceUntilTick()) {
             profile.setReviveGraceUntilTick(0L);
             profile.markDirty();
@@ -184,6 +188,29 @@ public final class MedicalEngine {
         float next = Cardio.advanceHeartRate(profile.getHeartRate(), ratio, stats.totalPain(),
                 profile.getStimulant(), profile.getPainSuppression(), interval / 20.0D, params);
         profile.setHeartRate(next);
+    }
+
+    private static void advanceStress(ServerPlayer player, MedicalProfile profile, int interval, long nowTick) {
+        BlockPos head = BlockPos.containing(player.getEyePosition());
+        stepStress(profile, player.level().getMaxLocalRawBrightness(head), interval, nowTick,
+                MedicalConfig.stressParams());
+    }
+
+    /** {@code package-private} for the unit suite. */
+    static void stepStress(MedicalProfile profile, int light, int interval, long nowTick, Stress.Params params) {
+        if (!params.enabled()) {
+            profile.setStress(0.0F);
+            return;
+        }
+        float before = profile.getStress();
+        boolean calm = light > params.darkLightLevel()
+                && nowTick - profile.getStressRoseTick() >= params.regenDelayTicks();
+        float next = Stress.advance(before, profile.cached().totalPain(), calm, interval / 20.0D, params);
+        if (next > before) {
+            profile.addStress(next - before, nowTick);
+        } else {
+            profile.setStress(next);
+        }
     }
 
     private static void reconcileDownedBroadcast(ServerPlayer player, MedicalProfile profile) {
@@ -440,7 +467,8 @@ public final class MedicalEngine {
     }
 
     private static boolean isActive(MedicalProfile profile) {
-        if (profile.isDirty() || profile.getPainSuppression() > 0.0F || profile.hasActiveTreatment()) {
+        if (profile.isDirty() || profile.getPainSuppression() > 0.0F || profile.hasActiveTreatment()
+                || profile.getStress() > 0.0F) {
             return true;
         }
         if (profile.getDrugLoad() > 0.0F || profile.isOverdoseUnconscious() || profile.getOverdoseUntilTick() > 0L

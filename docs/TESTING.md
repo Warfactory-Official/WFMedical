@@ -6,7 +6,7 @@ Two suites, split by what they need rather than by what they cover.
 |---|---|---|
 | What it is | JUnit 5 on a bootstrapped Minecraft | Vanilla GameTest in a real world |
 | Needs | registries and the config spec | a server, entities, mixins, AHF |
-| Count | 383 | 96; `-PwithWFLib` 104 |
+| Count | 401 | 96; `-PwithWFLib` 109 |
 | Runtime | ~10s | ~30s (most of it server boot) |
 | Lives in | `src/test/java` | `src/main/java/com/warfactory/medical/gametest` |
 
@@ -46,6 +46,7 @@ the shared fixtures for that suite.
 | `CommandGameTest` | the whole `/wfmedical` tree parses, and the state-changing branches work |
 | `MedicalStateApiGameTest` | the `api.MedicalState` surface other mods read |
 | `MedicalAttachmentGameTest` | who carries medical state, and respawn copying |
+| `WfLibStressGameTest` | `-PwithWFLib`: near-miss round => stress by distance (none beyond range / short of the eyes); cigarette event => relief |
 | `WfLibStrikeGameTest`, `WfLibArmorGameTest` | `-PwithWFLib`: WFLib round -> threat category + WFLib parts -> wounds; claimed-player headshot x1; no gap reject; armour hand-off. Not holders: `WfLibGameTests` registers per `@WfLibMode` => absent-mode count excludes WFLib-only tests |
 
 Rig, hit-geometry, weighted-sampler and pose-stream tests: AHF (`versions/1.21.1/src/{test,gametest}`).

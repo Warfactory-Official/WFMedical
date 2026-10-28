@@ -514,7 +514,8 @@ public final class MedInteractionScreen {
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () ->
-                "Pain: " + Math.round(sheetStats().totalPain() * 100.0F) + "%");
+                "Pain: " + Math.round(sheetStats().totalPain() * 100.0F) + "%  Stress: "
+                        + Math.round(sheetStats().stress() * 100.0F) + "%");
         y += OVERVIEW_LINE_H;
 
         addLine(root, y, () ->

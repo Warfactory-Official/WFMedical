@@ -52,6 +52,7 @@ public final class WFMedical {
         // Before anything else: tells WFLib, if it is here, that this mod answers for
         // players' armour per limb, so the two do not both reduce the same hit.
         com.warfactory.medical.compat.wflib.WfLibArmorCompat.init();
+        com.warfactory.medical.compat.wflib.WfLibStressCompat.init();
         if (OpenPersistenceCompat.isLoaded()) {
             AhfHooks.addEnvelopeTarget(e -> MedicalConfig.openPersistenceCompat() && OpenPersistenceCompat.isPersistentBody(e));
         }

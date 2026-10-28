@@ -35,6 +35,23 @@ Registered via `MedicalConfig.register(ModLoadingContext)` during mod constructi
 | `adrenalineEnabled` | `true` | If true, a purely pain-driven KO is held off for `adrenalinePainKoDelayTicks`. Blood-loss KOs are never delayed. |
 | `adrenalinePainKoDelayTicks` | `120` | Ticks (6 s) a pain KO is delayed by adrenaline once pain reaches knockout level. If pain drops below before expiry, timer resets. |
 
+### Section: `stress`
+
+| Key | Default | Description |
+|---|---|---|
+| `stressEnabled` | `true` | Master toggle; off pins stress at 0. |
+| `stressPainThreshold` | `0.15` | Perceived pain above which pain raises stress. |
+| `stressPainGain` | `0.03` | Stress/s at full pain. |
+| `stressRegenBase` | `0.004` | Stress/s recovered while calm. |
+| `stressRegenScale` | `0.05` | Extra stress/s per unit stress while calm. |
+| `stressRegenDelayTicks` | `100` | Calm needs this long since the last rise. |
+| `stressDarkLightLevel` | `4` | Head light at or below this => no recovery. |
+| `stressSuppressionGain` | `0.015` | Stress per round passing at 0 distance (WFLib). |
+| `stressSuppressionRange` | `3.0` | Blocks; gain falls linearly to 0 (capped by WFLib `rounds.nearMissRadius`). |
+| `cigaretteStressRelief` | `0.35` | Stress removed per cigarette smoked to the end (WFLib). |
+
+Client (`wfmedical-client.toml`, `[stress]`): `shakeStrength` (1.0; 0 disables), `vignette` (true).
+
 ### Section: `features`
 
 | Key | Default | Description |

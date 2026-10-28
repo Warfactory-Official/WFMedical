@@ -243,6 +243,37 @@ Combat Stimulant I also applies `clottingBoost = 1.0` for `effectTicks`.
 
 ---
 
+## Stress
+
+`stress` 0..1: `MedicalProfile` (saved), `DerivedStats.stress` (synced), `Stress` (pure), `MedicalEngine.stepStress` per interval.
+
+| | |
+|---|---|
+| pain rise | `stressPainGain * (pain - stressPainThreshold) / (1 - stressPainThreshold)` /s |
+| suppression | WFLib `RoundNearMissEvent` (round passes within `rounds.nearMissRadius` of the eyes, no hit) => `stressSuppressionGain * (1 - d / stressSuppressionRange)` per round |
+| calm | light at head `> stressDarkLightLevel` && `>= stressRegenDelayTicks` since last rise && no pain rise |
+| recovery | calm => `stressRegenBase + stressRegenScale * stress` /s; dark or not calm => frozen |
+| cigarette | WFLib `CigaretteSmokedEvent` (smoked to the end) => `- cigaretteStressRelief` |
+
+- Pain rise wins over recovery in the same step.
+- Defaults: 100% -> 0 in ~50 s, 10% -> 0 in ~16 s.
+- Suppression + cigarette need WFLib `[1.8.37,2)`; without it only pain raises.
+- `/wfmedical stress {set|add} <players> <value>`.
+
+Client (`client.StressShake`, `StressShakeHandler`, `overlay.StressVignetteOverlay`):
+
+| stress | shake (aim moves with it) | vignette |
+|---|---|---|
+| `< 0.15` | none | none |
+| `0.15-0.55` | bursts 4-12 ticks, chance/tick 0.01 -> 0.12, peak 0.15 -> 0.8 deg | none; faint from 0.4 |
+| `0.55-0.85` | burst floor rises to continuous | faint (`<= 0.30` alpha) |
+| `>= 0.8` | continuous, peak 1.1 -> 3.4 deg at 1.0 | black, alpha 0.65 -> 1.0, second pass |
+
+- Shake only holding a gun / drawn bow; unarmed `>= 0.8` => 0.3x. ADS 0.7x. Writes player rotation like `PainSwayHandler`; independent of `MedicalSway.suppress` (MineAssault yields pain sway only).
+- Client config `stress.shakeStrength`, `stress.vignette`.
+
+---
+
 ## Fractures
 
 Fractures use `TraumaCategory.FRACTURE` and `Trauma.isFracture()`. The feature can be disabled globally with `enableFractures=false`.

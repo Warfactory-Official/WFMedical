@@ -22,6 +22,9 @@ public final class MedicalProfile {
     private double maxBloodMl;
     private HealthState state = HealthState.HEALTHY;
     private float heartRate = DEFAULT_HEART_RATE;
+    private float stress;
+    /** Game tick stress last rose; transient. */
+    private long stressRoseTick = Long.MIN_VALUE / 2;
     private long bleedoutSinceTick = -1L;
     private float painSuppression;
     private float drugLoad;
@@ -110,6 +113,30 @@ public final class MedicalProfile {
             this.heartRate = clamped;
             this.dirty = true;
         }
+    }
+
+    public float getStress() {
+        return stress;
+    }
+
+    public void setStress(float value) {
+        float clamped = Math.clamp(value, 0.0F, 1.0F);
+        if (clamped != this.stress) {
+            this.stress = clamped;
+            this.dirty = true;
+        }
+    }
+
+    /** Raises stress by {@code amount} and restarts the recovery delay. */
+    public void addStress(float amount, long nowTick) {
+        if (amount > 0.0F) {
+            stressRoseTick = nowTick;
+        }
+        setStress(stress + amount);
+    }
+
+    public long getStressRoseTick() {
+        return stressRoseTick;
     }
 
     public void setMaxBloodMl(double maxBloodMl) {
@@ -478,6 +505,7 @@ public final class MedicalProfile {
         tag.putDouble("MaxBloodMl", maxBloodMl);
         tag.putString("State", state.name());
         tag.putFloat("HeartRate", heartRate);
+        tag.putFloat("Stress", stress);
         tag.putLong("BleedoutSince", bleedoutSinceTick);
         tag.putFloat("PainSuppression", painSuppression);
         tag.putFloat("DrugLoad", drugLoad);
@@ -503,6 +531,7 @@ public final class MedicalProfile {
         this.bloodMl = Math.max(0.0D, Math.min(loadedBlood, this.maxBloodMl));
         this.state = HealthState.byName(tag.getString("State"), HealthState.HEALTHY);
         this.heartRate = tag.contains("HeartRate") ? Math.max(0.0F, tag.getFloat("HeartRate")) : DEFAULT_HEART_RATE;
+        this.stress = Math.clamp(tag.getFloat("Stress"), 0.0F, 1.0F);
         if (tag.contains("BleedoutSince")) {
             this.bleedoutSinceTick = tag.getLong("BleedoutSince");
         } else {
