@@ -561,6 +561,45 @@ public final class MedicalEngine {
         }
     }
 
+    /**
+     * Outside healing (an artefact, a mod's regen): {@code hp} health points spent closing wounds that are healing
+     * anyway -- minor traumas (a fall's blunt trauma, burns) first, then treated or stabilised majors. Untreated
+     * majors (and so anything still bleeding untreated) are left for medicine. Returns the points used.
+     */
+    public static float restore(MedicalProfile profile, float hp) {
+        float left = hp;
+        for (int pass = 0; pass < 2 && left > 0.0F; pass++) {
+            for (LimbType lt : LimbType.VALUES) {
+                Limb limb = profile.limb(lt);
+                List<Trauma> traumas = limb.getTraumas();
+                boolean changed = false;
+                for (int i = traumas.size() - 1; i >= 0 && left > 0.0F; i--) {
+                    Trauma t = traumas.get(i);
+                    boolean eligible = pass == 0 ? t.isMinor()
+                            : !t.isMinor() && (t.isTreated() || t.isStabilized()) && !t.getType().isPermanent();
+                    float perSeverity = t.getType().getHealthReductionPerSeverity();
+                    if (!eligible || perSeverity <= 0.0F) {
+                        continue;
+                    }
+                    float whole = t.getSeverity() * perSeverity;
+                    if (left >= whole) {
+                        traumas.remove(i);
+                        left -= whole;
+                    } else {
+                        t.setSeverity(t.getSeverity() - left / perSeverity);
+                        left = 0.0F;
+                    }
+                    changed = true;
+                }
+                if (changed) {
+                    limb.markDirty();
+                    profile.markDirty();
+                }
+            }
+        }
+        return hp - left;
+    }
+
     /** Bleed-out progress, 0..1 across the unconscious..death blood-loss band. See {@link #advanceTrauma}. */
     static void updateDeathProgress(MedicalProfile profile, PhysiologyParams params) {
         double maxBlood = profile.getMaxBloodMl();

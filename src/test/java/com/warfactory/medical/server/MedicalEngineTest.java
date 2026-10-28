@@ -399,4 +399,29 @@ class MedicalEngineTest {
             }
         }
     }
+
+    @Nested
+    class Restore {
+
+        @Test
+        void healsMinorTraumaThenTreatedWoundsButNeverUntreatedOnes() {
+            Trauma bruise = wound(LimbType.TORSO, "blunt_force_trauma", 0.3F);
+            Trauma treated = wound(LimbType.LEFT_ARM, "laceration_large", 0.5F);
+            treated.setTreated(true);
+            Trauma open = wound(LimbType.RIGHT_LEG, "laceration_large", 0.5F);
+            float bruiseHp = 0.3F * bruise.getType().getHealthReductionPerSeverity();
+            float treatedHp = 0.5F * treated.getType().getHealthReductionPerSeverity();
+
+            float used = MedicalEngine.restore(profile, bruiseHp + treatedHp / 2.0F);
+
+            assertEquals(bruiseHp + treatedHp / 2.0F, used, EPS);
+            assertFalse(profile.limb(LimbType.TORSO).getTraumas().contains(bruise), "blunt trauma healed first");
+            assertEquals(0.25F, treated.getSeverity(), EPS);
+            assertEquals(0.5F, open.getSeverity(), EPS);
+
+            assertEquals(treatedHp / 2.0F, MedicalEngine.restore(profile, 100.0F), EPS);
+            assertEquals(0.0F, MedicalEngine.restore(profile, 100.0F), EPS);
+            assertEquals(0.5F, open.getSeverity(), EPS);
+        }
+    }
 }

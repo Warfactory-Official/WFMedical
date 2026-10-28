@@ -21,6 +21,8 @@ final class ArmorBridge {
 
     static void claim() {
         ArmorSystem.claimPlayerResolution();
+        // Artefact healing too: a vanilla heal is clamped to the medical health value and would do nothing.
+        com.wf.wflib.artifact.Artifacts.healer = com.warfactory.medical.api.MedicalHealing::heal;
     }
 
     static boolean claimed() {

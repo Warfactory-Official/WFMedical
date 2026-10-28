@@ -219,6 +219,8 @@ repositories {
         url = 'https://cursemaven.com'
         content { includeGroup 'curse.maven' }
     }
+    // A local WFLib (`publishToMavenLocal` in its checkout) wins over the published snapshot of the same version.
+    mavenLocal { content { includeGroup 'com.wf.wflib' } }
     maven {
         name = 'Warfactory Snapshots'
         url = 'https://repo.warfactory.co/snapshots'
