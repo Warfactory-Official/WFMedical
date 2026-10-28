@@ -23,6 +23,9 @@ final class ArmorBridge {
         ArmorSystem.claimPlayerResolution();
         // Artefact healing too: a vanilla heal is clamped to the medical health value and would do nothing.
         com.wf.wflib.artifact.Artifacts.healer = com.warfactory.medical.api.MedicalHealing::heal;
+        // And their wound closing: GAMMA's strongest (Mica, 0.054 a real second) near a full clotting boost.
+        com.wf.wflib.artifact.Artifacts.clotter = (player, rate) -> com.warfactory.medical.api.MedicalHealing.clot(
+                player, Math.min(1.0F, rate / 0.06F), 40);
     }
 
     static boolean claimed() {

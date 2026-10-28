@@ -193,11 +193,17 @@ public final class MedicalEngine {
     private static void advanceStress(ServerPlayer player, MedicalProfile profile, int interval, long nowTick) {
         BlockPos head = BlockPos.containing(player.getEyePosition());
         stepStress(profile, player.level().getMaxLocalRawBrightness(head), interval, nowTick,
-                MedicalConfig.stressParams());
+                MedicalConfig.stressParams(), com.warfactory.medical.compat.wflib.WfLibStressCompat.psyPass(player));
     }
 
     /** {@code package-private} for the unit suite. */
     static void stepStress(MedicalProfile profile, int light, int interval, long nowTick, Stress.Params params) {
+        stepStress(profile, light, interval, nowTick, params, 1.0F);
+    }
+
+    /** @param psyPass share of a rise that gets through (psy protection, {@code WfLibStressCompat#psyPass}) */
+    static void stepStress(MedicalProfile profile, int light, int interval, long nowTick, Stress.Params params,
+                           float psyPass) {
         if (!params.enabled()) {
             profile.setStress(0.0F);
             return;
@@ -207,7 +213,7 @@ public final class MedicalEngine {
                 && nowTick - profile.getStressRoseTick() >= params.regenDelayTicks();
         float next = Stress.advance(before, profile.cached().totalPain(), calm, interval / 20.0D, params);
         if (next > before) {
-            profile.addStress(next - before, nowTick);
+            profile.addStress((next - before) * psyPass, nowTick);
         } else {
             profile.setStress(next);
         }

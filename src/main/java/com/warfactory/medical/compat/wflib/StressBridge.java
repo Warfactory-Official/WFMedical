@@ -34,9 +34,13 @@ final class StressBridge {
     private static void onNearMiss(RoundNearMissEvent event) {
         MedicalProfile profile = profile(event.player());
         if (profile != null) {
-            profile.addStress(Stress.suppression(event.distance(), MedicalConfig.stressParams()),
-                    event.level().getGameTime());
+            profile.addStress(Stress.suppression(event.distance(), MedicalConfig.stressParams())
+                    * psyPass(event.player()), event.level().getGameTime());
         }
+    }
+
+    static float psyPass(net.minecraft.world.entity.player.Player player) {
+        return 1.0F - com.wf.wflib.artifact.Artifacts.psyProtection(player);
     }
 
     private static void onSmoked(CigaretteSmokedEvent event) {

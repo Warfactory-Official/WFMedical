@@ -18,10 +18,14 @@ public final class MedicalHealing {
     /**
      * Give back up to {@code hp} health points: first any health below what the wounds allow, then by healing
      * minor traumas (a fall's blunt trauma, burns) and treated or stabilised wounds. Untreated wounds are left for
-     * medicine. Returns the points given back.
+     * medicine. Negative {@code hp} drains instead ({@link #drain}). Returns the points given back.
      */
     public static float heal(ServerPlayer player, float hp) {
-        if (hp <= 0.0F || player.isDeadOrDying()) {
+        if (hp < 0.0F) {
+            drain(player, -hp);
+            return 0.0F;
+        }
+        if (hp == 0.0F || player.isDeadOrDying()) {
             return 0.0F;
         }
         IMedicalData data = MedicalAttachments.get(player);
@@ -41,6 +45,41 @@ public final class MedicalHealing {
             MedicalEngine.resync(player);
         }
         return player.getHealth() - before;
+    }
+
+    /** The minor trauma a drain lays down: blunt, current health only, heals by itself. */
+    private static final String DRAIN_TRAUMA = "blunt_force_trauma";
+
+    /**
+     * A slow drain (an artefact's negative health restore): {@code hp} health points as a minor trauma on the torso,
+     * one that grows while the drain lasts and heals by itself after. A plain hurt would lay down a wound.
+     */
+    public static void drain(ServerPlayer player, float hp) {
+        IMedicalData data = MedicalAttachments.get(player);
+        if (data == null || hp <= 0.0F || player.isDeadOrDying()) {
+            player.hurt(player.damageSources().starve(), hp);
+            return;
+        }
+        com.warfactory.medical.core.trauma.TraumaType type =
+                com.warfactory.medical.core.trauma.TraumaRegistry.active().get(DRAIN_TRAUMA);
+        if (type == null || type.getHealthReductionPerSeverity() <= 0.0F) {
+            return;
+        }
+        MedicalProfile profile = data.getProfile();
+        var limb = profile.limb(com.warfactory.medical.core.limb.LimbType.TORSO);
+        float add = hp / type.getHealthReductionPerSeverity();
+        com.warfactory.medical.core.trauma.Trauma existing = limb.getTraumas().stream()
+                .filter(t -> t.getType() == type).findFirst().orElse(null);
+        if (existing != null) {
+            existing.setSeverity(Math.min(type.getMaxSeverity(), existing.getSeverity() + add));
+            limb.markDirty();
+        } else {
+            profile.addTrauma(com.warfactory.medical.core.limb.LimbType.TORSO,
+                    new com.warfactory.medical.core.trauma.Trauma(type, com.warfactory.medical.core.limb.LimbType.TORSO,
+                            Math.min(type.getMaxSeverity(), add), player.level().getGameTime()));
+        }
+        profile.markDirty();
+        MedicalEngine.resync(player);
     }
 
     /**
