@@ -117,6 +117,16 @@ class PhysiologyTest {
         }
 
         @Test
+        void thinningRaisesTheTotalByItsShare() {
+            Fixtures.wound(profile, registry, LimbType.TORSO, "laceration_large", 1.0F);
+            double base = compute().totalBleeding();
+            profile.setThinning(0.4F);
+            assertEquals(base * 1.4D, compute().totalBleeding(), 1.0e-3D);
+            profile.setThinning(0.0F);
+            assertEquals(base, compute().totalBleeding(), 1.0e-3D);
+        }
+
+        @Test
         void aStoppedBleedFactorRemovesTheLimbFromTheTotal() {
             var t = Fixtures.wound(profile, registry, LimbType.TORSO, "laceration_large", 1.0F);
             assertTrue(compute().totalBleeding() > 0.0D);

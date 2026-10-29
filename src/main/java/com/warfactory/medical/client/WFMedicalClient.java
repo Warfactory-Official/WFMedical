@@ -2,6 +2,7 @@ package com.warfactory.medical.client;
 
 import com.norwood.ahf.client.compat.PoseSetLayers;
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.compat.wflib.TreatmentHandsClient;
 import com.warfactory.medical.item.MedicalPoses;
 import com.warfactory.medical.client.overlay.ActionProgressOverlay;
 import com.warfactory.medical.client.overlay.DamageOutlineOverlay;
@@ -18,6 +19,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.common.NeoForge;
 
 import java.util.Set;
 
@@ -31,6 +33,10 @@ public final class WFMedicalClient {
 
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
+        if (ModList.get().isLoaded("wflib")) {
+            NeoForge.EVENT_BUS.register(TreatmentHandsClient.class);
+            NeoForge.EVENT_BUS.register(com.warfactory.medical.compat.wflib.ScreenEffectsClient.class);
+        }
         if (ModList.get().isLoaded("playeranimator")) {
             event.enqueueWork(() -> PoseSetLayers.register(
                     ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "treatment"), 87,

@@ -5,13 +5,16 @@ import com.warfactory.medical.attachment.MedicalAttachments;
 import com.warfactory.medical.config.MedicalConfig;
 import com.warfactory.medical.core.MedicalProfile;
 import com.warfactory.medical.core.Stress;
+import com.wf.wflib.anomaly.PsyExposureEvent;
 import com.wf.wflib.round.RoundNearMissEvent;
 import com.wf.wflib.smoking.CigaretteSmokedEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
 
-/** The only class naming WFLib's near-miss and cigarette events; reached behind {@link WfLibArmorCompat#isLoaded()}. */
+/**
+ * The only class naming WFLib's near-miss, cigarette and psy events; reached behind {@link WfLibArmorCompat#isLoaded()}.
+ */
 final class StressBridge {
 
     private StressBridge() {
@@ -20,6 +23,7 @@ final class StressBridge {
     static void register() {
         NeoForge.EVENT_BUS.addListener(StressBridge::onNearMiss);
         NeoForge.EVENT_BUS.addListener(StressBridge::onSmoked);
+        NeoForge.EVENT_BUS.addListener(StressBridge::onPsy);
     }
 
     @Nullable
@@ -41,6 +45,16 @@ final class StressBridge {
 
     static float psyPass(net.minecraft.world.entity.player.Player player) {
         return 1.0F - com.wf.wflib.artifact.Artifacts.psyProtection(player);
+    }
+
+    /** Psy is stress here: taken (no psy damage) even while stress is off or creative-immune. */
+    private static void onPsy(PsyExposureEvent event) {
+        event.handle();
+        MedicalProfile profile = profile(event.player());
+        if (profile != null) {
+            profile.addStress(event.psy() * MedicalConfig.stressParams().psyGain() * psyPass(event.player()),
+                    event.player().level().getGameTime());
+        }
     }
 
     private static void onSmoked(CigaretteSmokedEvent event) {

@@ -46,6 +46,6 @@ side = "BOTH"
 [[dependencies.${ mod_id }]]
 modId = "wflib"
 type = "optional"
-versionRange = "[1.8.37,2)"
+versionRange = "[1.8.38,2)"
 ordering = "NONE"
 side = "BOTH"

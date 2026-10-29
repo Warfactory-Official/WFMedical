@@ -46,7 +46,8 @@ the shared fixtures for that suite.
 | `CommandGameTest` | the whole `/wfmedical` tree parses, and the state-changing branches work |
 | `MedicalStateApiGameTest` | the `api.MedicalState` surface other mods read |
 | `MedicalAttachmentGameTest` | who carries medical state, and respawn copying |
-| `WfLibStressGameTest` | `-PwithWFLib`: near-miss round => stress by distance (none beyond range / short of the eyes); cigarette event => relief |
+| `WfLibStressGameTest` | `-PwithWFLib`: near-miss round => stress by distance (none beyond range / short of the eyes); cigarette event => relief; psy => stress |
+| `WfLibArtifactGameTest` | `-PwithWFLib`: artefact healer drain -> one torso blunt trauma; clotter + -> clotting boost, - -> thinning |
 | `WfLibStrikeGameTest`, `WfLibArmorGameTest` | `-PwithWFLib`: WFLib round -> threat category + WFLib parts -> wounds; claimed-player headshot x1; no gap reject; armour hand-off. Not holders: `WfLibGameTests` registers per `@WfLibMode` => absent-mode count excludes WFLib-only tests |
 
 Rig, hit-geometry, weighted-sampler and pose-stream tests: AHF (`versions/1.21.1/src/{test,gametest}`).

@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StressTest {
 
-    static final Stress.Params P = new Stress.Params(true, 0.15F, 0.03F, 0.004F, 0.05F, 100, 4, 0.015F, 3.0F, 0.35F);
+    static final Stress.Params P = new Stress.Params(true, 0.15F, 0.03F, 0.004F, 0.05F, 100, 4, 0.015F, 3.0F, 0.35F, 1.0F);
 
     @Test
     void painBelowTheThresholdAddsNothingAndFullPainAddsTheGain() {

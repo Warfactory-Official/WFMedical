@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MedicalEngineStressTest {
 
-    private static final Stress.Params P = new Stress.Params(true, 0.15F, 0.03F, 0.004F, 0.05F, 100, 4, 0.015F, 3.0F, 0.35F);
+    private static final Stress.Params P = new Stress.Params(true, 0.15F, 0.03F, 0.004F, 0.05F, 100, 4, 0.015F, 3.0F, 0.35F, 1.0F);
     private static final int LIT = 15, DARK = 0, INTERVAL = 10;
 
     private TraumaRegistry registry;
@@ -66,7 +66,7 @@ class MedicalEngineStressTest {
     void disabledPinsStressAtZero() {
         profile.setStress(0.7F);
         MedicalEngine.stepStress(profile, LIT, INTERVAL, 1000L,
-                new Stress.Params(false, 0.15F, 0.03F, 0.004F, 0.05F, 100, 4, 0.015F, 3.0F, 0.35F));
+                new Stress.Params(false, 0.15F, 0.03F, 0.004F, 0.05F, 100, 4, 0.015F, 3.0F, 0.35F, 1.0F));
         assertEquals(0.0F, profile.getStress());
     }
 

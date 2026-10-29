@@ -120,6 +120,7 @@ public final class MedicalConfig {
     private static final ModConfigSpec.DoubleValue STRESS_SUPPRESSION_GAIN;
     private static final ModConfigSpec.DoubleValue STRESS_SUPPRESSION_RANGE;
     private static final ModConfigSpec.DoubleValue CIGARETTE_STRESS_RELIEF;
+    private static final ModConfigSpec.DoubleValue STRESS_PSY_GAIN;
     private static final ModConfigSpec.DoubleValue TOURNIQUET_LEG_SPEED_MULTIPLIER;
     private static final ModConfigSpec.DoubleValue TOURNIQUET_ARM_SPEED_MULTIPLIER;
     private static final ModConfigSpec.DoubleValue TOURNIQUET_ARM_SWAY;
@@ -408,6 +409,10 @@ public final class MedicalConfig {
         CIGARETTE_STRESS_RELIEF = b
                 .comment("Stress removed by smoking one WFLib cigarette to the end. Default 0.35.")
                 .defineInRange("cigaretteStressRelief", 0.35D, 0.0D, 1.0D);
+        STRESS_PSY_GAIN = b
+                .comment("Stress per unit of WFLib psy (STALKER psy health: 1 is all of it), before artefact "
+                        + "protection. Default 1.")
+                .defineInRange("stressPsyGain", 1.0D, 0.0D, 10.0D);
         TOURNIQUET_BLEED_MULTIPLIER = b
                 .comment("Multiplier applied to a limb's bleeding while a TOURNIQUET is on it (arms/legs only). "
                         + "Lower = a tourniquet slows blood loss more; it never fully stops it and does NOT treat "
@@ -926,7 +931,8 @@ public final class MedicalConfig {
                 STRESS_PAIN_GAIN.get().floatValue(), STRESS_REGEN_BASE.get().floatValue(),
                 STRESS_REGEN_SCALE.get().floatValue(), STRESS_REGEN_DELAY_TICKS.get(),
                 STRESS_DARK_LIGHT_LEVEL.get(), STRESS_SUPPRESSION_GAIN.get().floatValue(),
-                STRESS_SUPPRESSION_RANGE.get().floatValue(), CIGARETTE_STRESS_RELIEF.get().floatValue());
+                STRESS_SUPPRESSION_RANGE.get().floatValue(), CIGARETTE_STRESS_RELIEF.get().floatValue(),
+                STRESS_PSY_GAIN.get().floatValue());
     }
 
     public static float tourniquetLegSpeedMultiplier() {

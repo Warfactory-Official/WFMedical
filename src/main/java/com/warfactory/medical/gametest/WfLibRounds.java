@@ -55,6 +55,17 @@ final class WfLibRounds {
         Rounds.destroy(level, key);
     }
 
+    /** What worn artefacts do once a second: WFLib's healer (negative drains) and clotter (negative thins). */
+    static void artifactTick(ServerPlayer player, float hp, float bleedingPerSecond) {
+        com.wf.wflib.artifact.Artifacts.healer.accept(player, hp);
+        com.wf.wflib.artifact.Artifacts.clotter.accept(player, bleedingPerSecond);
+    }
+
+    /** WFLib psy (an anomaly's telepatic hit) at {@code player}; whether something took it. */
+    static boolean psy(ServerPlayer player, float units) {
+        return NeoForge.EVENT_BUS.post(new com.wf.wflib.anomaly.PsyExposureEvent(player, units)).handled();
+    }
+
     /** {@code player} smoked a cigarette to the end. */
     static void smoked(ServerPlayer player) {
         NeoForge.EVENT_BUS.post(new CigaretteSmokedEvent(player, new ItemStack(ModItems.CIGARETTE.get())));

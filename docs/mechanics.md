@@ -237,6 +237,10 @@ An untreated bleeding wound whose `severity <= bleedingSelfHealThreshold` (defau
 
 Combat Stimulant I also applies `clottingBoost = 1.0` for `effectTicks`.
 
+### Thinning
+
+WFLib artefacts with negative `bleeding_restore_speed` => `MedicalHealing.thin`: transient `thinning` (0..1, not saved) => total bleeding `x (1 + thinning)`; refreshed each second while worn, lapses 40 ticks after.
+
 ### Blood restoration
 
 `RESTORE_BLOOD` items (blood bag) add `bloodRestoreMl` (default 1000 ml) directly to the pool. Some items have a secondary `bloodRestoreMl` field (e.g. the medkit restores 250 ml alongside treating trauma).
@@ -254,10 +258,11 @@ Combat Stimulant I also applies `clottingBoost = 1.0` for `effectTicks`.
 | calm | light at head `> stressDarkLightLevel` && `>= stressRegenDelayTicks` since last rise && no pain rise |
 | recovery | calm => `stressRegenBase + stressRegenScale * stress` /s; dark or not calm => frozen |
 | cigarette | WFLib `CigaretteSmokedEvent` (smoked to the end) => `- cigaretteStressRelief` |
+| psy | WFLib `PsyExposureEvent` (psy anomalies; units = STALKER psy health) => `+ psy * stressPsyGain * (1 - Artifacts.psyProtection)`; always handled => no `wflib:psy` damage |
 
 - Pain rise wins over recovery in the same step.
 - Defaults: 100% -> 0 in ~50 s, 10% -> 0 in ~16 s.
-- Suppression + cigarette need WFLib `[1.8.37,2)`; without it only pain raises.
+- Suppression, cigarette, psy need WFLib `[1.8.38,2)`; without it only pain raises.
 - `/wfmedical stress {set|add} <players> <value>`.
 
 Client (`client.StressShake`, `StressShakeHandler`, `overlay.StressVignetteOverlay`):

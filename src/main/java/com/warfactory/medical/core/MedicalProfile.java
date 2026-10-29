@@ -30,6 +30,9 @@ public final class MedicalProfile {
     private float drugLoad;
     private float clottingBoost;
     private long clottingBoostEndTick;
+    /** Extra bleeding share, 0..1, until {@link #thinningEndTick}; transient: its source re-applies it. */
+    private float thinning;
+    private long thinningEndTick;
     private float stimulant;
     private long stimulantEndTick;
     private UUID lastDamagingPlayer;
@@ -229,6 +232,26 @@ public final class MedicalProfile {
 
     public void setClottingBoostEndTick(long tick) {
         this.clottingBoostEndTick = tick;
+    }
+
+    public float getThinning() {
+        return thinning;
+    }
+
+    public void setThinning(float value) {
+        float clamped = value < 0.0F ? 0.0F : (value > 1.0F ? 1.0F : value);
+        if (clamped != this.thinning) {
+            this.thinning = clamped;
+            this.dirty = true;
+        }
+    }
+
+    public long getThinningEndTick() {
+        return thinningEndTick;
+    }
+
+    public void setThinningEndTick(long tick) {
+        this.thinningEndTick = tick;
     }
 
     public float getStimulant() {

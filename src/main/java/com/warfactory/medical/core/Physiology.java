@@ -272,7 +272,7 @@ public final class Physiology {
                 effectiveMaxHealth,
                 healthModifier,
                 effectiveCurrentHealth,
-                bleeding * cfg.bleedingRateMultiplier() * bleedScale,
+                bleeding * cfg.bleedingRateMultiplier() * bleedScale * (1.0F + p.getThinning()),
                 totalPain,
                 systemicPain,
                 movement,

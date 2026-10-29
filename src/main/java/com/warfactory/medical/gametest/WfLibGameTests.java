@@ -19,7 +19,7 @@ public final class WfLibGameTests {
     public static void register(RegisterGameTestsEvent event) {
         boolean loaded = WfLibArmorCompat.isLoaded();
         for (Class<?> holder : new Class<?>[]{WfLibArmorGameTest.class, WfLibStrikeGameTest.class,
-                WfLibStressGameTest.class}) {
+                WfLibStressGameTest.class, WfLibArtifactGameTest.class}) {
             for (Method m : holder.getDeclaredMethods()) {
                 WfLibMode mode = m.getAnnotation(WfLibMode.class);
                 if (mode == null || mode.value() == loaded) {

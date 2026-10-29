@@ -38,5 +38,6 @@ Hit weights are base probabilities used by the weighted fallback sampler; the ge
 |---|---|
 | [architecture.md](architecture.md) | Package layout, end-to-end hit trace, server-authoritative design, capability/dirty/revision scheme, client/server split |
 | [mechanics.md](mechanics.md) | Gameplay systems: trauma, pain, blood loss, fractures, asphyxia, drugs, death vs unconsciousness, persistent bodies |
+| [treatment-hands.md](treatment-hands.md) | First-person GAMMA treatment clips, kind mapping, placeholder props, regeneration |
 | [config.md](config.md) | Reference table for every `MedicalConfig` option; `wfmedical_definitions.toml` schema |
 | [extending.md](extending.md) | Adding a new trauma type, substance, treatment, and item; enum-dispatch sites that must be updated together |

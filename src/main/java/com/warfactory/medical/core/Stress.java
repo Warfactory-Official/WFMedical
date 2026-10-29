@@ -16,7 +16,7 @@ public final class Stress {
      */
     public record Params(boolean enabled, float painThreshold, float painGain, float regenBase, float regenScale,
                          int regenDelayTicks, int darkLightLevel, float suppressionGain, float suppressionRange,
-                         float cigaretteRelief) {
+                         float cigaretteRelief, float psyGain) {
     }
 
     private Stress() {

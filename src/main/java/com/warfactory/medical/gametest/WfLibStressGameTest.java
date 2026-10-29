@@ -44,6 +44,18 @@ public class WfLibStressGameTest {
 
     @WfLibMode(true)
     @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
+    public static void psyIsTakenAsStress(GameTestHelper helper) {
+        TestBodies.Victim v = TestBodies.spawn(helper, TestBodies.victim(helper, STAND, 0.0F));
+        MedicalProfile profile = TestBodies.profileOf(helper, v);
+        helper.assertTrue(WfLibRounds.psy(v, 0.2F), "psy not handled: it would hurt instead");
+        float expected = 0.2F * MedicalConfig.stressParams().psyGain();
+        helper.assertTrue(Math.abs(profile.getStress() - expected) < 1.0e-5F,
+                "stress " + profile.getStress() + ", expected " + expected);
+        helper.succeed();
+    }
+
+    @WfLibMode(true)
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
     public static void aSmokedCigaretteLowersStress(GameTestHelper helper) {
         TestBodies.Victim v = TestBodies.spawn(helper, TestBodies.victim(helper, STAND, 0.0F));
         MedicalProfile profile = TestBodies.profileOf(helper, v);

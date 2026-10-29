@@ -83,6 +83,21 @@ public final class MedicalHealing {
     }
 
     /**
+     * Make bleeding wounds bleed faster for {@code ticks}: {@code strength} 0..1 is the extra share. The latest call
+     * wins; not saved.
+     */
+    public static void thin(ServerPlayer player, float strength, int ticks) {
+        IMedicalData data = MedicalAttachments.get(player);
+        if (data == null || strength <= 0.0F || ticks <= 0) {
+            return;
+        }
+        MedicalProfile profile = data.getProfile();
+        long end = player.level().getGameTime() + ticks;
+        profile.setThinning(strength);
+        profile.setThinningEndTick(end);
+    }
+
+    /**
      * Help bleeding wounds close on their own for {@code ticks}, as a clotting drug does: {@code strength} 0..1
      * raises the severity a wound self-clots below and how fast. The strongest current boost and latest end win.
      */

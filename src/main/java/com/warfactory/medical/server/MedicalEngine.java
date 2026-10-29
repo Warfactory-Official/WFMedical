@@ -237,6 +237,9 @@ public final class MedicalEngine {
             profile.setClottingBoost(0.0F);
             profile.markDirty();
         }
+        if (profile.getThinning() > 0.0F && nowTick >= profile.getThinningEndTick()) {
+            profile.setThinning(0.0F);
+        }
 
         boolean severeOverdose = MedicalConfig.overdoseLethalEnabled()
                 && MedicalConfig.overdoseLethalThreshold() > 0.0D
