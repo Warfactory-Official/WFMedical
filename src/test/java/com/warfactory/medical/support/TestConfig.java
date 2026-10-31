@@ -1,7 +1,7 @@
 package com.warfactory.medical.support;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
-import com.warfactory.medical.config.MedicalConfig;
+import com.warfactory.medical.body.MedicalConfig;
 
 import java.lang.reflect.Constructor;
 
@@ -36,6 +36,7 @@ public final class TestConfig {
             // it bound rather than replacing it, so set()/get() address the config the accessors read.
             if (backing == null) {
                 backing = adoptExistingBacking();
+                MedicalConfig.rebuild();
             }
             return;
         }
@@ -43,6 +44,7 @@ public final class TestConfig {
         MedicalConfig.SPEC.correct(cfg);
         backing = cfg;
         MedicalConfig.SPEC.acceptConfig(loadedConfig(cfg));
+        MedicalConfig.rebuild();
     }
 
     /**
@@ -56,6 +58,7 @@ public final class TestConfig {
         Object prev = backing.get(path);
         backing.set(path, value);
         MedicalConfig.SPEC.afterReload();
+        MedicalConfig.rebuild();
         return prev;
     }
 

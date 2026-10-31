@@ -30,13 +30,6 @@ ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.${ mod_id }]]
-modId = "ldlib2"
-type = "required"
-versionRange = "*"
-ordering = "AFTER"
-side = "BOTH"
-
-[[dependencies.${ mod_id }]]
 modId = "ahf"
 type = "required"
 versionRange = "[1.0.4,2)"
@@ -45,7 +38,7 @@ side = "BOTH"
 
 [[dependencies.${ mod_id }]]
 modId = "wflib"
-type = "optional"
+type = "required"
 versionRange = "[1.8.38,2)"
-ordering = "NONE"
+ordering = "AFTER"
 side = "BOTH"

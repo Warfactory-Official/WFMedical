@@ -1,6 +1,6 @@
 # Treatment hands (first person)
 
-WFLib present => `compat.wflib.TreatmentHandsClient` (registered in `WFMedicalClient`): vanilla hands cancelled, `HandClipView` solves arms onto baked GAMMA fist tracks, prop glbs follow item tracks, camera effector added. Absent => vanilla hands.
+`treatment.client.TreatmentHands` (registered by `TreatmentClient`): vanilla hands cancelled, `HandClipView` solves arms onto baked GAMMA fist tracks, prop glbs follow item tracks, camera effector added. Absent => vanilla hands.
 
 | kind | items | GAMMA hands clip | camera |
 |---|---|---|---|

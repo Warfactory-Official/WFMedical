@@ -1,17 +1,19 @@
 package com.warfactory.medical.support;
 
-import com.warfactory.medical.config.MedicalDefinitions;
-import com.warfactory.medical.core.MedicalProfile;
-import com.warfactory.medical.core.PhysiologyParams;
-import com.warfactory.medical.core.limb.LimbType;
-import com.warfactory.medical.core.substance.SubstanceRegistry;
-import com.warfactory.medical.core.trauma.Trauma;
-import com.warfactory.medical.core.trauma.TraumaRegistry;
-import com.warfactory.medical.core.trauma.TraumaType;
-import com.warfactory.medical.core.treatment.Treatment;
+import com.warfactory.medical.body.MedicalDefinitions;
+import com.warfactory.medical.body.MedicalProfile;
+import com.warfactory.medical.body.PhysiologyParams;
+import com.warfactory.medical.body.limb.LimbType;
+import com.warfactory.medical.substance.Substance;
+import com.warfactory.medical.substance.SubstanceDefinitions;
+import com.warfactory.medical.body.trauma.Trauma;
+import com.warfactory.medical.body.trauma.TraumaTypes;
+import com.warfactory.medical.body.trauma.TraumaType;
+import com.warfactory.medical.treatment.Treatment;
+import com.warfactory.medical.treatment.TreatmentDefinitions;
 import net.minecraft.util.RandomSource;
 
-import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Shared builders for the unit suite: the shipped trauma/treatment definitions, and posed profiles. */
@@ -21,27 +23,21 @@ public final class Fixtures {
     }
 
     /**
-     * A registry holding the hardcoded defaults from {@link MedicalDefinitions#loadDefaults}, which are what
+     * A fresh table of the hardcoded defaults ({@link MedicalDefinitions#defaultTraumas}), which are what
      * ship when no {@code wfmedical_definitions.toml} is present. Tests assert against these ids, so a rename
      * upstream surfaces here rather than silently degrading into {@code firstOfCategory} fallbacks.
      */
-    public static TraumaRegistry registry() {
-        TraumaRegistry r = new TraumaRegistry();
-        MedicalDefinitions.loadDefaults(r, new HashMap<>(), new SubstanceRegistry());
-        return r;
+    public static TraumaTypes.Table registry() {
+        return MedicalDefinitions.defaultTraumas();
     }
 
     /** The shipped item -> treatment table (bandage, splint, suture kit, medkit, ...). */
     public static Map<String, Treatment> treatments() {
-        Map<String, Treatment> t = new HashMap<>();
-        MedicalDefinitions.loadDefaults(new TraumaRegistry(), t, new SubstanceRegistry());
-        return t;
+        return TreatmentDefinitions.defaultTreatments();
     }
 
-    public static SubstanceRegistry substances() {
-        SubstanceRegistry s = new SubstanceRegistry();
-        MedicalDefinitions.loadDefaults(new TraumaRegistry(), new HashMap<>(), s);
-        return s;
+    public static List<Substance> substances() {
+        return SubstanceDefinitions.defaultSubstances();
     }
 
     public static PhysiologyParams params() {
@@ -105,7 +101,7 @@ public final class Fixtures {
     }
 
     /** Add a trauma of {@code id} at {@code severity} to {@code limb}, and return it. */
-    public static Trauma wound(MedicalProfile p, TraumaRegistry r, LimbType limb, String id, float severity) {
+    public static Trauma wound(MedicalProfile p, TraumaTypes.Lookup r, LimbType limb, String id, float severity) {
         TraumaType type = r.getOrThrow(id);
         Trauma t = new Trauma(type, limb, severity, 0L);
         p.addTrauma(limb, t);

@@ -4,13 +4,13 @@
   "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8.5",
   "mixins": [
-    "LivingEntityMixin"
+    "body.LivingEntityMixin"
   ],
   "client": [
-    "CameraMixin",
-    "EntityDownedLookMixin",
-    "ItemInHandRendererMixin",
-    "PostChainAccessor"
+    "body.CameraMixin",
+    "body.EntityDownedLookMixin",
+    "body.ItemInHandRendererMixin",
+    "fx.PostChainAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

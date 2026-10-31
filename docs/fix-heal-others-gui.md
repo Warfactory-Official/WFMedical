@@ -1,6 +1,6 @@
 # Fixing the "heal another player via GUI" system
 
-Task briefing for an AI/dev session working on **WFMedical** (Minecraft 1.20.1 Forge, LDLib-based UI).
+Task briefing for an AI/dev session working on **WFMedical** (Minecraft 1.20.1 Forge).
 This document maps the entire treat-another-player flow, states what has already been audited as
 correct (do not re-suspect it), and lists the concrete defects found, ranked, each with a failure
 scenario and a suggested fix. All paths are relative to the repo root; line numbers are from
@@ -265,13 +265,13 @@ Scenarios to run after any fix:
 
 | Concern | File |
 |---|---|
-| Right-click flow, item lock, target pick | `src/main/java/com/warfactory/medical/client/TreatmentInteractions.java` |
-| Limb wheel GUI | `src/main/java/com/warfactory/medical/client/screen/LimbWheelScreen.java` |
-| Self interaction sheet | `src/main/java/com/warfactory/medical/client/screen/MedInteractionScreen.java` + `MedicalUIParts.java` |
-| Start/tick/cancel, tourniquets, examine reply | `src/main/java/com/warfactory/medical/server/MedicalActionService.java` |
-| Treatment application + trauma picking | `src/main/java/com/warfactory/medical/server/TreatmentService.java` |
-| Engine cadence, resync | `src/main/java/com/warfactory/medical/server/MedicalEngine.java` |
+| Right-click flow, item lock, target pick | `src/main/java/com/warfactory/medical/treatment/client/TreatmentInteractions.java` |
+| Limb wheel GUI | `src/main/java/com/warfactory/medical/treatment/client/LimbWheelScreen.java` |
+| Self interaction sheet | `src/main/java/com/warfactory/medical/treatment/client/MedInteractionScreen.java` + `MedicalUIParts.java` |
+| Start/tick/cancel, tourniquets, examine reply | `src/main/java/com/warfactory/medical/treatment/MedicalActionService.java` |
+| Treatment application + trauma picking | `src/main/java/com/warfactory/medical/treatment/TreatmentService.java` |
+| Engine cadence, resync | `src/main/java/com/warfactory/medical/body/MedicalEngine.java` |
 | Packets + registration | `src/main/java/com/warfactory/medical/network/` (`MedicalNetworking.register` has the id table) |
-| Damaged-limb predicate (wheel contents) | `src/main/java/com/warfactory/medical/core/limb/LimbStatus.java` |
-| Active-treatment bookkeeping | `src/main/java/com/warfactory/medical/core/MedicalProfile.java` (lines 553–623) |
-| Progress bar | `src/main/java/com/warfactory/medical/client/overlay/ActionProgressOverlay.java` |
+| Damaged-limb predicate (wheel contents) | `src/main/java/com/warfactory/medical/body/limb/LimbStatus.java` |
+| Active-treatment bookkeeping | `src/main/java/com/warfactory/medical/body/MedicalProfile.java` (lines 553–623) |
+| Progress bar | `src/main/java/com/warfactory/medical/treatment/client/ActionProgressOverlay.java` |

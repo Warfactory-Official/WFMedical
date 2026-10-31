@@ -2,7 +2,7 @@
 
 ## Trauma types and categories
 
-Each wound is a `Trauma` object: a `TraumaType` definition plus a mutable `severity` float clamped to `[0, maxSeverity]`. Types are registered in `wfmedical_definitions.toml` (or the programmatic fallback in `MedicalDefinitions.loadDefaults`).
+Each wound is a `Trauma` object: a `TraumaType` definition plus a mutable `severity` float clamped to `[0, maxSeverity]`. Types are registered in `wfmedical_definitions.toml` (fallback `MedicalDefinitions.defaultTraumas`).
 
 ### TraumaCategory
 
@@ -258,14 +258,14 @@ WFLib artefacts with negative `bleeding_restore_speed` => `MedicalHealing.thin`:
 | calm | light at head `> stressDarkLightLevel` && `>= stressRegenDelayTicks` since last rise && no pain rise |
 | recovery | calm => `stressRegenBase + stressRegenScale * stress` /s; dark or not calm => frozen |
 | cigarette | WFLib `CigaretteSmokedEvent` (smoked to the end) => `- cigaretteStressRelief` |
-| psy | WFLib `PsyExposureEvent` (psy anomalies; units = STALKER psy health) => `+ psy * stressPsyGain * (1 - Artifacts.psyProtection)`; always handled => no `wflib:psy` damage |
+| psy | WFLib `PsyExposureEvent` iff `wflib:anomaly` on (psy anomalies; units = STALKER psy health) => `+ psy * stressPsyGain * (1 - Artifacts.psyProtection)`; always handled => no `wflib:psy` damage |
 
 - Pain rise wins over recovery in the same step.
 - Defaults: 100% -> 0 in ~50 s, 10% -> 0 in ~16 s.
-- Suppression, cigarette, psy need WFLib `[1.8.38,2)`; without it only pain raises.
+- Sources: pain, suppression, cigarette, psy (wflib `[1.8.38,2)` required).
 - `/wfmedical stress {set|add} <players> <value>`.
 
-Client (`client.StressShake`, `StressShakeHandler`, `overlay.StressVignetteOverlay`):
+Client (`StressShake`, `StressShakeHandler` = wflib `CameraSway` source `wfmedical:stress`, `StressVignetteOverlay`):
 
 | stress | shake (aim moves with it) | vignette |
 |---|---|---|
@@ -274,7 +274,7 @@ Client (`client.StressShake`, `StressShakeHandler`, `overlay.StressVignetteOverl
 | `0.55-0.85` | burst floor rises to continuous | faint (`<= 0.30` alpha) |
 | `>= 0.8` | continuous, peak 1.1 -> 3.4 deg at 1.0 | black, alpha 0.65 -> 1.0, second pass |
 
-- Shake only holding a gun / drawn bow; unarmed `>= 0.8` => 0.3x. ADS 0.7x. Writes player rotation like `PainSwayHandler`; independent of `MedicalSway.suppress` (MineAssault yields pain sway only).
+- Shake only holding a gun / drawn bow; unarmed `>= 0.8` => 0.3x. ADS 0.7x. Not subject to wflib `PainSway.YIELDS`.
 - Client config `stress.shakeStrength`, `stress.vignette`.
 
 ---
@@ -293,7 +293,7 @@ Fractures use `TraumaCategory.FRACTURE` and `Trauma.isFracture()`. The feature c
 
 - `Weakness` effect at level `brokenArmMeleeWeaknessLevel` (default 1 = Weakness I) re-applied with 60-tick duration every engine pass while any arm is fractured.
 - Aim sway floor: `brokenArmAimSway` (default 0.9) while drawing a bow/crossbow or holding an `AhfHooks.isHeldGun` item; ADS steadiness (`AhfHooks.gunAimProgress`) does not lower it.
-- Sway yield: any `MedicalSway.suppress` predicate true => no medical sway; the suppressor reads `MedicalState.painSwayIntensity` / `hasArmFracture` / `hasArmTourniquet` + `MedicalSway.amplitudeDegrees`.
+- Pain sway = wflib `PainSway.SOURCE` (set by body): intensity `painSwayIntensity`, aim floor above, amplitude `2.5 * painSwayStrength` deg; camera writer + `YIELDS` in wflib `sway`.
 
 ### Fracture self-healing
 
@@ -386,7 +386,7 @@ One dose adds `doseLoad = 1.4`, just below the overdose threshold of 1.6. A seco
 ### Instant death (major trauma)
 
 Any single hit that:
-1. Was **not** `ArmorEvaluation.Outcome.BLOCKED`
+1. Was **not** `ArmorOutcome.STOPPED`
 2. Belongs to a category that `canInstakillOnImpact` (not FIRE/CHEMICAL/RADIATION)
 3. Has raw damage `>= maxHealthPoints * majorTraumaFraction(category)`
 

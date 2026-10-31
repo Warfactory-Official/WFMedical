@@ -135,9 +135,9 @@ Old values are not migrated.
 
 ## `wfmedical_definitions.toml` – data-driven definitions
 
-This file is copied into the Forge config directory on first launch and parsed by `MedicalDefinitions`. Editing the config-directory copy customizes injuries and medical items without code changes. The file is parsed by NightConfig's TOML parser. Unknown keys are silently ignored; missing keys fall back to coded defaults.
+This file is copied into the config directory on first launch and parsed by `MedicalDefinitions`. Editing the config-directory copy customizes injuries and medical items without code changes. The file is parsed by NightConfig's TOML parser. Unknown keys are silently ignored; missing keys fall back to coded defaults.
 
-If the file cannot be parsed at all, `MedicalDefinitions.loadDefaults` regenerates the same definitions programmatically as a fallback.
+Per table (`[[trauma]]`, `[[treatment]]`, `[[substance]]`): unparseable file, bad item id or duplicate `id`/`item` => hard-coded defaults for that table, ERROR logged; empty table => defaults. Read once at startup.
 
 ### `[[trauma]]` tables
 

@@ -280,12 +280,12 @@ bloodRestoreMl = 0.0
 useDurationTicks = 60
 removesTrauma = false
 
-# Suture kit: closes lacerations/punctures so they cannot reopen, and they then mend on their own. Quick to
+# Suture kit: closes lacerations/punctures so they cannot reopen; only stop for internal bleeding, and they then mend on their own. Quick to
 # apply so it can be a mainstay item rather than a fallback.
 [[treatment]]
 item = "wfmedical:suture_kit"
 action = "SUTURE_WOUND"
-categories = ["LACERATION", "PUNCTURE"]
+categories = ["LACERATION", "PUNCTURE", "INTERNAL_BLEEDING"]
 magnitude = 1.0
 bloodRestoreMl = 0.0
 useDurationTicks = 60
@@ -333,14 +333,14 @@ bloodRestoreMl = 0.0
 useDurationTicks = 50
 removesTrauma = false
 
-# Tourniquet: strong bleeding stop on limbs.
+# Tourniquet: toggles a limb tourniquet; bleed and speed scaling live in MedicalConfig.
 [[treatment]]
 item = "wfmedical:tourniquet"
-action = "REDUCE_BLEEDING"
-categories = ["LACERATION", "PUNCTURE", "INTERNAL_BLEEDING"]
-magnitude = 0.9
+action = "APPLY_TOURNIQUET"
+categories = []
+magnitude = 0.0
 bloodRestoreMl = 0.0
-useDurationTicks = 60
+useDurationTicks = 20
 removesTrauma = false
 
 # Medkit: general-purpose, fully heals (removes) most trauma and restores blood. Deliberately slow to apply

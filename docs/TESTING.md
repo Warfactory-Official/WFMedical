@@ -6,7 +6,7 @@ Two suites, split by what they need rather than by what they cover.
 |---|---|---|
 | What it is | JUnit 5 on a bootstrapped Minecraft | Vanilla GameTest in a real world |
 | Needs | registries and the config spec | a server, entities, mixins, AHF |
-| Count | 401 | 96; `-PwithWFLib` 109 |
+| Count | 409 | 101 |
 | Runtime | ~10s | ~30s (most of it server boot) |
 | Lives in | `src/test/java` | `src/main/java/com/warfactory/medical/gametest` |
 
@@ -35,7 +35,6 @@ the shared fixtures for that suite.
 
 | Holder | Covers |
 |---|---|
-| `ArmorEvaluationGameTest` | BLOCKED/PARTIAL/FULL, category effectiveness, per-slot durability |
 | `DamageClassifierGameTest` | the tag-driven half of classification, over the real registry |
 | `TraumaPipelineGameTest` | an `AhfHitSource` round, end to end, to a wound on its AHF part; PRECISE gap reject; real bow arrow in flight |
 | `MedicalStanceGameTest` | downed / leg crawl -> AHF posture locks; sway exports |
@@ -46,22 +45,22 @@ the shared fixtures for that suite.
 | `CommandGameTest` | the whole `/wfmedical` tree parses, and the state-changing branches work |
 | `MedicalStateApiGameTest` | the `api.MedicalState` surface other mods read |
 | `MedicalAttachmentGameTest` | who carries medical state, and respawn copying |
-| `WfLibStressGameTest` | `-PwithWFLib`: near-miss round => stress by distance (none beyond range / short of the eyes); cigarette event => relief; psy => stress |
-| `WfLibArtifactGameTest` | `-PwithWFLib`: artefact healer drain -> one torso blunt trauma; clotter + -> clotting boost, - -> thinning |
-| `WfLibStrikeGameTest`, `WfLibArmorGameTest` | `-PwithWFLib`: WFLib round -> threat category + WFLib parts -> wounds; claimed-player headshot x1; no gap reject; armour hand-off. Not holders: `WfLibGameTests` registers per `@WfLibMode` => absent-mode count excludes WFLib-only tests |
+| `stress.gametest.StressSourcesGameTest` | near-miss round => stress by distance (none beyond range / short of the eyes); cigarette event => relief; psy => stress |
+| `body.gametest.ArtifactHealingGameTest` | artefact healer drain -> one torso blunt trauma; clotter + -> clotting boost, - -> thinning |
+| `damage.gametest.StrikeGameTest`, `ArmorHandoffGameTest` | WFLib round -> threat category + WFLib parts -> wounds; claimed-player headshot x1; no gap reject; armour outcomes (`STOPPED`/`REDUCED`/`THROUGH`), per-limb slot, wear. `WfLibRounds`: shared wflib fixtures, registers the test preset at common setup (gametest runs only) |
 
 Rig, hit-geometry, weighted-sampler and pose-stream tests: AHF (`versions/1.21.1/src/{test,gametest}`).
 
 ### What is deliberately not covered
 
-Everything under `client/` — the HUD overlays, the limb wheel and interaction screens, the downed-body
+Everything under `*/client/` and `fx/` — the HUD overlays, the limb wheel and interaction screens, the downed-body
 and tourniquet renderers, the post-processing effects. None of it is reachable from a headless
 gametest server, and the pieces that could be extracted are thin wrappers over `ClientMedicalCache`,
 which is covered. Changes there still need `./gradlew runClient`, or `runAll` for the two-client
 sync check below.
 
-The client-side mixins (`CameraMixin`, `ItemInHandRendererMixin`, `EntityDownedLookMixin`) and
-`PainSwayHandler` are in the same position. `wfmedical.mixins.json` is `required: true`,
+The client-side mixins (`CameraMixin`, `ItemInHandRendererMixin`, `EntityDownedLookMixin`) are in the same
+position. `wfmedical.mixins.json` is `required: true`,
 `defaultRequire: 1`: a failed injector crashes at load.
 
 ## Traps that have already bitten

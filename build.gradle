@@ -208,11 +208,6 @@ def findWfmedicalGameJvms(project) {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
-    // LDLib2 (UI framework).
-    maven {
-        name = 'FirstDarkDev'
-        url = 'https://maven.firstdark.dev/snapshots'
-    }
     // curse.maven:* transitive from WFLib's POM (spark).
     maven {
         name = 'CurseMaven'
@@ -220,11 +215,11 @@ repositories {
         content { includeGroup 'curse.maven' }
     }
     // A local WFLib (`publishToMavenLocal` in its checkout) wins over the published snapshot of the same version.
-    mavenLocal { content { includeGroup 'com.wf.wflib' } }
+    mavenLocal { content { includeGroup 'com.wf.wflib'; includeGroup 'com.wf.gemrender'; includeGroup 'warfactory.ultimateweight' } }
     maven {
         name = 'Warfactory Snapshots'
         url = 'https://repo.warfactory.co/snapshots'
-        content { includeGroup 'com.wf.wflib'; includeGroup 'com.norwood' }
+        content { includeGroup 'com.wf.wflib'; includeGroup 'com.norwood'; includeGroup 'com.wf.gemrender' }
         // Anonymous reads work on this server; only `publish` needs credentials. A present-but-null
         // credentials block makes Gradle refuse anonymous reads too, so omit it entirely when unset.
         def warfactoryUser = project.findProperty('warfactoryUser') ?: System.getenv('WARFACTORY_MAVEN_USER')
@@ -243,24 +238,33 @@ configurations.all {
     resolutionStrategy.cacheChangingModulesFor(0, 'seconds')
 }
 
+configurations {
+    clientRunMods { transitive = false }
+    localRuntime
+    runtimeClasspath.extendsFrom localRuntime
+}
+
 dependencies {
     testImplementation platform("org.junit:junit-bom:${junit_version}")
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    // NeoForge pins slf4j-api strictly (2.0.9); ArchUnit's 2.0.12 conflicts.
+    testImplementation('com.tngtech.archunit:archunit-junit5:1.3.0') { exclude group: 'org.slf4j' }
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-
-    // `all` = shaded consumer jar.
-    implementation "com.lowdragmc.ldlib2:ldlib2-neoforge-1.21.1:${ldlib_version}:all"
 
     implementation "com.norwood:ahf-1.21.1-neoforge:${ahf_version}-SNAPSHOT"
 
-    // Optional (compat.wflib is ModList-gated). -PwithWFLib puts it on the run classpath; off by
-    // default: its content/mixins/handlers would join every test. Flywheel + GemRender are CLIENT
-    // deps => server/gametest runs need neither.
-    compileOnly "com.wf.wflib:wflib:${wflib_version}-SNAPSHOT"
-    if (project.hasProperty('withWFLib')) {
-        runtimeOnly "com.wf.wflib:wflib:${wflib_version}-SNAPSHOT"
-    }
+    implementation "com.wf.wflib:wflib:${wflib_version}-SNAPSHOT"
+    // wfweight: no API use; on dev runs so wflib compat.wfweight bridges load.
+    localRuntime "warfactory.ultimateweight:wfweight-1.21.1-neoforge:1.0.0-SNAPSHOT@jar" // shaded (snakeyaml); module runtime variant = -dev jar without it
+    // wflib's CLIENT deps (GemRender, Flywheel inside) => off every run classpath; staged for mc-harness clients.
+    clientRunMods "com.wf.gemrender:gemrender-1.21.1:${gemrender_version}-SNAPSHOT"
 }
+
+def stageClientMods = tasks.register('stageClientMods', Sync) {
+    from configurations.clientRunMods
+    into layout.buildDirectory.dir('clientRunMods/mods')
+}
+tasks.named('createLaunchScripts').configure { dependsOn stageClientMods }
 
 tasks.named('processResources', ProcessResources).configure {
     var replaceProperties = [

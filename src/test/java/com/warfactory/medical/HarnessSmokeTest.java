@@ -1,6 +1,6 @@
 package com.warfactory.medical;
 
-import com.warfactory.medical.core.limb.LimbType;
+import com.warfactory.medical.body.limb.LimbType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.phys.Vec3;

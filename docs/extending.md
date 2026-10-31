@@ -26,7 +26,7 @@ treatmentActions = ["HEAL_TRAUMA"]
 
 ### 2. If you need a new TraumaCategory
 
-Edit `core/trauma/TraumaCategory.java` and add the constant:
+Edit `body/trauma/TraumaCategory.java` and add the constant:
 
 ```java
 NERVE_DAMAGE(true)   // majorByDefault: true = major unless overridden
@@ -41,16 +41,15 @@ Then update every site that switches on `TraumaCategory`:
 
 ### 3. If you need a new DamageCategory
 
-Edit `core/damage/DamageCategory.java` and add the constant. Then update:
+Edit `damage/DamageCategory.java` and add the constant. Then update:
 
 | File | Location | What to add |
 |---|---|---|
 | `DamageClassifier.java` | `classify()` | Detection rule (tag, key, or msgId substring) |
-| `ArmorEvaluation.java` | `categoryEffectiveness()` | Armor effectiveness factor |
 | `DamageCategory.java` | `hitCategory()` | AHF `HitCategory` (new constant there too; AHF `HitSampler.categoryBias`) |
 | `TraumaGenerator.java` | `generate()` | Trauma set to generate |
-| `MedicalConfig.java` | `majorTraumaFraction()` | If you want a per-category instant-kill threshold |
-| `MedicalConfig.java` | `canInstakillOnImpact()` | If this is a DoT category that should never instant-kill |
+| `DamageConfig.java` | `majorTraumaFraction()` | If you want a per-category instant-kill threshold |
+| `DamageConfig.java` | `canInstakillOnImpact()` | If this is a DoT category that should never instant-kill |
 
 ---
 
@@ -58,27 +57,15 @@ Edit `core/damage/DamageCategory.java` and add the constant. Then update:
 
 ### 1. Register the item
 
-In `ModItems.java`, register a `MedicalItem` (for timed use) or `InjectableItem` (for substances). The item's registry name is the key used in `wfmedical_definitions.toml`.
+`treatment/TreatmentContent`: add a holder (`MedicalItem`); registered and listed in the creative tab by `TreatmentSystem`. Registry name = `item` key in `wfmedical_definitions.toml`.
 
-### 2. Embed the treatment in the item registration
+### 2. Add its `[[treatment]]` table
 
-**Important:** The `[[treatment]]` tables in `wfmedical_definitions.toml` are parsed by `MedicalDefinitions.load` into a local `Map<String, Treatment>` but this map is currently not stored globally – it is not wired up to override the runtime behavior of existing items. The actual treatment an item applies comes from the `Treatment` object embedded in the `MedicalItem` at registration time in `ModItems.java`.
-
-Substances are different: `SubstanceService` does look up the live config-loaded definition from `SubstanceRegistry.active()` at inject time, so TOML changes to substances take effect at runtime. Treatment item behavior does not have this hookup yet.
-
-To add a new treatment item, add a registration in `ModItems.java`:
-
-```java
-public static final RegistryObject<Item> NERVE_SEALANT = medical("nerve_sealant",
-    new Treatment(TreatmentAction.HEAL_TRAUMA,
-        cats(TraumaCategory.PUNCTURE), 0.5F, 0.0D, 80, false));
-```
-
-The `[[treatment]]` entry in TOML documents the intent but is not currently applied at runtime for treatment items.
+`item = "wfmedical:<name>"` => `Treatments.TREATMENTS`; `MedicalItem.getTreatment` reads it per use. No table => item does nothing.
 
 ### 3. If you need a new TreatmentAction
 
-Edit `core/treatment/TreatmentAction.java` and add the constant:
+Edit `body/trauma/TreatmentAction.java` and add the constant:
 
 ```java
 SEAL_NERVE(false)   // false = localized (requires a limb target)
@@ -91,7 +78,7 @@ Then update every dispatch site:
 | `TreatmentService.java` | `applyTargeted()` switch block | A new `case SEAL_NERVE ->` branch with the actual mutation logic |
 | `TreatmentService.java` | `priority()` switch | Scoring bonus for `pickTarget` selection |
 | `MedicalDefinitions.java` | `parseAction()` | Resolved automatically via `TreatmentAction.valueOf` – no change needed |
-| Trauma `treatmentActions` arrays | TOML / `loadDefaults` | List `"SEAL_NERVE"` on the trauma types that respond to it |
+| Trauma `treatmentActions` arrays | TOML / `MedicalDefinitions.defaultTraumas` | List `"SEAL_NERVE"` on the trauma types that respond to it |
 
 ---
 
@@ -121,11 +108,11 @@ effectTicks = 1200             # 1 minute
 
 ### 2. Register the item
 
-Register an `InjectableItem` in `ModItems.java`. The `InjectableItem` constructor takes the substance id; `SubstanceRegistry.active().get(substance.itemId())` resolves the live config-loaded definition at inject time, so TOML changes take effect without restarting.
+`substance/SubstanceContent`: add a holder; `InjectableItem` resolves `Substances.SUBSTANCES` by its item RL per use.
 
 ### 3. If you need new substance behaviour
 
-Add fields to `Substance` (a Java record), update `MedicalDefinitions.readSubstance` to read them, and add the handling logic in `SubstanceService.inject`. If the behaviour needs a new profile-level field (like `stimulant` or `clottingBoost`), add it to `MedicalProfile` (with NBT serialization in `save`/`load`), `MedicalSyncPacket` (encode/decode), and `Physiology.compute` (consume it in the derived-stats pass).
+Add fields to `Substance` (a Java record), update `SubstanceDefinitions.readSubstance` to read them, and add the handling logic in `SubstanceService.inject`. If the behaviour needs a new profile-level field (like `stimulant` or `clottingBoost`), add it to `MedicalProfile` (with NBT serialization in `save`/`load`), `MedicalSyncPacket` (encode/decode), and `Physiology.compute` (consume it in the derived-stats pass).
 
 ---
 
@@ -135,24 +122,23 @@ When adding new values to any of the key enums, this is the complete list of fil
 
 ### Adding a `TraumaCategory`
 
-- `core/trauma/TraumaCategory.java` – add constant
-- `core/damage/TraumaGenerator.java` – `generate()` switch
+- `body/trauma/TraumaCategory.java` – add constant
+- `damage/TraumaGenerator.java` – `generate()` switch
 - Any TOML `[[treatment]]` table – `categories` array
 
 ### Adding a `DamageCategory`
 
-- `core/damage/DamageCategory.java` – add constant
-- `core/damage/DamageClassifier.java` – `classify()` detection rules
-- `core/damage/ArmorEvaluation.java` – `categoryEffectiveness()`
-- `core/damage/DamageCategory.java` – `hitCategory()`; AHF `HitCategory` + `HitSampler.categoryBias()`
-- `core/damage/TraumaGenerator.java` – `generate()` / `fractureChance()`
-- `config/MedicalConfig.java` – `majorTraumaFraction()` and `canInstakillOnImpact()` if needed
+- `damage/DamageCategory.java` – add constant
+- `damage/DamageClassifier.java` – `classify()` detection rules
+- `damage/DamageCategory.java` – `hitCategory()`; AHF `HitCategory` + `HitSampler.categoryBias()`
+- `damage/TraumaGenerator.java` – `generate()` / `fractureChance()`
+- `damage/DamageConfig.java` – `majorTraumaFraction()` and `canInstakillOnImpact()` if needed
 
 ### Adding a `TreatmentAction`
 
-- `core/treatment/TreatmentAction.java` – add constant
-- `server/TreatmentService.java` – `applyTargeted()` switch and `priority()` switch
-- TOML `[[trauma]]` `treatmentActions` arrays (or `loadDefaults` in `MedicalDefinitions`)
+- `body/trauma/TreatmentAction.java` – add constant
+- `treatment/TreatmentService.java` – `applyTargeted()` switch and `priority()` switch
+- TOML `[[trauma]]` `treatmentActions` arrays (or `MedicalDefinitions.defaultTraumas`)
 
 ### Adding a `LimbType`
 
@@ -166,10 +152,7 @@ Files to update: `LimbType.java`, `PhysiologyParams.java` (`painShare()`), `Limb
 
 **Goal:** add `wfmedical:nerve_sealant` that treats `PUNCTURE` wounds reducing severity by 0.5.
 
-1. `ModItems.java`: register `NERVE_SEALANT = new MedicalItem(...)`.
-2. `ModCreativeTab.java`: add to the creative tab output list.
-3. `en_us.json`: add `"item.wfmedical.nerve_sealant": "Nerve Sealant"`.
-4. `wfmedical_definitions.toml`: add a `[[treatment]]` table for documentation purposes (not yet applied at runtime for treatment items – the embedded `Treatment` in step 1 is what runs).
-5. Provide item model JSON and texture in `assets/wfmedical/`.
-
-The treatment pipeline (`MedicalItem.finishUsingItem` → `TreatmentService.applyTargeted`) uses the `Treatment` embedded in the item. For injectables, `InjectableItem` routes through `SubstanceService.inject`, which does look up the live TOML-loaded `Substance` from `SubstanceRegistry.active()`.
+1. `TreatmentContent`: `NERVE_SEALANT` holder (`MedicalItem`).
+2. `en_us.json`: `"item.wfmedical.nerve_sealant": "Nerve Sealant"`.
+3. `wfmedical_definitions.toml` + `TreatmentDefinitions.defaultTreatments`: `[[treatment]]` with `item = "wfmedical:nerve_sealant"`.
+4. Item model JSON and texture in `assets/wfmedical/`.

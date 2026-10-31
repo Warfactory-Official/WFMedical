@@ -1,6 +1,6 @@
 # WFMedical – Developer & Designer Reference
 
-WFMedical is a Forge 1.20.1 mod that replaces vanilla health with a per-body-part medical trauma system. Incoming damage is classified by type and hit location, translated into persistent wound objects on one of six body parts, and periodically recalculated into derived stats that vanilla health and movement attributes track. Players can self-treat or be treated by others using medical items; the system is tunable via a COMMON config and a data-driven TOML definitions file.
+WFMedical is a NeoForge 1.21.1 mod that replaces vanilla health with a per-body-part medical trauma system. Incoming damage is classified by type and hit location, translated into persistent wound objects on one of six body parts, and periodically recalculated into derived stats that vanilla health and movement attributes track. Players can self-treat or be treated by others using medical items; the system is tunable via a COMMON config and a data-driven TOML definitions file.
 
 ## High-level state model
 
@@ -36,7 +36,7 @@ Hit weights are base probabilities used by the weighted fallback sampler; the ge
 
 | Doc | Contents |
 |---|---|
-| [architecture.md](architecture.md) | Package layout, end-to-end hit trace, server-authoritative design, capability/dirty/revision scheme, client/server split |
+| [architecture.md](architecture.md) | Systems, startup, extension points, registries, config snapshot, hit path, payloads, mixins |
 | [mechanics.md](mechanics.md) | Gameplay systems: trauma, pain, blood loss, fractures, asphyxia, drugs, death vs unconsciousness, persistent bodies |
 | [treatment-hands.md](treatment-hands.md) | First-person GAMMA treatment clips, kind mapping, placeholder props, regeneration |
 | [config.md](config.md) | Reference table for every `MedicalConfig` option; `wfmedical_definitions.toml` schema |
