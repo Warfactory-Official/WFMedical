@@ -22,7 +22,8 @@ public final class ArmorResolution {
      */
     public static ArmorResult resolve(LivingEntity victim, LimbType limb, DamageSource source, float amount,
                                       boolean applyWear) {
-        return com.wf.wflib.armor.api.ArmorResolution.resolveSlot(victim, slotFor(limb), source, amount, applyWear);
+        return com.wf.wflib.armor.api.ArmorResolution.resolveSlot(victim, slotFor(limb),
+                limb.name().toLowerCase(java.util.Locale.ROOT), source, amount, applyWear);
     }
 
     /** Arms sit behind the chestplate (vanilla slot layout). */

@@ -23,6 +23,7 @@ public final class DamageSystem implements MedicalSystem {
     @Override
     public void register(IEventBus modBus, ModContainer container) {
         ArmorResolution.claimPlayers();
+        ExoBridge.register();
         NeoForge.EVENT_BUS.register(DamageEvents.class);
         DamageCommands.register();
     }

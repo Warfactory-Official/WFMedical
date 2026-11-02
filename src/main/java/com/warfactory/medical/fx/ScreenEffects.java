@@ -18,7 +18,8 @@ import java.util.concurrent.ThreadLocalRandom;
  * <ul>
  * <li>hits ({@code actor_effects.script Update_Impact}): health down over 5% => {@code amk_shoot.ppe} (factor = drop
  * x 100); over 20% => a random {@code hit_*.anm}; over 50% => {@code total_recall.ppe} + {@code head_shot.anm};</li>
- * <li>{@code Update_Blood}: any drop => {@code bloody.ppe}, then 2-5 s before the next;</li>
+ * <li>{@code Update_Blood}: any drop => {@code bloody.ppe}, then 2-5 s before the next; factor {@code min(0.2, 2 x drop)}
+ * (divergence: engine uses 1; at 1 the gray amount 0.75 leaves 25% of the image => near black);</li>
  * <li>{@code Update_Bleeding}: health under 21% => {@code alcohol.ppe} looped; bleeding over half (of
  * {@code wakeupBleedReference}) under 20% health => {@code deimos1.ppe} every 4-10 s;</li>
  * <li>psy ({@code arszi_psy.script}, GAMMA Psy rework): psy health {@code 1 - stress} under 0.9 =>
@@ -31,6 +32,8 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class ScreenEffects {
     private static final String[] MIDDLE = {"hit_front", "hit_right", "hit_back", "hit_left", "hit_front_left",
             "hit_back_left", "hit_front_right", "hit_back_right"};
+    private static final float BLOODY_PER_DROP = 2.0F;
+    private static final float BLOODY_MAX = 0.2F;
     private static float lastHealth = -1.0F;
     private static long bloodyAt;
     private static long deimosAt;
@@ -74,7 +77,7 @@ public final class ScreenEffects {
             return;
         }
         if (now >= bloodyAt) {
-            XrScreen.post("wfmedical:bloody", ppe("bloody"), false, 1.0F);
+            XrScreen.post("wfmedical:bloody", ppe("bloody"), false, Math.min(BLOODY_MAX, drop * BLOODY_PER_DROP));
             bloodyAt = now + ThreadLocalRandom.current().nextLong(2000, 5000);
         }
         if (drop <= 0.05F) {
