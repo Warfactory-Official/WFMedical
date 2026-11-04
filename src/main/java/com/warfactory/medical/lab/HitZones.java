@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
@@ -178,6 +179,10 @@ final class HitZones {
         Body[][] out = new Body[STANCES.length][];
         BlockPos spawn = level.getSharedSpawnPos();
         double y = Math.max(spawn.getY(), level.getMinBuildHeight()) + 40.0;
+        while (y < level.getMaxBuildHeight() - 4
+                && !level.noCollision(new AABB(spawn.getX() - 1.0, y, spawn.getZ() - 1.0, spawn.getX() + 2.0, y + 3.0, spawn.getZ() + 2.0))) {
+            y += 4.0;
+        }
         for (int s : stances) {
             out[s] = new Body[phases.length];
             for (int k = 0; k < phases.length; k++) {
@@ -194,6 +199,7 @@ final class HitZones {
         v.yBodyRot = 0.0F;
         v.yBodyRotO = 0.0F;
         v.setPose(Pose.STANDING);
+        v.setOnGround(true);
         switch (STANCES[s]) {
             case "sneak" -> {
                 v.setShiftKeyDown(true);
