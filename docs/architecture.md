@@ -7,7 +7,7 @@
 | system | mandatory | `requires()` | off => |
 |---|---|---|---|
 | `body` | yes | `wflib:artifact`, `wflib:sway` (sets `PainSway.SOURCE`) | n/a |
-| `damage` | no | `body`, `wflib:armor` | no wounds from hits; `PLAYER_RESOLUTION` unset => wflib resolves player armour |
+| `damage` | no | `body`, `treatment`, `wflib:armor` | no wounds from hits; `PLAYER_RESOLUTION` unset => wflib resolves player armour |
 | `treatment` | no | `body` | no medical items, sheet, radial, tourniquets; wounds heal by time only |
 | `substance` | no | `body`, `treatment` | no syringes; drug state idle |
 | `stress` | no | `body` | `Stress` stays 0 |

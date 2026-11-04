@@ -152,11 +152,19 @@ public final class DamageEvents {
         // Wound energy = armour throughput, not incoming amount.
         float throughEnergy = (float) resolved.through();
 
+        float lethal = MedicalConfig.maxHealthPoints() * (float) DamageConfig.majorTraumaFraction(cat);
         boolean majorTrauma = primaryOutcome != ArmorOutcome.STOPPED
                 && DamageConfig.canInstakillOnImpact(cat)
-                && throughEnergy >= MedicalConfig.maxHealthPoints() * (float) DamageConfig.majorTraumaFraction(cat);
-        if (majorTrauma) {
+                && throughEnergy >= lethal;
+        boolean limbDowned = majorTrauma && cat == DamageCategory.BALLISTIC && !primary.isVital()
+                && MedicalConfig.enableBleedout()
+                && throughEnergy < lethal * (float) MedicalConfig.majorTraumaLimbMultiplier();
+        if (majorTrauma && !limbDowned) {
             return new HurtResolution(true, false, primaryOutcome);
+        }
+        if (limbDowned) {
+            profile.setUnconsciousLatched(true);
+            profile.markDirty();
         }
 
         boolean addedAny = false;
@@ -175,7 +183,7 @@ public final class DamageEvents {
             addedAny |= applyLimbTrauma(cat, outcome, limb, energy, profile, registry, nowTick, rand);
             energy = (float) (energy * falloff);
         }
-        return new HurtResolution(false, addedAny, primaryOutcome);
+        return new HurtResolution(false, addedAny || limbDowned, primaryOutcome);
     }
 
     private static List<LimbType> pickLimbs(LivingEntity victim, DamageSource src, DamageCategory cat,

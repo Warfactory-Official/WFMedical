@@ -70,6 +70,12 @@ neoForge {
         server {
             server()
             systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+            // ./gradlew runServer -Plabs=<ids|all> [-PlabsArgs="ranges=0,100 rounds=wflib:*"]: WFLabs headless run, then stop.
+            if (project.hasProperty('labs')) {
+                gameDirectory = project.file('run-labs')
+                systemProperty 'wflabs', project.property('labs').toString()
+                systemProperty 'wflabs.args', project.findProperty('labsArgs')?.toString() ?: ''
+            }
         }
 
         gameTestServer {
@@ -92,7 +98,7 @@ tasks.register('prepareDedicatedServer') {
     group = 'neoforge runs'
 
     doLast {
-        def runDir = project.file('run')
+        def runDir = project.file(project.hasProperty('labs') ? 'run-labs' : 'run')
         runDir.mkdirs()
 
         // Accept the EULA for the dev run directory.
@@ -100,6 +106,9 @@ tasks.register('prepareDedicatedServer') {
 
         def propsFile = new File(runDir, 'server.properties')
         def overrides = ['online-mode': 'false', 'enforce-secure-profile': 'false']
+        if (project.hasProperty('labs')) {
+            overrides += ['level-name': 'labs', 'level-type': 'minecraft\\:flat']
+        }
         def lines = propsFile.exists() ? propsFile.readLines() : []
         overrides.each { key, value ->
             def i = lines.findIndexOf { it ==~ /\s*\Q${key}\E\s*=.*/ }

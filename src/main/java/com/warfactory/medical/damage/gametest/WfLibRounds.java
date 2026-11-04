@@ -46,7 +46,8 @@ public final class WfLibRounds {
     public static void request() {
         if (gametest()) {
             WFSystems.require(WFMedical.MOD_ID, "wflib:smoking", "wflib:anomaly");
-            WFLibContent.armor(WFMedical.MOD_ID + " tests", "plate_carrier");
+            WFLibContent.armor(WFMedical.MOD_ID + " tests", "plate_carrier", "steel_plate", "combat_helmet");
+            WFLibContent.calibres(WFMedical.MOD_ID + " tests", "5.56x45", "7.62x51");
         }
     }
 

@@ -17,7 +17,7 @@ public final class DamageSystem implements MedicalSystem {
 
     @Override
     public Set<String> requires() {
-        return Set.of("body", "wflib:armor");
+        return Set.of("body", "treatment", "wflib:armor");
     }
 
     @Override
@@ -26,5 +26,8 @@ public final class DamageSystem implements MedicalSystem {
         ExoBridge.register();
         NeoForge.EVENT_BUS.register(DamageEvents.class);
         DamageCommands.register();
+        if (com.wf.wflib.core.api.WFSystems.enabled("wflib:labs")) {
+            com.warfactory.medical.lab.MedicalLabs.register();
+        }
     }
 }

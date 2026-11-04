@@ -78,21 +78,7 @@ public final class MedicalEngine {
             BodyHooks.ACTIVE_TREATMENT.get().tick(player, profile, nowTick);
         }
 
-        double bleeding = MedicalConfig.enableBleeding() ? profile.cached().totalBleeding() : 0.0D;
-        if (bleeding > 0.0D) {
-            profile.setBloodMl(profile.getBloodMl() - bleeding * interval);
-        }
-
-        double bloodRegenPerSecond = MedicalConfig.bloodRegenMlPerSecond();
-        // Only regenerate once bleeding is fully under control: any active haemorrhage (even one merely
-        // slowed by a tourniquet, which never drops to zero) pauses regen entirely. Stop the bleed first,
-        // then the body rebuilds volume. setBloodMl clamps at max, so this stops cleanly once topped up.
-        if (bloodRegenPerSecond > 0.0D && bleeding <= 0.0D && profile.getBloodMl() < profile.getMaxBloodMl()) {
-            // interval is ticks since the last update; 20 ticks = 1s.
-            profile.setBloodMl(profile.getBloodMl() + bloodRegenPerSecond / 20.0D * interval);
-        }
-
-        advanceHeartRate(profile, params, interval);
+        bleedAndRegen(profile, params, interval);
 
         advanceStress(player, profile, interval, nowTick);
 
@@ -109,35 +95,12 @@ public final class MedicalEngine {
 
         boolean wasDirty = profile.isDirty();
         HealthState beforeState = profile.getState();
-        DerivedStats stats = wasDirty ? profile.recompute(params) : profile.cached();
+        DerivedStats stats = settle(profile, params, nowTick);
         if (AhfConfig.logHitDetection() && stats.state() != beforeState) {
             WFMedical.LOGGER.info("[{}] state transition: {} {} -> {} at tick {} (health={})", WFMedical.MOD_ID,
                     player.getName().getString(), beforeState, stats.state(), nowTick,
                     String.format("%.1f", player.getHealth()));
         }
-
-        if (stats.state() == HealthState.UNCONSCIOUS && profile.getForcedState() == null
-                && !profile.isUnconsciousLatched()) {
-            profile.setUnconsciousLatched(true);
-        }
-
-        if (params.adrenalineEnabled()) {
-            if (stats.painKoPending()) {
-                if (profile.getPainKoSince() <= 0L) {
-                    profile.setPainKoSince(nowTick);
-                } else if (!profile.isAdrenalineExhausted()
-                        && nowTick - profile.getPainKoSince() >= MedicalConfig.adrenalinePainKoDelayTicks()) {
-                    profile.setAdrenalineExhausted(true);
-                    profile.markDirty();
-                }
-            } else if (profile.getPainKoSince() > 0L || profile.isAdrenalineExhausted()) {
-                profile.setPainKoSince(0L);
-                profile.setAdrenalineExhausted(false);
-                profile.markDirty();
-            }
-        }
-
-        updateDeathProgress(profile, params);
         if (stats.state() == HealthState.DEAD && player.getHealth() > 0.0F) {
             killByBleedingOut(player, profile);
         }
@@ -162,6 +125,54 @@ public final class MedicalEngine {
         }
 
         reconcileDownedBroadcast(player, profile);
+    }
+
+    /** Blood loss, regeneration and heart rate over {@code interval} ticks: the entity-free head of a player tick. */
+    public static void bleedAndRegen(MedicalProfile profile, PhysiologyParams params, int interval) {
+        double bleeding = MedicalConfig.enableBleeding() ? profile.cached().totalBleeding() : 0.0D;
+        if (bleeding > 0.0D) {
+            profile.setBloodMl(profile.getBloodMl() - bleeding * interval);
+        }
+
+        double bloodRegenPerSecond = MedicalConfig.bloodRegenMlPerSecond();
+        // Only regenerate once bleeding is fully under control: any active haemorrhage (even one merely
+        // slowed by a tourniquet, which never drops to zero) pauses regen entirely. Stop the bleed first,
+        // then the body rebuilds volume. setBloodMl clamps at max, so this stops cleanly once topped up.
+        if (bloodRegenPerSecond > 0.0D && bleeding <= 0.0D && profile.getBloodMl() < profile.getMaxBloodMl()) {
+            // interval is ticks since the last update; 20 ticks = 1s.
+            profile.setBloodMl(profile.getBloodMl() + bloodRegenPerSecond / 20.0D * interval);
+        }
+
+        advanceHeartRate(profile, params, interval);
+    }
+
+    /** Recompute when dirty, then latch, adrenaline and bleed-out progress: the entity-free tail of a player tick. */
+    public static DerivedStats settle(MedicalProfile profile, PhysiologyParams params, long nowTick) {
+        DerivedStats stats = profile.isDirty() ? profile.recompute(params) : profile.cached();
+
+        if (stats.state() == HealthState.UNCONSCIOUS && profile.getForcedState() == null
+                && !profile.isUnconsciousLatched()) {
+            profile.setUnconsciousLatched(true);
+        }
+
+        if (params.adrenalineEnabled()) {
+            if (stats.painKoPending()) {
+                if (profile.getPainKoSince() <= 0L) {
+                    profile.setPainKoSince(nowTick);
+                } else if (!profile.isAdrenalineExhausted()
+                        && nowTick - profile.getPainKoSince() >= MedicalConfig.adrenalinePainKoDelayTicks()) {
+                    profile.setAdrenalineExhausted(true);
+                    profile.markDirty();
+                }
+            } else if (profile.getPainKoSince() > 0L || profile.isAdrenalineExhausted()) {
+                profile.setPainKoSince(0L);
+                profile.setAdrenalineExhausted(false);
+                profile.markDirty();
+            }
+        }
+
+        updateDeathProgress(profile, params);
+        return stats;
     }
 
     /**
@@ -504,7 +515,7 @@ public final class MedicalEngine {
      * with no entity or level involved -- {@code package-private} rather than {@code private} only so the
      * unit suite can drive it directly; nothing outside {@link MedicalEngine} calls it.
      */
-    static void advanceTrauma(MedicalProfile profile, int interval) {
+    public static void advanceTrauma(MedicalProfile profile, int interval) {
         if (profile.getPainSuppression() > 0.0F) {
             profile.setPainSuppression(profile.getPainSuppression() - PAIN_SUPPRESSION_DECAY_PER_TICK * interval);
         }

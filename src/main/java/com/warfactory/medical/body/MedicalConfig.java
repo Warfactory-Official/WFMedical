@@ -32,6 +32,7 @@ public final class MedicalConfig {
     private static final ModConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_BLUNT;
     private static final ModConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_UNARMED;
     private static final ModConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_FALL;
+    private static final ModConfigSpec.DoubleValue MAJOR_TRAUMA_LIMB_MULTIPLIER;
     private static final ModConfigSpec.BooleanValue FINISH_DOWNED_ON_HIT;
     private static final ModConfigSpec.BooleanValue EFFECT_IMMUNE_IN_CREATIVE;
     private static final ModConfigSpec.BooleanValue MANAGE_NATURAL_REGEN;
@@ -552,6 +553,11 @@ public final class MedicalConfig {
                 .comment("Falls -- 1.0 means a fall dealing a full health bar (~33 blocks) instant-kills; "
                         + "shorter falls crush/fracture legs and can bleed you out instead.")
                 .defineInRange("majorTraumaFractionFall", 1.0D, 0.1D, 100.0D);
+        MAJOR_TRAUMA_LIMB_MULTIPLIER = b
+                .comment("Bullets into an arm or leg: kill outright only at this multiple of majorTraumaFractionBallistic.",
+                        "Between the two the limb is wrecked and the player is downed (revivable, bleed-out timer).",
+                        "Head and torso always use majorTraumaFractionBallistic. Ignored when bleed-out is disabled.")
+                .defineInRange("majorTraumaLimbMultiplier", 1.5D, 1.0D, 100.0D);
         b.pop();
         FINISH_DOWNED_ON_HIT = b
                 .comment("If true, any real damage taken while already unconscious/downed finishes the player "
@@ -754,6 +760,7 @@ public final class MedicalConfig {
         final double majorTraumaFractionBlunt = MAJOR_TRAUMA_FRACTION_BLUNT.get();
         final double majorTraumaFractionUnarmed = MAJOR_TRAUMA_FRACTION_UNARMED.get();
         final double majorTraumaFractionFall = MAJOR_TRAUMA_FRACTION_FALL.get();
+        final double majorTraumaLimbMultiplier = MAJOR_TRAUMA_LIMB_MULTIPLIER.get();
         final boolean finishDownedOnHit = FINISH_DOWNED_ON_HIT.get();
         final boolean effectImmuneInCreative = EFFECT_IMMUNE_IN_CREATIVE.get();
         final boolean manageNaturalRegen = MANAGE_NATURAL_REGEN.get();
@@ -1254,6 +1261,10 @@ public final class MedicalConfig {
 
     public static double majorTraumaFractionFall() {
         return v().majorTraumaFractionFall;
+    }
+
+    public static double majorTraumaLimbMultiplier() {
+        return v().majorTraumaLimbMultiplier;
     }
 
     public static boolean finishDownedOnHit() {
