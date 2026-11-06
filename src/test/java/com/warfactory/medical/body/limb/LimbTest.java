@@ -144,6 +144,44 @@ class LimbTest {
     }
 
     @Nested
+    class CategoryCap {
+
+        @Test
+        void aLimbNeverCollectsMoreLacerationsThanTheCategoryCap() {
+            limb.tryMerge(trauma("laceration_small", 1.0F), 8, c -> 2);
+            limb.tryMerge(trauma("laceration_large", 1.0F), 8, c -> 2);
+            for (int i = 0; i < 4; i++) {
+                limb.tryMerge(trauma(i % 2 == 0 ? "laceration_small" : "laceration_large", 1.0F), 8, c -> 2);
+            }
+            long lacerations = limb.getTraumas().stream()
+                    .filter(t -> t.getType().getCategory() == com.warfactory.medical.body.trauma.TraumaCategory.LACERATION).count();
+            assertEquals(2, lacerations);
+        }
+
+        @Test
+        void aSecondFractureIsFoldedIntoTheFirstWhenTheCapIsOne() {
+            limb.tryMerge(trauma("fracture", 0.5F), 8, c -> 1);
+            limb.tryMerge(trauma("fracture", 0.5F), 8, c -> 1);
+            assertEquals(1, limb.getTraumas().size());
+        }
+
+        @Test
+        void aZeroCategoryCapMeansUnlimited() {
+            for (int i = 0; i < 4; i++) {
+                limb.tryMerge(trauma("fracture", 0.5F), 8, c -> 0);
+            }
+            assertEquals(4, limb.getTraumas().size());
+        }
+
+        @Test
+        void otherCategoriesAreNotCountedAgainstTheCap() {
+            limb.tryMerge(trauma("fracture", 0.5F), 8, c -> 1);
+            limb.tryMerge(trauma("laceration_small", 0.5F), 8, c -> 1);
+            assertEquals(2, limb.getTraumas().size());
+        }
+    }
+
+    @Nested
     class Cap {
 
         @Test

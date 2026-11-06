@@ -1,6 +1,7 @@
 package com.warfactory.medical.body.limb;
 
 import com.warfactory.medical.body.trauma.Trauma;
+import com.warfactory.medical.body.trauma.TraumaCategory;
 import com.warfactory.medical.body.trauma.TraumaTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -103,12 +104,41 @@ public final class Limb {
     }
 
     public void tryMerge(Trauma incoming, int maxPerLimb) {
+        tryMerge(incoming, maxPerLimb, c -> 0);
+    }
+
+    /**
+     * Adds {@code incoming}, merging it into a compatible wound when there is one. {@code categoryCap} is the most wounds
+     * of a category one limb may carry (0 = no limit): at the cap the new wound is folded into the worst existing wound
+     * of its category instead of piling up, so a limb never collects five lacerations or a stack of fractures.
+     */
+    public void tryMerge(Trauma incoming, int maxPerLimb, java.util.function.ToIntFunction<TraumaCategory> categoryCap) {
         Trauma mergeTarget = null;
         for (int i = 0; i < traumas.size(); i++) {
             Trauma t = traumas.get(i);
             if (t.canMergeWith(incoming)) {
                 mergeTarget = t;
                 break;
+            }
+        }
+        if (mergeTarget == null) {
+            TraumaCategory category = incoming.getType().getCategory();
+            int cap = categoryCap.applyAsInt(category);
+            if (cap > 0) {
+                int same = 0;
+                Trauma worst = null;
+                for (Trauma t : traumas) {
+                    if (t.getType().getCategory() != category) {
+                        continue;
+                    }
+                    same++;
+                    if (worst == null || t.getSeverity() > worst.getSeverity()) {
+                        worst = t;
+                    }
+                }
+                if (same >= cap) {
+                    mergeTarget = worst;
+                }
             }
         }
         if (mergeTarget != null) {

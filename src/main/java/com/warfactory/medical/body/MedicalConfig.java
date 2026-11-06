@@ -26,6 +26,8 @@ public final class MedicalConfig {
     private static final ModConfigSpec.BooleanValue ENABLE_GIVE_UP;
     private static final ModConfigSpec.IntValue GIVE_UP_HOLD_TICKS;
     private static final ModConfigSpec.IntValue BLEEDOUT_TICKS;
+    private static final ModConfigSpec.IntValue MAX_LACERATIONS_PER_LIMB, MAX_FRACTURES_PER_LIMB, MAX_PUNCTURES_PER_LIMB,
+            MAX_OTHER_TRAUMA_PER_CATEGORY;
     private static final ModConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_DEFAULT;
     private static final ModConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_BALLISTIC;
     private static final ModConfigSpec.DoubleValue MAJOR_TRAUMA_FRACTION_EXPLOSION;
@@ -154,20 +156,21 @@ public final class MedicalConfig {
                 .defineInRange("bloodCriticalFraction", 0.35D, 0.0D, 1.0D);
         BLOOD_DEATH_LOSS_FRACTION = b
                 .comment("Fraction of total blood volume that, once LOST, kills the player outright (bleeding out "
-                        + "totally). Default 0.40 = losing more than 40% of your blood is instantly fatal.")
-                .defineInRange("bloodDeathLossFraction", 0.40D, 0.05D, 1.0D);
+                        + "totally). Default 0.55 = losing more than 55% of your blood is fatal; the gap above "
+                        + "bloodUnconsciousLossFraction is how long a downed casualty can be kept alive.")
+                .defineInRange("bloodDeathLossFraction", 0.55D, 0.05D, 1.0D);
         BLOOD_UNCONSCIOUS_LOSS_FRACTION = b
                 .comment("Fraction of total blood volume LOST at which blood loss starts contributing to the "
-                        + "unconsciousness score. Between this and bloodDeathLossFraction (default 30%-40% loss) "
+                        + "unconsciousness score. Between this and bloodDeathLossFraction (default 25%-55% loss) "
                         + "blood loss ramps that score from 0 to 1; combined with pain it can knock the player out.")
-                .defineInRange("bloodUnconsciousLossFraction", 0.30D, 0.0D, 1.0D);
+                .defineInRange("bloodUnconsciousLossFraction", 0.25D, 0.0D, 1.0D);
         PAIN_SHOCK_THRESHOLD = b
                 .comment("Pain (0..1) above which pain-shock penalties begin.")
                 .defineInRange("painShockThreshold", 0.60D, 0.0D, 1.0D);
         PAIN_UNCONSCIOUS_THRESHOLD = b
                 .comment("Perceived pain (0..1) above which pain begins contributing to the unconsciousness score. "
                         + "Severe pain past this point pushes the player toward passing out.")
-                .defineInRange("painUnconsciousThreshold", 0.70D, 0.0D, 1.0D);
+                .defineInRange("painUnconsciousThreshold", 0.65D, 0.0D, 1.0D);
         PAIN_UNCONSCIOUS_WEIGHT = b
                 .comment("Weight of the pain factor in the unconsciousness score. The score is the SUM of an "
                         + "independent blood-loss factor (reaches 1.0 at bloodUnconsciousLossFraction) and a pain "
@@ -439,8 +442,8 @@ public final class MedicalConfig {
         ADRENALINE_PAIN_KO_DELAY_TICKS = b
                 .comment("Ticks a pain-driven knockout is delayed by adrenaline once pain reaches knockout level "
                         + "(20 ticks = 1 second). If pain drops below that level within the window, adrenaline "
-                        + "recharges and the timer resets. Default 120 (6 seconds).")
-                .defineInRange("adrenalinePainKoDelayTicks", 120, 0, 12000);
+                        + "recharges and the timer resets. Default 60 (3 seconds).")
+                .defineInRange("adrenalinePainKoDelayTicks", 60, 0, 12000);
         b.pop();
 
         b.push("unconsciousness");
@@ -557,10 +560,24 @@ public final class MedicalConfig {
                 .comment("If true, any real damage taken while already unconscious/downed finishes the player "
                         + "(they can be killed while helpless). If false, a downed player is immune to further "
                         + "combat damage and can only die from the bleed-out timer.")
-                .define("finishDownedOnHit", true);
+                .define("finishDownedOnHit", false);
         MAX_TRAUMA_PER_LIMB = b
                 .comment("Hard cap on distinct trauma objects per limb; excess compatible trauma is merged.")
-                .defineInRange("maxTraumaPerLimb", 8, 1, 64);
+                .defineInRange("maxTraumaPerLimb", 6, 1, 64);
+        MAX_LACERATIONS_PER_LIMB = b
+                .comment("Most lacerations (small and large) one limb can carry. A further one is folded into the worst existing "
+                        + "laceration instead of adding a new wound. 0 = no limit.")
+                .defineInRange("maxLacerationsPerLimb", 2, 0, 32);
+        MAX_FRACTURES_PER_LIMB = b
+                .comment("Most fractures one limb can carry (a bone breaks once). 0 = no limit.")
+                .defineInRange("maxFracturesPerLimb", 1, 0, 8);
+        MAX_PUNCTURES_PER_LIMB = b
+                .comment("Most puncture wounds one limb can carry. 0 = no limit.")
+                .defineInRange("maxPuncturesPerLimb", 2, 0, 32);
+        MAX_OTHER_TRAUMA_PER_CATEGORY = b
+                .comment("Most wounds of any other kind (bruise, burn, crush, internal bleeding, radiation, chemical) of one "
+                        + "category on one limb. 0 = no limit.")
+                .defineInRange("maxOtherTraumaPerCategoryPerLimb", 3, 0, 32);
         LEG_FRACTURE_SPEED_MULTIPLIER = b
                 .comment("Movement speed multiplier applied per fractured leg (1.0 = no penalty).")
                 .defineInRange("legFractureSpeedMultiplier", 0.40D, 0.0D, 1.0D);
@@ -758,6 +775,10 @@ public final class MedicalConfig {
         final boolean effectImmuneInCreative = EFFECT_IMMUNE_IN_CREATIVE.get();
         final boolean manageNaturalRegen = MANAGE_NATURAL_REGEN.get();
         final int maxTraumaPerLimb = MAX_TRAUMA_PER_LIMB.get();
+        final int maxLacerationsPerLimb = MAX_LACERATIONS_PER_LIMB.get();
+        final int maxFracturesPerLimb = MAX_FRACTURES_PER_LIMB.get();
+        final int maxPuncturesPerLimb = MAX_PUNCTURES_PER_LIMB.get();
+        final int maxOtherTraumaPerCategory = MAX_OTHER_TRAUMA_PER_CATEGORY.get();
         final double legFractureSpeedMultiplier = LEG_FRACTURE_SPEED_MULTIPLIER.get();
         final boolean enableInjectables = ENABLE_INJECTABLES.get();
         final double drugDecayPerTick = DRUG_DECAY_PER_TICK.get();
@@ -1270,6 +1291,16 @@ public final class MedicalConfig {
 
     public static int maxTraumaPerLimb() {
         return v().maxTraumaPerLimb;
+    }
+
+    /** Most wounds of {@code category} on one limb (0 = no limit). */
+    public static int maxTraumaPerCategory(com.warfactory.medical.body.trauma.TraumaCategory category) {
+        return switch (category) {
+            case LACERATION -> v().maxLacerationsPerLimb;
+            case FRACTURE -> v().maxFracturesPerLimb;
+            case PUNCTURE -> v().maxPuncturesPerLimb;
+            default -> v().maxOtherTraumaPerCategory;
+        };
     }
 
     public static float legFractureSpeedMultiplier() {

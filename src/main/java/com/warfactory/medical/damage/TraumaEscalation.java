@@ -54,6 +54,7 @@ public final class TraumaEscalation {
         }
         traumas.removeIf(t -> t.isMinor() && family.test(t.getType().getCategory()));
         float severity = Math.min(WOUND_BASE_SEVERITY + (load - ESCALATE_THRESHOLD) * WOUND_OVERFLOW_SCALE, 1.0F);
-        limb.tryMerge(new Trauma(wound, limbType, severity, nowTick), maxPerLimb);
+        limb.tryMerge(new Trauma(wound, limbType, severity, nowTick), maxPerLimb,
+                com.warfactory.medical.body.MedicalConfig::maxTraumaPerCategory);
     }
 }

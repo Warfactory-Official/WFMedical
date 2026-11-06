@@ -228,7 +228,7 @@ public final class DamageEvents {
                 && (limbType.isArm() || limbType.isLeg())) {
             TraumaType fracture = resolveTrauma(registry, "fracture", TraumaCategory.FRACTURE);
             if (fracture != null) {
-                limb.tryMerge(new Trauma(fracture, limbType, 1.0F, nowTick), maxPerLimb);
+                limb.tryMerge(new Trauma(fracture, limbType, 1.0F, nowTick), maxPerLimb, MedicalConfig::maxTraumaPerCategory);
             }
         }
         float overflow = afterReduction - Math.max(cap, beforeReduction);
@@ -237,7 +237,7 @@ public final class DamageEvents {
             if (bleed != null) {
                 float sev = Math.min(overflow * OVERFLOW_BLEED_FACTOR, OVERFLOW_BLEED_MAX);
                 if (sev > 0.0F) {
-                    limb.tryMerge(new Trauma(bleed, limbType, sev, nowTick), maxPerLimb);
+                    limb.tryMerge(new Trauma(bleed, limbType, sev, nowTick), maxPerLimb, MedicalConfig::maxTraumaPerCategory);
                 }
             }
         }
@@ -261,7 +261,7 @@ public final class DamageEvents {
             if (t.isFracture() && !MedicalConfig.enableFractures()) {
                 continue;
             }
-            targetLimb.tryMerge(t, maxPerLimb);
+            targetLimb.tryMerge(t, maxPerLimb, MedicalConfig::maxTraumaPerCategory);
             added = true;
         }
         return added;

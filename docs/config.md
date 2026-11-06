@@ -13,10 +13,10 @@ Registered via `MedicalConfig.register(ModLoadingContext)` during mod constructi
 | `maxBloodMl` | `5000.0` | Total blood volume in millilitres. |
 | `bloodLowFraction` | `0.60` | Blood fraction (remaining) at or below which blood-loss penalties begin. |
 | `bloodCriticalFraction` | `0.35` | Blood fraction (remaining) at or below which state becomes CRITICAL. |
-| `bloodDeathLossFraction` | `0.40` | Fraction of total blood **lost** that kills outright (exsanguination). |
-| `bloodUnconsciousLossFraction` | `0.30` | Fraction lost at which blood-loss starts feeding the unconsciousness score. |
+| `bloodDeathLossFraction` | `0.55` | Fraction of total blood **lost** that kills outright (exsanguination). The gap above `bloodUnconsciousLossFraction` is the window a downed casualty can be kept alive in. |
+| `bloodUnconsciousLossFraction` | `0.25` | Fraction lost at which blood-loss starts feeding the unconsciousness score. |
 | `painShockThreshold` | `0.60` | Systemic pain (0..1) above which the pain-shock max-health penalty begins. |
-| `painUnconsciousThreshold` | `0.70` | Systemic pain above which pain feeds the unconsciousness score. |
+| `painUnconsciousThreshold` | `0.65` | Systemic pain above which pain feeds the unconsciousness score. |
 | `painUnconsciousWeight` | `1.00` | Weight of the pain factor in the unconsciousness score. 1.0 = severe pain alone can down the player; lower = pain only contributes to a combined KO. Range: 0–4. |
 | `bloodMovementPenaltyLossFraction` | `0.25` | Fraction of blood **lost** above which walk/jump speed is penalised (ramping toward the pain speed floor at the death loss). |
 | `bleedingSelfHealThreshold` | `0.30` | Severity at/below which an untreated bleeding wound naturally clots. |
@@ -33,7 +33,7 @@ Registered via `MedicalConfig.register(ModLoadingContext)` during mod constructi
 | `painShareArm` | `0.10` | Max systemic pain share per ARM (applied per arm, not total). |
 | `painShareLeg` | `0.20` | Max systemic pain share per LEG. |
 | `adrenalineEnabled` | `true` | If true, a purely pain-driven KO is held off for `adrenalinePainKoDelayTicks`. Blood-loss KOs are never delayed. |
-| `adrenalinePainKoDelayTicks` | `120` | Ticks (6 s) a pain KO is delayed by adrenaline once pain reaches knockout level. If pain drops below before expiry, timer resets. |
+| `adrenalinePainKoDelayTicks` | `60` | Ticks (3 s) a pain KO is delayed by adrenaline once pain reaches knockout level. If pain drops below before expiry, timer resets. |
 
 ### Section: `stress`
 
@@ -76,8 +76,12 @@ Client (`wfmedical-client.toml`, `[stress]`): `shakeStrength` (1.0; 0 disables),
 | `lethality.majorTraumaFractionBlunt` | `1.1` | Instant-kill fraction for `BLUNT` (requires a hit heavier than full health). |
 | `lethality.majorTraumaFractionUnarmed` | `3.0` | Instant-kill fraction for `UNARMED` – effectively disabled. |
 | `lethality.majorTraumaFractionFall` | `1.5` | Instant-kill fraction for `FALL` – only catastrophic falls. |
-| `finishDownedOnHit` | `true` | If true, any real damage to an already UNCONSCIOUS player kills them. |
-| `maxTraumaPerLimb` | `8` | Hard cap on distinct trauma objects per limb; excess is merged. |
+| `finishDownedOnHit` | `false` | If true, any real damage to an already UNCONSCIOUS player kills them. Off by default so a downed player can be revived. |
+| `maxTraumaPerLimb` | `6` | Hard cap on distinct trauma objects per limb; excess is merged. |
+| `maxLacerationsPerLimb` | `2` | Most lacerations (small + large) on one limb; a further one is folded into the worst existing laceration. 0 = no limit. |
+| `maxFracturesPerLimb` | `1` | Most fractures on one limb (a bone breaks once). 0 = no limit. |
+| `maxPuncturesPerLimb` | `2` | Most puncture wounds on one limb. 0 = no limit. |
+| `maxOtherTraumaPerCategoryPerLimb` | `3` | Most wounds of any other category (bruise, burn, crush, internal bleeding, radiation, chemical) per category on one limb. 0 = no limit. |
 | `legFractureSpeedMultiplier` | `0.40` | Multiplicative speed penalty applied per fractured leg. |
 | `unarmedMajorChance` | `0.15` | Probability (0..1) that a bare-handed punch to the torso/head produces internal bleeding. |
 | `painSwayEnabled` | `true` | If true, high pain makes the client's aim drift (client-side). |
