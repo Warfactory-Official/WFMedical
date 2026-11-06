@@ -17,6 +17,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.Item;
@@ -164,7 +165,7 @@ public final class TreatmentInteractions {
         double reachSqr = reach * reach;
         HitResult hr = mc.hitResult;
         if (hr instanceof EntityHitResult ehr
-                && ehr.getEntity() instanceof LivingEntity le && le != player && isTargetable(le)
+                && target(ehr.getEntity()) instanceof LivingEntity le && le != player
                 && player.distanceToSqr(le) <= reachSqr) {
             return le.getId();
         }
@@ -173,9 +174,9 @@ public final class TreatmentInteractions {
         Vec3 end = eye.add(view.scale(reach));
         AABB sweep = player.getBoundingBox().expandTowards(view.scale(reach)).inflate(1.0D);
         EntityHitResult ray = ProjectileUtil.getEntityHitResult(player, eye, end, sweep,
-                e -> e != player && e instanceof LivingEntity le && isTargetable(le),
+                e -> e != player && target(e) != null,
                 reachSqr);
-        if (ray != null && ray.getEntity() instanceof LivingEntity le && player.distanceToSqr(le) <= reachSqr) {
+        if (ray != null && target(ray.getEntity()) instanceof LivingEntity le && player.distanceToSqr(le) <= reachSqr) {
             return le.getId();
         }
         return -1;
@@ -184,6 +185,11 @@ public final class TreatmentInteractions {
     private static boolean isTargetable(LivingEntity entity) {
         return entity instanceof Player
                 || com.warfactory.medical.body.BodyHooks.PERSISTENT_BODY.get().test(entity);
+    }
+
+    private static Entity target(Entity entity) {
+        LivingEntity target = com.warfactory.medical.body.BodyHooks.TREATMENT_TARGET.get().apply(entity);
+        return target != null && isTargetable(target) ? target : null;
     }
 
     private static boolean holdsAnywhere(Player player, Item item) {

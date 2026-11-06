@@ -6,11 +6,13 @@ import com.wf.wflib.core.api.OrderedRegistry;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 
 import javax.annotation.Nullable;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.function.Function;
 
 /** Seams other WFMedical systems fill; body names none of them. */
 public final class BodyHooks {
@@ -42,6 +44,10 @@ public final class BodyHooks {
 
     /** Non-player entities carrying a medical profile (logout bodies). */
     public static final Hook<Predicate<Entity>> PERSISTENT_BODY = Hook.of("wfmedical persistent body", e -> false);
+
+    /** A visible medical proxy resolves to its real patient; ordinary living entities resolve to themselves. */
+    public static final Hook<Function<Entity, LivingEntity>> TREATMENT_TARGET = Hook.of("wfmedical treatment target",
+            e -> e instanceof LivingEntity living ? living : null);
 
     /** Login: after the profile sync. */
     public static final OrderedRegistry<Consumer<ServerPlayer>> JOIN = OrderedRegistry.create("wfmedical join");

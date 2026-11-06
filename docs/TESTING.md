@@ -6,7 +6,7 @@ Two suites, split by what they need rather than by what they cover.
 |---|---|---|
 | What it is | JUnit 5 on a bootstrapped Minecraft | Vanilla GameTest in a real world |
 | Needs | registries and the config spec | a server, entities, mixins, AHF |
-| Count | 409 | 101 |
+| Count | 415 | 105 |
 | Runtime | ~10s | ~30s (most of it server boot) |
 | Lives in | `src/test/java` | `src/main/java/com/warfactory/medical/gametest` |
 
@@ -50,6 +50,14 @@ the shared fixtures for that suite.
 | `damage.gametest.StrikeGameTest`, `ArmorHandoffGameTest` | WFLib round -> threat category + WFLib parts -> wounds; claimed-player headshot x1; no gap reject; armour outcomes (`STOPPED`/`REDUCED`/`THROUGH`), per-limb slot, wear. `WfLibRounds`: shared wflib fixtures, registers the test preset at common setup (gametest runs only) |
 
 Rig, hit-geometry, weighted-sampler and pose-stream tests: AHF (`versions/1.21.1/src/{test,gametest}`).
+
+`ragdoll.gametest.RagdollGameTest` exercises real Bullet body creation/collapse, medical
+recovery without inventory changes, native Corpse menu transfer, distance rejection,
+actual death reusing the downed proxy, and native pose/UUID save/reload. It uses
+near-origin forced chunks because Saro's single-precision physics cannot represent
+sub-block joints at the GameTest runner's randomized multi-million-block coordinates.
+`ragdoll.client.MedicalRagdollRendererTest` checks all six bone matrices under five
+rotations; geometry and saved-pose validation have eight additional JUnit checks.
 
 ### What is deliberately not covered
 

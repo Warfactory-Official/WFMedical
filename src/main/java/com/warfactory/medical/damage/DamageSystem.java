@@ -17,7 +17,7 @@ public final class DamageSystem implements MedicalSystem {
 
     @Override
     public Set<String> requires() {
-        return Set.of("body", "wflib:armor");
+        return Set.of("body", "treatment", "wflib:armor");
     }
 
     @Override

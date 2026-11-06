@@ -6,6 +6,7 @@ import com.warfactory.medical.damage.DamageSystem;
 import com.warfactory.medical.damage.gametest.WfLibRounds;
 import com.warfactory.medical.fx.FxSystem;
 import com.warfactory.medical.persistence.PersistenceSystem;
+import com.warfactory.medical.ragdoll.RagdollSystem;
 import com.warfactory.medical.stress.StressSystem;
 import com.warfactory.medical.substance.SubstanceSystem;
 import com.warfactory.medical.treatment.TreatmentSystem;
@@ -30,7 +31,8 @@ public final class WFMedical {
             new SubstanceSystem(),
             new StressSystem(),
             new FxSystem(),
-            new PersistenceSystem());
+            new PersistenceSystem(),
+            new RagdollSystem());
 
     public WFMedical(IEventBus modBus, ModContainer modContainer) {
         WfLibRounds.request();
