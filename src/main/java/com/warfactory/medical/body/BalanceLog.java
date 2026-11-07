@@ -68,9 +68,13 @@ public final class BalanceLog {
     }
 
     public static void transition(LivingEntity who, HealthState from, HealthState to, MedicalProfile profile) {
-        WFMedical.LOGGER.info("[balance] tick={} victim={} transition {} -> {} blood={} bleed={}",
+        WFMedical.LOGGER.info("[balance] tick={} victim={} transition {} -> {} blood={} bleed={} "
+                        + "drugLoad={} stimulant={} pain={} health={} overdose={} asphyxia={} latched={} forced={}",
                 who.level().getGameTime(), who.getName().getString(), from, to, (int) profile.getBloodMl(),
-                f((float) profile.cached().totalBleeding()));
+                f((float) profile.cached().totalBleeding()), f(profile.getDrugLoad()), f(profile.getStimulant()),
+                f(profile.cached().systemicPain()), f(profile.cached().effectiveCurrentHealth()),
+                profile.isOverdoseUnconscious(), profile.isAsphyxiating() || profile.isAsphyxiaUnconscious(),
+                profile.isUnconsciousLatched(), profile.getForcedState());
     }
 
     private static String f(float v) {

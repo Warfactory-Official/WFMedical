@@ -96,7 +96,7 @@ public final class MedicalEngine {
         boolean wasDirty = profile.isDirty();
         HealthState beforeState = profile.getState();
         DerivedStats stats = settle(profile, params, nowTick);
-        if (stats.state() != beforeState && BalanceLog.on()) {
+        if (stats.state() != beforeState && (BalanceLog.on() || stats.state() == HealthState.UNCONSCIOUS)) {
             BalanceLog.transition(player, beforeState, stats.state(), profile);
         }
         if (AhfConfig.logHitDetection() && stats.state() != beforeState) {
@@ -694,7 +694,11 @@ public final class MedicalEngine {
             return;
         }
         MedicalProfile profile = data.getProfile();
+        HealthState beforeState = profile.getState();
         DerivedStats stats = profile.recompute(MedicalConfig.toPhysiologyParams());
+        if (stats.state() != beforeState && stats.state() == HealthState.UNCONSCIOUS) {
+            BalanceLog.transition(player, beforeState, stats.state(), profile);
+        }
         if (applyEffects) {
             MedicalEffects.apply(player, stats, true);
         }
