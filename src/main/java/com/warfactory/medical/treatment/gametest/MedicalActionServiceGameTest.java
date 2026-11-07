@@ -399,4 +399,37 @@ public class MedicalActionServiceGameTest {
         }
         helper.succeed();
     }
+
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
+    public void oneCombatStimulantCastLeavesASoberPlayerConsciousAndConsumesOneDose(GameTestHelper helper) {
+        TestBodies.Victim v = TestBodies.victim(helper);
+        MedicalProfile profile = TestBodies.profileOf(helper, v);
+        var stim = com.warfactory.medical.substance.Substances.get("wfmedical:combat_stimulant_i");
+        if (stim == null || stim.doseLoad() >= stim.overdoseThreshold()) {
+            helper.fail("the fixture needs a registered stimulant with a safe first-dose window");
+            return;
+        }
+        ResourceLocation id = hold(v, com.warfactory.medical.substance.SubstanceContent.COMBAT_STIMULANT_I.get());
+        if (profile.getDrugLoad() != 0.0F || !MedicalActionService.start(v, id, null, -1)) {
+            helper.fail("a sober player's first stimulant cast was not started");
+            return;
+        }
+        complete(helper, v);
+        // Later engine ticks after completion must not apply the same action again.
+        for (int i = 0; i < 20; i++) {
+            MedicalActionService.tick(v, profile, helper.getLevel().getGameTime() + 100 + i);
+        }
+        if (Math.abs(profile.getDrugLoad() - stim.doseLoad()) > 0.0001F
+                || profile.getStimulant() <= 0.0F || profile.isDowned()
+                || profile.getBlackoutGraceUntil() > 0L || profile.isAsphyxiating()) {
+            helper.fail("one stimulant cast caused an overdose or failed to grant its buff: load="
+                    + profile.getDrugLoad() + " state=" + profile.getState());
+            return;
+        }
+        if (v.getInventory().getItem(0).getCount() != 1 || profile.hasActiveTreatment()) {
+            helper.fail("a completed cast must consume exactly one syringe and stop");
+            return;
+        }
+        helper.succeed();
+    }
 }
