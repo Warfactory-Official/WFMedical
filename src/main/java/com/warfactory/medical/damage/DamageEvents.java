@@ -127,6 +127,9 @@ public final class DamageEvents {
         if (profile.hasActiveTreatment()) {
             BodyHooks.ACTIVE_TREATMENT.get().cancel(player, "damaged");
         }
+        if (!alreadyDowned && reacts(DamageClassifier.classify(src))) {
+            HitReactions.onHit(player, src, res.primary(), res.armor(), res.through(), amount);
+        }
         if (!res.traumaAdded()) {
             return true;
         }
@@ -140,6 +143,14 @@ public final class DamageEvents {
             event.setAmount(0.0F);
         }
         return true;
+    }
+
+    /** Impacts push a body around; fire, falls, poison and radiation do not. */
+    private static boolean reacts(DamageCategory cat) {
+        return switch (cat) {
+            case BALLISTIC, EXPLOSION, SLASHING, BLUNT, UNARMED, PIERCING -> true;
+            default -> false;
+        };
     }
 
     /**

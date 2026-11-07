@@ -93,6 +93,26 @@ For the reference rifle round (~10.7 energy through, unarmoured):
 
 Centre-mass fire downs in ~5 rounds and kills in ~7. A plate carrier turns a rifle round into spall plus blunt trauma (~6 torso hits to down); an AP round through plate takes ~4. Wound size is `woundSeverityScale` x zone multiplier x energy; the severity ceiling is raised so hits keep adding. **Resolve:** a hit that would kill a casualty at or above `resolveHealthFraction` of full health downs them instead, so the *next* hit is the lethal one. A downed casualty is helpless, not immune: only hits an attacker landed count, the energy that gets through armour accumulates (a head hit triple), and past `downedFinishEnergy` the next hit kills. The bleed-out itself is slow (`bleedingRateMultiplier`, ~4 minutes from a torso downing) so a medic has a window if nobody keeps shooting.
 
+## Hit reactions
+
+After xray-monolith: its engine plays an additive flinch for every hit, picked by hit direction and which side of the
+spine was struck (`character_hit_animations`), and GAMMA's `critical_wound_threshold` (0.35) makes enough damage in a
+short time stagger the actor with a clip chosen by body part (`critical_hit_head/torso/hand/legs`).
+
+- Every non-fatal impact (ballistic, explosion, melee) on a conscious casualty sends a `HitReactionPacket`: zone,
+  direction to the attacker in the victim's frame, strength. Clients play a flinch on every player model (soldiers
+  included) through a PlayerAnimator layer: torso/head lean away from the hit, the hit arm swings out, the hit leg buckles.
+- A hit adds `impact / 10 x zoneWeight x (0.75..1.25)` to a per-casualty meter (weights: head 0.45, torso 0.30,
+  leg 0.22, arm 0.18; impact = energy past armour, plus 40% of the incoming amount when armour stopped or reduced
+  the round). The meter drains at `staggerDecayPerSecond`; past `staggerThreshold` it empties and the casualty staggers.
+  So a rifle round to the head always staggers, to the torso about one time in three (a second round in a burst settles
+  it), a limb needs two, and plate-stopped rounds need a burst.
+- A stagger lasts 8-14 ticks by zone (+0.4 s of animation): walking speed cut by `staggerSlow` (legs more), the body
+  shoved away from the shooter, the camera clip of the engine for the local player (`head_shot.anm`, `hit_*.anm`), and a
+  soldier's aim kicked off target. A new stagger cannot start for 1 s after the last.
+- `/wfmedical reaction <player> <zone> <front> <side>` plays a stagger for testing; `/wfmedical balance on` logs each
+  reaction (`[balance] ... reaction zone= impact= stagger=`).
+
 ## Pain
 
 Pain is the most layered system. Two aggregates emerge from `Physiology.compute`:
