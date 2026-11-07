@@ -13,7 +13,9 @@ public final class MedicalStance {
     public static void downed(ServerPlayer player, boolean downed) {
         StanceState s = AhfStance.get(player);
         if (s == null ? downed : s.downed() != downed) {
+            BodyHooks.DOWNED.get().before(player, downed);
             AhfStance.setDowned(player, downed);
+            BodyHooks.DOWNED.get().after(player, downed);
         }
     }
 

@@ -51,13 +51,7 @@ the shared fixtures for that suite.
 
 Rig, hit-geometry, weighted-sampler and pose-stream tests: AHF (`versions/1.21.1/src/{test,gametest}`).
 
-`ragdoll.gametest.RagdollGameTest` exercises real Bullet body creation/collapse, medical
-recovery without inventory changes, native Corpse menu transfer, distance rejection,
-actual death reusing the downed proxy, and native pose/UUID save/reload. It uses
-near-origin forced chunks because Saro's single-precision physics cannot represent
-sub-block joints at the GameTest runner's randomized multi-million-block coordinates.
-`ragdoll.client.MedicalRagdollRendererTest` checks all six bone matrices under five
-rotations; geometry and saved-pose validation have eight additional JUnit checks.
+`ragdoll.gametest.RagdollGameTest`: a downed patient is a WFLib ragdoll (`Ragdolls.active`), and recovery releases it and restores the STAND posture. The solver itself is tested in WFLib (`RagdollTest`, `RagdollGameTest`).
 
 ### What is deliberately not covered
 

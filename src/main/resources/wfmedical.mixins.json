@@ -4,20 +4,13 @@
   "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8.5",
   "mixins": [
-    "body.LivingEntityMixin",
-    "ragdoll.RagdollAccess",
-    "ragdoll.SaroGameplayMixin",
-    "ragdoll.SaroJoinMixin",
-    "ragdoll.SaroGuiMixin",
-    "ragdoll.SaroPlayerCollisionMixin",
-    "ragdoll.SaroNativeMixin"
+    "body.LivingEntityMixin"
   ],
   "client": [
     "body.CameraMixin",
     "body.EntityDownedLookMixin",
     "body.ItemInHandRendererMixin",
-    "fx.PostChainAccessor",
-    "ragdoll.CorpseRendererMixin"
+    "fx.PostChainAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

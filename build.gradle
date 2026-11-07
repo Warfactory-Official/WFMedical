@@ -275,15 +275,6 @@ dependencies {
     compileOnly "dev.kosmx.player-anim:player-animation-lib-forge:${playeranimator_version}"
 
     implementation "com.wf.wflib:wflib:${wflib_version}-SNAPSHOT"
-    // Pin the optional integration to the shipped APIs; neither third-party mod is bundled.
-    compileOnly 'maven.modrinth:saros-player-ragdoll:JOe6biTu'
-    compileOnly 'maven.modrinth:corpse:Zwf8nv8y'
-    localRuntime 'maven.modrinth:saros-player-ragdoll:JOe6biTu'
-    localRuntime 'maven.modrinth:corpse:Zwf8nv8y'
-    compileOnly 'com.github.stephengold:Libbulletjme:18.1.0'
-    testImplementation 'maven.modrinth:saros-player-ragdoll:JOe6biTu'
-    testImplementation 'maven.modrinth:corpse:Zwf8nv8y'
-    testImplementation 'com.github.stephengold:Libbulletjme:18.1.0'
     // wfweight: no API use; on dev runs so wflib compat.wfweight bridges load.
     localRuntime "warfactory.ultimateweight:wfweight-1.21.1-neoforge:1.0.0-SNAPSHOT@jar" // shaded (snakeyaml); module runtime variant = -dev jar without it
     // wflib's CLIENT deps (GemRender, Flywheel inside) => off every run classpath; staged for mc-harness clients.

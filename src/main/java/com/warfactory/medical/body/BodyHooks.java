@@ -49,6 +49,10 @@ public final class BodyHooks {
     public static final Hook<Function<Entity, LivingEntity>> TREATMENT_TARGET = Hook.of("wfmedical treatment target",
             e -> e instanceof LivingEntity living ? living : null);
 
+    /** The downed posture lock changes: {@code before} runs ahead of the lock, {@code after} behind it. */
+    public static final Hook<DownedChange> DOWNED = Hook.of("wfmedical downed change", new DownedChange() {
+    });
+
     /** Login: after the profile sync. */
     public static final OrderedRegistry<Consumer<ServerPlayer>> JOIN = OrderedRegistry.create("wfmedical join");
 
@@ -61,6 +65,14 @@ public final class BodyHooks {
             OrderedRegistry.create("wfmedical subcommands");
 
     private BodyHooks() {
+    }
+
+    public interface DownedChange {
+        default void before(ServerPlayer player, boolean downed) {
+        }
+
+        default void after(ServerPlayer player, boolean downed) {
+        }
     }
 
     public interface ActiveTreatment {

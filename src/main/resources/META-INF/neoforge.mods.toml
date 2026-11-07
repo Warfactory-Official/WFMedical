@@ -43,16 +43,4 @@ versionRange = "[1.8.38,2)"
 ordering = "AFTER"
 side = "BOTH"
 
-[[dependencies.wfmedical]]
-modId = "saros_ragdoll"
-type = "optional"
-versionRange = "[2.0.5,2.0.6)"
-ordering = "AFTER"
-side = "BOTH"
 
-[[dependencies.wfmedical]]
-modId = "corpse"
-type = "optional"
-versionRange = "[1.21.1-1.1.13,1.21.1-1.2)"
-ordering = "AFTER"
-side = "BOTH"
