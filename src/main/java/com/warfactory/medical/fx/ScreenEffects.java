@@ -24,8 +24,8 @@ import java.util.concurrent.ThreadLocalRandom;
  * {@code wakeupBleedReference}) under 20% health => {@code deimos1.ppe} every 4-10 s;</li>
  * <li>psy ({@code arszi_psy.script}, GAMMA Psy rework): psy health {@code 1 - stress} under 0.9 =>
  * {@code snd_shock.ppe} looped at {@code (1 - psy) x 0.01};</li>
- * <li>a finished treatment ({@code medic_effects.script}): {@code item_use_fast.anm} + {@code surge_fade.ppe}, then
- * {@code inv_medkit.ppe}; radiation treatment: {@code item_use.anm} + {@code surge_fade.ppe}, then {@code blur.ppe}.</li>
+ * <li>a finished drug dose, not bandages etc. ({@code medic_effects.script}): {@code item_use_fast.anm} +
+ * {@code surge_fade.ppe}, then {@code inv_medkit.ppe}.</li>
  * </ul>
  * Gap: GAMMA's {@code pripyat_horror.anm} + {@code snd_shock.ppe} at heavy bleeding and low stamina (no stamina here).
  */
@@ -100,16 +100,15 @@ public final class ScreenEffects {
         }
     }
 
-    /** A treatment that ran its full time (not one cancelled) plays the medic effects. */
+    /** Only a drug (painkiller/stimulant dose, action REDUCE_PAIN) that ran its full time plays the medic effects; bandages and the like stay clear. */
     private static void treatment(long now) {
         ActiveTreatment active = ActiveTreatment.local();
-        if (treating != null && active == null && treating.action() != TreatmentAction.RESUSCITATE
+        if (treating != null && active == null && treating.action() == TreatmentAction.REDUCE_PAIN
                 && Minecraft.getInstance().level != null
                 && Minecraft.getInstance().level.getGameTime() >= treating.startGameTime() + treating.totalTicks() - 2) {
-            boolean rad = treating.action() == TreatmentAction.TREAT_RADIATION;
-            float seconds = XrScreen.camera(XrScreen.anm("wflib", rad ? "item_use" : "item_use_fast"), 1.0F);
+            float seconds = XrScreen.camera(XrScreen.anm("wflib", "item_use_fast"), 1.0F);
             XrScreen.post("wfmedical:medic", ppe("surge_fade"), false, 1.0F);
-            afterMedic = rad ? "blur" : "inv_medkit";
+            afterMedic = "inv_medkit";
             afterMedicAt = now + (long) (seconds * 1000.0F);
         }
         treating = active;
