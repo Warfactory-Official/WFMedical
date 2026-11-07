@@ -57,8 +57,21 @@ public final class Trauma {
         if (s < 0.0F) {
             return 0.0F;
         }
-        float max = type.getMaxSeverity();
+        float max = ceiling();
         return s > max ? max : s;
+    }
+
+    /** The type's maxSeverity, raised by woundCeilingMultiplier for the wounds a hit can keep deepening. */
+    private float ceiling() {
+        float max = type.getMaxSeverity();
+        switch (type.getCategory()) {
+            case PUNCTURE, LACERATION, CRUSH_INJURY, BURN -> {
+                return max * (float) com.warfactory.medical.body.MedicalConfig.woundCeilingMultiplierSafe();
+            }
+            default -> {
+                return max;
+            }
+        }
     }
 
     private static float clampFactor(float f) {
@@ -177,7 +190,7 @@ public final class Trauma {
                 && other.limb == this.limb
                 && !this.closed
                 && !other.closed
-                && this.severity < type.getMaxSeverity();
+                && this.severity < ceiling();
     }
 
     public void mergeIn(Trauma other) {

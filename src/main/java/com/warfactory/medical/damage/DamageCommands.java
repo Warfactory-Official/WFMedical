@@ -14,6 +14,7 @@ import com.norwood.ahf.rig.RigSpec;
 import com.norwood.ahf.rig.RigSpecIO;
 import com.norwood.ahf.rig.RigTuning;
 import com.warfactory.medical.WFMedical;
+import com.warfactory.medical.body.BalanceLog;
 import com.warfactory.medical.body.limb.LimbType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -38,6 +39,17 @@ public final class DamageCommands {
 
     static void register() {
         BodyHooks.SUBCOMMANDS.register(ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "damage"), -400, root -> {
+            root.then(Commands.literal("balance")
+                    .then(Commands.literal("on").executes(ctx -> {
+                        BalanceLog.set(true);
+                        ctx.getSource().sendSuccess(() -> Component.literal("[wfmedical] balance telemetry on"), false);
+                        return 1;
+                    }))
+                    .then(Commands.literal("off").executes(ctx -> {
+                        BalanceLog.set(false);
+                        ctx.getSource().sendSuccess(() -> Component.literal("[wfmedical] balance telemetry off"), false);
+                        return 1;
+                    })));
             root.then(Commands.literal("hittest")
                     .executes(ctx -> cmdHitTest(ctx.getSource(), 0.0D))
                     .then(Commands.argument("maxDist", DoubleArgumentType.doubleArg(0.0D))

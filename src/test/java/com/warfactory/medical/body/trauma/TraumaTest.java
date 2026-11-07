@@ -27,12 +27,17 @@ class TraumaTest {
         return new Trauma(registry.getOrThrow(id), LimbType.TORSO, severity, 100L);
     }
 
+    /** A laceration's ceiling: its type maxSeverity (1.0) times woundCeilingMultiplier. */
+    private static float ceiling() {
+        return (float) com.warfactory.medical.body.MedicalConfig.woundCeilingMultiplierSafe();
+    }
+
     @Nested
     class Severity {
 
         @Test
         void severityIsClampedToTheTypesCeilingAndFloor() {
-            assertEquals(1.0F, of("laceration_large", 5.0F).getSeverity(), EPS);
+            assertEquals(ceiling(), of("laceration_large", 50.0F).getSeverity(), EPS);
             assertEquals(0.0F, of("laceration_large", -5.0F).getSeverity(), EPS);
         }
 
@@ -40,7 +45,7 @@ class TraumaTest {
         void theSetterClampsToo() {
             Trauma t = of("laceration_large", 0.5F);
             t.setSeverity(99.0F);
-            assertEquals(1.0F, t.getSeverity(), EPS);
+            assertEquals(ceiling(), t.getSeverity(), EPS);
             t.setSeverity(-1.0F);
             assertEquals(0.0F, t.getSeverity(), EPS);
         }

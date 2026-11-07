@@ -1,5 +1,6 @@
 package com.warfactory.medical.damage;
 
+import com.warfactory.medical.body.BalanceLog;
 import com.warfactory.medical.body.BodyEvents;
 import com.warfactory.medical.body.BodyHooks;
 import com.warfactory.medical.body.attachment.IMedicalData;
@@ -102,9 +103,20 @@ public final class DamageEvents {
         recordDamagingPlayer(profile, src, player);
 
         boolean alreadyDowned = profile.isDowned() || profile.getState() == HealthState.UNCONSCIOUS;
+        if (!alreadyDowned) {
+            profile.setDownedHitEnergy(0.0F);
+        }
         boolean finishDowned = alreadyDowned && MedicalConfig.finishDownedOnHit();
 
         HurtResolution res = finishDowned ? null : resolveHit(player, src, amount, profile);
+        if (alreadyDowned && res != null && !res.majorTrauma()) {
+            finishDowned = finishesDowned(profile, res);
+        }
+        if (BalanceLog.on()) {
+            profile.recompute(MedicalConfig.toPhysiologyParams());
+            BalanceLog.hit(player, src, DamageClassifier.classify(src), amount, alreadyDowned, finishDowned,
+                    res != null && res.majorTrauma(), profile);
+        }
         if (finishDowned || (res != null && res.majorTrauma())) {
             BodyEvents.markDead(player, data, profile);
             event.setAmount(Math.max(amount, player.getHealth() + 1.0F));
@@ -127,6 +139,23 @@ public final class DamageEvents {
             event.setAmount(0.0F);
         }
         return true;
+    }
+
+    /**
+     * A downed casualty is helpless, not immune: what gets through armour is added up, a head hit counting for
+     * more, and past downedFinishEnergy the next hit kills. A few more rounds end it; a graze does not.
+     */
+    private static boolean finishesDowned(MedicalProfile profile, HurtResolution res) {
+        double limit = MedicalConfig.downedFinishEnergy();
+        if (limit <= 0.0D) {
+            return false;
+        }
+        float energy = res.through();
+        if (res.primary() == LimbType.HEAD) {
+            energy *= (float) MedicalConfig.downedHeadMultiplier();
+        }
+        profile.setDownedHitEnergy(profile.getDownedHitEnergy() + energy);
+        return profile.getDownedHitEnergy() >= limit;
     }
 
     private static void recordDamagingPlayer(MedicalProfile profile, DamageSource src, ServerPlayer victim) {
@@ -153,14 +182,25 @@ public final class DamageEvents {
         float throughEnergy = (float) resolved.through();
 
         float lethal = MedicalConfig.maxHealthPoints() * (float) DamageConfig.majorTraumaFraction(cat);
+        // Armour that was damaged but not stopped still passes some of what it ate on as spall.
+        float woundEnergy = (float) resolved.through()
+                + (primaryOutcome == ArmorOutcome.REDUCED
+                ? (float) (resolved.absorbed() * MedicalConfig.armorSpallFraction()) : 0.0F);
         boolean majorTrauma = primaryOutcome != ArmorOutcome.STOPPED
                 && DamageConfig.canInstakillOnImpact(cat)
                 && throughEnergy >= lethal;
         boolean limbDowned = majorTrauma && cat == DamageCategory.BALLISTIC && !primary.isVital()
                 && MedicalConfig.enableBleedout()
                 && throughEnergy < lethal * (float) MedicalConfig.majorTraumaLimbMultiplier();
+        if (BalanceLog.on()) {
+            StringBuilder names = new StringBuilder();
+            for (LimbType lt : limbs) {
+                names.append(lt.name().toLowerCase(java.util.Locale.ROOT)).append(',');
+            }
+            BalanceLog.resolved(names.toString(), primaryOutcome, throughEnergy, lethal, limbDowned);
+        }
         if (majorTrauma && !limbDowned) {
-            return new HurtResolution(true, false, primaryOutcome);
+            return new HurtResolution(true, false, primaryOutcome, woundEnergy, primary);
         }
         if (limbDowned) {
             profile.setUnconsciousLatched(true);
@@ -173,17 +213,20 @@ public final class DamageEvents {
         for (int i = 0; i < limbs.size(); i++) {
             LimbType limb = limbs.get(i);
             ArmorOutcome outcome;
+            float absorbed;
             if (i == 0) {
                 outcome = primaryOutcome;
+                absorbed = (float) resolved.absorbed();
             } else {
                 ArmorResult onward = ArmorResolution.resolve(victim, limb, src, energy, false);
                 outcome = onward.outcome();
+                absorbed = (float) onward.absorbed();
                 energy = (float) onward.through();
             }
-            addedAny |= applyLimbTrauma(cat, outcome, limb, energy, profile, registry, nowTick, rand);
+            addedAny |= applyLimbTrauma(cat, outcome, limb, energy, absorbed, profile, registry, nowTick, rand);
             energy = (float) (energy * falloff);
         }
-        return new HurtResolution(false, addedAny || limbDowned, primaryOutcome);
+        return new HurtResolution(false, addedAny || limbDowned, primaryOutcome, woundEnergy, primary);
     }
 
     private static List<LimbType> pickLimbs(LivingEntity victim, DamageSource src, DamageCategory cat,
@@ -205,10 +248,12 @@ public final class DamageEvents {
         return limbs;
     }
 
-    private static boolean applyLimbTrauma(DamageCategory cat, ArmorOutcome outcome, LimbType limbType,
-                                           float energy, MedicalProfile profile, TraumaTypes.Lookup registry,
-                                           long nowTick, RandomSource rand) {
-        List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limbType, energy, registry, nowTick, rand);
+    /** Package-private so the balance suite can drive the wound model without an entity. */
+    static boolean applyLimbTrauma(DamageCategory cat, ArmorOutcome outcome, LimbType limbType,
+                                   float energy, float absorbed, MedicalProfile profile, TraumaTypes.Lookup registry,
+                                   long nowTick, RandomSource rand) {
+        List<Trauma> generated = TraumaGenerator.generate(cat, outcome, limbType, energy, absorbed, registry,
+                nowTick, rand);
         Limb targetLimb = profile.limb(limbType);
         targetLimb.rebuildCache();
         float beforeReduction = targetLimb.getCachedHealthReduction();
@@ -275,6 +320,10 @@ public final class DamageEvents {
         return added;
     }
 
-    public record HurtResolution(boolean majorTrauma, boolean traumaAdded, ArmorOutcome armor) {
+    public record HurtResolution(boolean majorTrauma, boolean traumaAdded, ArmorOutcome armor, float through,
+                                 LimbType primary) {
+        public HurtResolution(boolean majorTrauma, boolean traumaAdded, ArmorOutcome armor) {
+            this(majorTrauma, traumaAdded, armor, 0.0F, null);
+        }
     }
 }

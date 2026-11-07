@@ -67,6 +67,8 @@ public final class MedicalProfile {
     private transient boolean lastBroadcastDowned;
 
     private transient float deathProgress;
+    /** Energy that got through armour into this casualty since they went down; not saved. */
+    private transient float downedHitEnergy;
 
     private transient HealthState forcedState;
 
@@ -399,6 +401,14 @@ public final class MedicalProfile {
 
     public float getDeathProgress() {
         return deathProgress;
+    }
+
+    public float getDownedHitEnergy() {
+        return downedHitEnergy;
+    }
+
+    public void setDownedHitEnergy(float value) {
+        this.downedHitEnergy = value;
     }
 
     public void setDeathProgress(float value) {

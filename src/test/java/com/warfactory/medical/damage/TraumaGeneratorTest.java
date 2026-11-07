@@ -117,7 +117,8 @@ class TraumaGeneratorTest {
         void theEnergyFactorIsClampedSoAnAbsurdHitDoesNotOverflow() {
             List<Trauma> out = gen(DamageCategory.BALLISTIC, LimbType.TORSO, 1.0e6F);
             for (Trauma t : out) {
-                assertTrue(t.getSeverity() <= t.getType().getMaxSeverity(),
+                assertTrue(t.getSeverity() <= t.getType().getMaxSeverity()
+                                * (float) MedicalConfig.woundCeilingMultiplierSafe(),
                         t.getType().getId() + " exceeded its max severity");
             }
         }
@@ -150,21 +151,26 @@ class TraumaGeneratorTest {
     class Armour {
 
         @Test
-        void fullyBlockedLeavesOnlyABruise() {
-            List<Trauma> out = gen(DamageCategory.BALLISTIC, ArmorOutcome.STOPPED,
-                    LimbType.TORSO, 20.0F, Fixtures.alwaysRolls());
+        void fullyBlockedLeavesOnlyBluntTraumaThatGrowsWithWhatTheArmourAte() {
+            List<Trauma> out = TraumaGenerator.generate(DamageCategory.BALLISTIC, ArmorOutcome.STOPPED,
+                    LimbType.TORSO, 0.0F, 8.0F, registry, 0L, Fixtures.alwaysRolls());
             assertEquals(1, out.size());
-            assertEquals("bruise", out.get(0).getType().getId());
+            assertEquals("blunt_force_trauma", out.get(0).getType().getId());
+            List<Trauma> light = TraumaGenerator.generate(DamageCategory.BALLISTIC, ArmorOutcome.STOPPED,
+                    LimbType.TORSO, 0.0F, 1.0F, registry, 0L, Fixtures.alwaysRolls());
+            assertTrue(out.get(0).getSeverity() > light.get(0).getSeverity(), "a harder hit shoves harder");
             assertFalse(has(out, "internal_bleeding"), "stopped by plate means no penetrating wound");
         }
 
         @Test
-        void aPartialStopLeavesABruiseAndASmallCut() {
-            List<Trauma> out = gen(DamageCategory.BALLISTIC, ArmorOutcome.REDUCED,
-                    LimbType.TORSO, 20.0F, Fixtures.alwaysRolls());
-            assertTrue(has(out, "bruise"));
-            assertTrue(has(out, "laceration_small"));
-            assertFalse(has(out, "puncture"));
+        void aPartialStopLeavesBluntTraumaAndAWoundSizedByWhatGotThrough() {
+            List<Trauma> out = TraumaGenerator.generate(DamageCategory.BALLISTIC, ArmorOutcome.REDUCED,
+                    LimbType.TORSO, 5.0F, 5.0F, registry, 0L, Fixtures.alwaysRolls());
+            assertTrue(has(out, "blunt_force_trauma"));
+            assertTrue(has(out, "puncture"), "what got past the plate (and the spall behind it) still cuts");
+            List<Trauma> faint = TraumaGenerator.generate(DamageCategory.BALLISTIC, ArmorOutcome.REDUCED,
+                    LimbType.TORSO, 0.1F, 0.1F, registry, 0L, Fixtures.alwaysRolls());
+            assertFalse(has(faint, "puncture"), "a graze through plate is not a hole");
         }
 
         @Test

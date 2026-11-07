@@ -78,6 +78,19 @@ Each limb holds at most `maxTraumaPerLimb` (default 8) distinct `Trauma` objects
 
 ---
 
+## Lethality
+
+Tuned against `BalanceTargetsTest` (a deterministic shots-to-kill table; `./gradlew test --tests '*BalanceTargetsTest*' -i` prints it) and live soldier fights (`/wfmedical balance on` logs one `[balance]` line per hit and per state change; `tools/balance_report.py <latest.log>` turns that into hits-to-down/death per life).
+
+For the reference rifle round (~10.7 energy through, unarmoured):
+
+| | head | torso | arm / leg |
+|---|---|---|---|
+| shots to down | dies | 2 | limb disabled in 1 |
+| shots to die | 1 | 4 (2 to down + 2 into the downed casualty) | |
+
+A plate carrier turns a rifle round into spall plus blunt trauma, so a torso takes ~5 hits to down; an AP round through plate takes ~3. Wound size is `woundSeverityScale` x zone multiplier x energy; the ceiling is raised so hits keep adding. A destroyed head kills (`headDepletionInstakill`). A downed casualty is helpless, not immune: energy that gets through armour accumulates and past `downedFinishEnergy` the next hit kills (a head hit counts triple), while the bleed-out itself is slow (`bleedingRateMultiplier`, ~4 minutes from a torso downing) so a medic still has a window if nobody keeps shooting.
+
 ## Pain
 
 Pain is the most layered system. Two aggregates emerge from `Physiology.compute`:

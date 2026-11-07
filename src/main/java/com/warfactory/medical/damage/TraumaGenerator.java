@@ -42,6 +42,13 @@ public final class TraumaGenerator {
     public static List<Trauma> generate(DamageCategory cat, ArmorOutcome outcome,
                                         LimbType limb, float energy, TraumaTypes.Lookup registry,
                                         long nowTick, RandomSource rand) {
+        return generate(cat, outcome, limb, energy, 0.0F, registry, nowTick, rand);
+    }
+
+    /** @param absorbed energy the armour took off this hit: it still lands as blunt trauma */
+    public static List<Trauma> generate(DamageCategory cat, ArmorOutcome outcome,
+                                        LimbType limb, float energy, float absorbed, TraumaTypes.Lookup registry,
+                                        long nowTick, RandomSource rand) {
         List<Trauma> out = new ArrayList<>(3);
         if (registry == null || limb == null) {
             return out;
@@ -50,6 +57,11 @@ public final class TraumaGenerator {
         ArmorOutcome result = outcome == null ? ArmorOutcome.THROUGH : outcome;
         float e = Math.max(energy, 0.0F);
         float energyFactor = clampF(e * 0.1F, 0.1F, 1.5F);
+        // Wound SIZE tracks energy and where it landed; the CHANCES below (fracture, internal bleeding) keep the
+        // unscaled factor, or a harder-cutting wound would also break every bone it touched.
+        float sizeFactor = (category == DamageCategory.BALLISTIC || category == DamageCategory.EXPLOSION)
+                ? clampF(e * 0.1F, 0.1F, 4.5F) * woundScale(limb)
+                : energyFactor;
 
         switch (category) {
             case FIRE -> {
@@ -65,8 +77,8 @@ public final class TraumaGenerator {
                 return out;
             }
             case EXPLOSION -> {
-                add(out, registry, CRUSH_INJURY, TraumaCategory.CRUSH_INJURY, limb, energyFactor, nowTick);
-                add(out, registry, BURN, TraumaCategory.BURN, limb, 0.6F * energyFactor, nowTick);
+                add(out, registry, CRUSH_INJURY, TraumaCategory.CRUSH_INJURY, limb, sizeFactor, nowTick);
+                add(out, registry, BURN, TraumaCategory.BURN, limb, 0.6F * sizeFactor, nowTick);
                 maybeFracture(out, registry, limb, nowTick, rand, fractureChance(category, limb, energyFactor));
                 return out;
             }
@@ -92,12 +104,20 @@ public final class TraumaGenerator {
 
         switch (result) {
             case STOPPED -> {
-                add(out, registry, BRUISE, TraumaCategory.BRUISE, limb, 0.5F, nowTick);
+                bluntBehindArmor(out, registry, limb, absorbed, nowTick);
                 return out;
             }
             case REDUCED -> {
-                add(out, registry, BRUISE, TraumaCategory.BRUISE, limb, 0.5F, nowTick);
-                add(out, registry, LACERATION_SMALL, TraumaCategory.LACERATION, limb, 0.5F, nowTick);
+                // What got through still cuts, in proportion; what the armour ate still bruises.
+                bluntBehindArmor(out, registry, limb, absorbed, nowTick);
+                float woundEnergy = e + absorbed * (float) MedicalConfig.armorSpallFraction();
+                if (category == DamageCategory.BALLISTIC && woundEnergy >= 1.0F) {
+                    float spallSize = clampF(woundEnergy * 0.1F, 0.1F, 4.5F) * woundScale(limb);
+                    add(out, registry, PUNCTURE, TraumaCategory.PUNCTURE, limb, 0.9F * spallSize, nowTick);
+                    add(out, registry, LACERATION_LARGE, TraumaCategory.LACERATION, limb, 0.7F * spallSize, nowTick);
+                } else {
+                    add(out, registry, LACERATION_SMALL, TraumaCategory.LACERATION, limb, 0.5F, nowTick);
+                }
                 return out;
             }
             default -> {
@@ -106,8 +126,8 @@ public final class TraumaGenerator {
                     // tear it opens on the way through. The extra small laceration that used to ride along was
                     // the same wound counted a third time, so a single hit now reads as two wounds plus at most
                     // one complication (see the cap in add()).
-                    add(out, registry, PUNCTURE, TraumaCategory.PUNCTURE, limb, 0.9F * energyFactor, nowTick);
-                    add(out, registry, LACERATION_LARGE, TraumaCategory.LACERATION, limb, 0.7F * energyFactor, nowTick);
+                    add(out, registry, PUNCTURE, TraumaCategory.PUNCTURE, limb, 0.9F * sizeFactor, nowTick);
+                    add(out, registry, LACERATION_LARGE, TraumaCategory.LACERATION, limb, 0.7F * sizeFactor, nowTick);
                     // Bone before organs: a broken limb is the characteristic complication of a hit to one,
                     // and internal bleeding there is already a long shot. On the trunk there is no bone in the
                     // rig to break, so the order only decides which one survives the cap on a limb.
@@ -138,6 +158,22 @@ public final class TraumaGenerator {
                 return out;
             }
         }
+    }
+
+    private static float woundScale(LimbType limb) {
+        double zone = switch (limb) {
+            case HEAD -> MedicalConfig.woundZoneHead();
+            case TORSO -> MedicalConfig.woundZoneTorso();
+            default -> MedicalConfig.woundZoneLimb();
+        };
+        return (float) (MedicalConfig.woundSeverityScale() * zone);
+    }
+
+    private static void bluntBehindArmor(List<Trauma> out, TraumaTypes.Lookup registry, LimbType limb,
+                                         float absorbed, long nowTick) {
+        // blunt_force_trauma is current-health damage that heals on its own: plate stops the round, not the shove.
+        float sev = clampF(0.05F + absorbed * (float) MedicalConfig.behindArmorBlunt(), 0.05F, 0.6F);
+        add(out, registry, BLUNT_FORCE_TRAUMA, TraumaCategory.BRUISE, limb, sev, nowTick);
     }
 
     private static float fractureChance(DamageCategory cat, LimbType limb, float energyFactor) {

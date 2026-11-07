@@ -96,6 +96,9 @@ public final class MedicalEngine {
         boolean wasDirty = profile.isDirty();
         HealthState beforeState = profile.getState();
         DerivedStats stats = settle(profile, params, nowTick);
+        if (stats.state() != beforeState && BalanceLog.on()) {
+            BalanceLog.transition(player, beforeState, stats.state(), profile);
+        }
         if (AhfConfig.logHitDetection() && stats.state() != beforeState) {
             WFMedical.LOGGER.info("[{}] state transition: {} {} -> {} at tick {} (health={})", WFMedical.MOD_ID,
                     player.getName().getString(), beforeState, stats.state(), nowTick,

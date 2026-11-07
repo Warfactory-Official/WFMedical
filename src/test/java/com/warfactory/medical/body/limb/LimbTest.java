@@ -136,7 +136,8 @@ class LimbTest {
 
         @Test
         void mergingIntoAMaxedWoundStacksInsteadOfBeingLost() {
-            limb.tryMerge(trauma("laceration_small", 1.0F), 8);
+            float ceiling = (float) com.warfactory.medical.body.MedicalConfig.woundCeilingMultiplierSafe();
+            limb.tryMerge(trauma("laceration_small", ceiling), 8);
             limb.tryMerge(trauma("laceration_small", 0.5F), 8);
             assertEquals(2, limb.getTraumas().size(),
                     "a full-severity wound cannot absorb more, so the damage must land as a second wound");

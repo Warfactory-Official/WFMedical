@@ -136,7 +136,7 @@ public record PhysiologyParams(
                 0.20F,      // tourniquetBleedMultiplier
                 0.85F,      // tourniquetLegSpeedMultiplier
                 0.95F,      // tourniquetArmSpeedMultiplier
-                false,      // headDepletionInstakill
+                true,       // headDepletionInstakill
                 false,      // torsoDepletionInstakill
                 0.50D,      // bleedingRateMultiplier
                 true,       // cardiacOutputEnabled
