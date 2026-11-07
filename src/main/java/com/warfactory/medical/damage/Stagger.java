@@ -14,20 +14,13 @@ public final class Stagger {
 
     /** Body part sections of the engine's {@code body_parts_section_id}. */
     public enum Zone {
-        HEAD(0.45F, 12), TORSO(0.30F, 10), ARM_L(0.18F, 8), ARM_R(0.18F, 8), LEG_L(0.22F, 14), LEG_R(0.22F, 14);
+        HEAD(0.45F), TORSO(0.30F), ARM_L(0.18F), ARM_R(0.18F), LEG_L(0.22F), LEG_R(0.22F);
 
         /** Meter gain per {@link #REFERENCE_ENERGY} of impact. */
         final float weight;
-        /** Stagger length, ticks. */
-        final int ticks;
 
-        Zone(float weight, int ticks) {
+        Zone(float weight) {
             this.weight = weight;
-            this.ticks = ticks;
-        }
-
-        public int ticks() {
-            return ticks;
         }
 
         public boolean isLeg() {

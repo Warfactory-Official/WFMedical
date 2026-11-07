@@ -8,10 +8,11 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * A hit's body reaction for player {@code entityId}, to its trackers and itself. {@code front}/{@code side}: unit
- * direction to the attacker in the victim's frame (front + = ahead, side + = its right); {@code strength} in [0, 1].
+ * direction to the attacker in the victim's frame (front + = ahead, side + = its right); {@code strength} in [0, 1];
+ * {@code variant}: which stagger clip of the body part ({@link HitClips#staggerClip}).
  */
 public record HitReactionPacket(int entityId, Stagger.Zone zone, boolean stagger, float front, float side,
-                                float strength) implements CustomPacketPayload {
+                                float strength, int variant) implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<HitReactionPacket> TYPE =
             new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "hit_reaction"));
@@ -26,7 +27,7 @@ public record HitReactionPacket(int entityId, Stagger.Zone zone, boolean stagger
 
     public static HitReactionPacket decode(FriendlyByteBuf buf) {
         return new HitReactionPacket(buf.readVarInt(), buf.readEnum(Stagger.Zone.class), buf.readBoolean(),
-                buf.readFloat(), buf.readFloat(), buf.readFloat());
+                buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readVarInt());
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -36,5 +37,6 @@ public record HitReactionPacket(int entityId, Stagger.Zone zone, boolean stagger
         buf.writeFloat(front);
         buf.writeFloat(side);
         buf.writeFloat(strength);
+        buf.writeVarInt(variant);
     }
 }

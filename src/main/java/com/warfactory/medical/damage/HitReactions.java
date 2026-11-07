@@ -59,8 +59,10 @@ public final class HitReactions {
         long now = victim.level().getGameTime();
         State st = STATES.computeIfAbsent(victim, v -> new State());
         float jitter = 0.75F + 0.5F * victim.getRandom().nextFloat();
+        // The engine picks among a part's stagger clips by critical_wound_weights (100, 50).
+        int variant = victim.getRandom().nextInt(3) == 0 ? 1 : 0;
         boolean stagger = st.meter.add(Stagger.power(impact, zone, jitter), now, (float) MedicalConfig.staggerThreshold(),
-                (float) MedicalConfig.staggerDecayPerSecond() / 20.0F, zone.ticks());
+                (float) MedicalConfig.staggerDecayPerSecond() / 20.0F, HitClips.staggerTicks(zone, variant));
         float strength = Mth.clamp(impact / Stagger.REFERENCE_ENERGY, 0.2F, 1.0F);
 
         Vec3 from = src == null ? null : src.getSourcePosition();
@@ -81,15 +83,15 @@ public final class HitReactions {
                     victim.getGameProfile().getName(), zone, impact, stagger);
         }
         if (stagger) {
-            stagger(victim, st, zone, strength, now, dx, dz, len > 1.0E-3D);
+            stagger(victim, st, zone, variant, strength, now, dx, dz, len > 1.0E-3D);
         }
         PacketDistributor.sendToPlayersTrackingEntityAndSelf(victim,
-                new HitReactionPacket(victim.getId(), zone, stagger, front, side, strength));
+                new HitReactionPacket(victim.getId(), zone, stagger, front, side, strength, variant));
     }
 
-    private static void stagger(ServerPlayer victim, State st, Stagger.Zone zone, float strength, long now,
+    private static void stagger(ServerPlayer victim, State st, Stagger.Zone zone, int variant, float strength, long now,
                                 double awayX, double awayZ, boolean hasDir) {
-        st.staggerUntil = now + zone.ticks();
+        st.staggerUntil = now + HitClips.staggerTicks(zone, variant);
         AttributeInstance speed = victim.getAttribute(Attributes.MOVEMENT_SPEED);
         if (speed != null) {
             speed.removeModifier(SLOW_ID);

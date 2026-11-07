@@ -50,21 +50,24 @@ public final class DamageCommands {
                         ctx.getSource().sendSuccess(() -> Component.literal("[wfmedical] balance telemetry off"), false);
                         return 1;
                     })));
-            root.then(Commands.literal("reaction")
-                    .then(Commands.argument("target", net.minecraft.commands.arguments.EntityArgument.player())
-                            .then(Commands.argument("zone", com.mojang.brigadier.arguments.StringArgumentType.word())
-                                    .then(Commands.argument("front", com.mojang.brigadier.arguments.FloatArgumentType.floatArg(-1.0F, 1.0F))
-                                            .then(Commands.argument("side", com.mojang.brigadier.arguments.FloatArgumentType.floatArg(-1.0F, 1.0F))
-                                                    .executes(ctx -> {
-                                                        var target = net.minecraft.commands.arguments.EntityArgument.getPlayer(ctx, "target");
-                                                        var zone = Stagger.Zone.valueOf(com.mojang.brigadier.arguments.StringArgumentType
-                                                                .getString(ctx, "zone").toUpperCase(java.util.Locale.ROOT));
-                                                        net.neoforged.neoforge.network.PacketDistributor.sendToPlayersTrackingEntityAndSelf(target,
-                                                                new HitReactionPacket(target.getId(), zone, true,
-                                                                        com.mojang.brigadier.arguments.FloatArgumentType.getFloat(ctx, "front"),
-                                                                        com.mojang.brigadier.arguments.FloatArgumentType.getFloat(ctx, "side"), 1.0F));
-                                                        return 1;
-                                                    }))))));
+            for (String mode : new String[] {"reaction", "flinch"}) {
+                boolean stagger = mode.equals("reaction");
+                root.then(Commands.literal(mode)
+                        .then(Commands.argument("target", net.minecraft.commands.arguments.EntityArgument.player())
+                                .then(Commands.argument("zone", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                        .then(Commands.argument("front", com.mojang.brigadier.arguments.FloatArgumentType.floatArg(-1.0F, 1.0F))
+                                                .then(Commands.argument("side", com.mojang.brigadier.arguments.FloatArgumentType.floatArg(-1.0F, 1.0F))
+                                                        .executes(ctx -> {
+                                                            var target = net.minecraft.commands.arguments.EntityArgument.getPlayer(ctx, "target");
+                                                            var zone = Stagger.Zone.valueOf(com.mojang.brigadier.arguments.StringArgumentType
+                                                                    .getString(ctx, "zone").toUpperCase(java.util.Locale.ROOT));
+                                                            net.neoforged.neoforge.network.PacketDistributor.sendToPlayersTrackingEntityAndSelf(target,
+                                                                    new HitReactionPacket(target.getId(), zone, stagger,
+                                                                            com.mojang.brigadier.arguments.FloatArgumentType.getFloat(ctx, "front"),
+                                                                            com.mojang.brigadier.arguments.FloatArgumentType.getFloat(ctx, "side"), 1.0F, 0));
+                                                            return 1;
+                                                        }))))));
+            }
             root.then(Commands.literal("hittest")
                     .executes(ctx -> cmdHitTest(ctx.getSource(), 0.0D))
                     .then(Commands.argument("maxDist", DoubleArgumentType.doubleArg(0.0D))

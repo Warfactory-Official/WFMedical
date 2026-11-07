@@ -37,7 +37,7 @@ public class HitReactionGameTest {
         helper.assertTrue(HitReactions.isStaggered(v), "head hit did not stagger");
         helper.assertTrue(v.getAttribute(Attributes.MOVEMENT_SPEED).hasModifier(
                 ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "stagger")), "no slow while staggered");
-        helper.runAfterDelay(Stagger.Zone.HEAD.ticks() + 6, () -> {
+        helper.runAfterDelay(com.warfactory.medical.damage.HitClips.staggerTicks(Stagger.Zone.HEAD, 0) + 6, () -> {
             helper.assertTrue(!HitReactions.isStaggered(v), "still staggered");
             helper.assertTrue(!v.getAttribute(Attributes.MOVEMENT_SPEED).hasModifier(
                     ResourceLocation.fromNamespaceAndPath(WFMedical.MOD_ID, "stagger")), "slow not removed");

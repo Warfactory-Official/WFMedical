@@ -15,7 +15,7 @@ class StaggerTest {
     private static final float RIFLE = 10.66F;
 
     private static boolean hit(Stagger.Meter m, Stagger.Zone z, float energy, float jitter, long tick) {
-        return m.add(Stagger.power(energy, z, jitter), tick, THRESHOLD, DECAY, z.ticks());
+        return m.add(Stagger.power(energy, z, jitter), tick, THRESHOLD, DECAY, 20);
     }
 
     @Test
