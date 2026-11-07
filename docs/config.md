@@ -76,6 +76,7 @@ Client (`wfmedical-client.toml`, `[stress]`): `shakeStrength` (1.0; 0 disables),
 | `lethality.majorTraumaFractionBlunt` | `1.1` | Instant-kill fraction for `BLUNT` (requires a hit heavier than full health). |
 | `lethality.majorTraumaFractionUnarmed` | `3.0` | Instant-kill fraction for `UNARMED` – effectively disabled. |
 | `lethality.majorTraumaFractionFall` | `1.5` | Instant-kill fraction for `FALL` – only catastrophic falls. |
+| `lethality.majorTraumaLimbMultiplier` | `1.5` | `BALLISTIC` into arm/leg: kill only at this × ballistic fraction; between => limb wrecked, downed (latched UNCONSCIOUS, bleed-out). Head/torso unaffected. `1.0` = old behaviour. Bleed-out off => ignored. |
 | `finishDownedOnHit` | `false` | If true, any real damage to an already UNCONSCIOUS player kills them. Off by default so a downed player can be revived. |
 | `maxTraumaPerLimb` | `6` | Hard cap on distinct trauma objects per limb; excess is merged. |
 | `maxLacerationsPerLimb` | `2` | Most lacerations (small + large) on one limb; a further one is folded into the worst existing laceration. 0 = no limit. |

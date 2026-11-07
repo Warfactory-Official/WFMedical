@@ -17,7 +17,7 @@ HEALTHY → CRITICAL → UNCONSCIOUS → DEAD
 
 Ordinal order `HEALTHY < CRITICAL < UNCONSCIOUS < DEAD` is load-bearing – it governs severity comparisons for admin-forced state overrides and is the NBT serialization contract.
 
-There is no `lethalBlowsEnabled` toggle. Instant death from a single hit is **intrinsic**: a hit the medical armor did not fully block whose raw damage reaches `majorTraumaFraction(category) × maxHealthPoints` kills on impact, regardless of current health (see [mechanics](mechanics.md#death-vs-unconsciousness)).
+There is no `lethalBlowsEnabled` toggle. Instant death from a single hit is **intrinsic**: a hit the medical armor did not fully block whose raw damage reaches `majorTraumaFraction(category) × maxHealthPoints` kills on impact, regardless of current health; `BALLISTIC` into an arm/leg below `majorTraumaLimbMultiplier` × that downs instead (see [mechanics](mechanics.md#death-vs-unconsciousness)).
 
 ## The six body parts
 

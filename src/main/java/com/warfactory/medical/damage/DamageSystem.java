@@ -26,5 +26,8 @@ public final class DamageSystem implements MedicalSystem {
         ExoBridge.register();
         NeoForge.EVENT_BUS.register(DamageEvents.class);
         DamageCommands.register();
+        if (com.wf.wflib.core.api.WFSystems.enabled("wflib:labs")) {
+            com.warfactory.medical.lab.MedicalLabs.register();
+        }
     }
 }
