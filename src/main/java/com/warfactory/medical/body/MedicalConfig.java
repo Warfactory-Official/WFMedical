@@ -46,6 +46,10 @@ public final class MedicalConfig {
     private static final ModConfigSpec.DoubleValue RESOLVE_HEALTH_FRACTION;
     private static final ModConfigSpec.DoubleValue DOWNED_FINISH_ENERGY;
     private static final ModConfigSpec.DoubleValue DOWNED_HEAD_MULTIPLIER;
+    private static final ModConfigSpec.BooleanValue HIT_REACTIONS;
+    private static final ModConfigSpec.DoubleValue STAGGER_THRESHOLD;
+    private static final ModConfigSpec.DoubleValue STAGGER_DECAY_PER_SECOND;
+    private static final ModConfigSpec.DoubleValue STAGGER_SLOW;
     private static final ModConfigSpec.BooleanValue EFFECT_IMMUNE_IN_CREATIVE;
     private static final ModConfigSpec.BooleanValue MANAGE_NATURAL_REGEN;
     private static final ModConfigSpec.IntValue MAX_TRAUMA_PER_LIMB;
@@ -611,6 +615,18 @@ public final class MedicalConfig {
         DOWNED_HEAD_MULTIPLIER = b
                 .comment("How much more a hit to the head of a downed casualty counts toward downedFinishEnergy.")
                 .defineInRange("downedHeadMultiplier", 3.0D, 1.0D, 100.0D);
+        HIT_REACTIONS = b
+                .comment("Hits flinch the victim's body (direction + body part) and can stagger them (xray-monolith critical-hit stagger): briefly slowed, aim kicked off target. False = no reactions at all.")
+                .define("hitReactions", true);
+        STAGGER_THRESHOLD = b
+                .comment("Stagger meter level that triggers a stagger. A rifle round adds ~0.48 to the head, ~0.32 to the torso, ~0.2 to a limb (scaled by energy through armour), so lower = staggers more often.")
+                .defineInRange("staggerThreshold", 0.35D, 0.01D, 10.0D);
+        STAGGER_DECAY_PER_SECOND = b
+                .comment("How fast the stagger meter drains (units per second). Fast bursts stack; spaced single shots do not.")
+                .defineInRange("staggerDecayPerSecond", 0.25D, 0.0D, 10.0D);
+        STAGGER_SLOW = b
+                .comment("Share of walking speed lost while staggered (legs: +0.3, capped at 0.9).")
+                .defineInRange("staggerSlow", 0.55D, 0.0D, 0.9D);
         MAX_TRAUMA_PER_LIMB = b
                 .comment("Hard cap on distinct trauma objects per limb; excess compatible trauma is merged.")
                 .defineInRange("maxTraumaPerLimb", 6, 1, 64);
@@ -833,6 +849,10 @@ public final class MedicalConfig {
         final double resolveHealthFraction = RESOLVE_HEALTH_FRACTION.get();
         final double downedFinishEnergy = DOWNED_FINISH_ENERGY.get();
         final double downedHeadMultiplier = DOWNED_HEAD_MULTIPLIER.get();
+        final boolean hitReactions = HIT_REACTIONS.get();
+        final double staggerThreshold = STAGGER_THRESHOLD.get();
+        final double staggerDecayPerSecond = STAGGER_DECAY_PER_SECOND.get();
+        final double staggerSlow = STAGGER_SLOW.get();
         final boolean effectImmuneInCreative = EFFECT_IMMUNE_IN_CREATIVE.get();
         final boolean manageNaturalRegen = MANAGE_NATURAL_REGEN.get();
         final int maxTraumaPerLimb = MAX_TRAUMA_PER_LIMB.get();
@@ -1380,6 +1400,22 @@ public final class MedicalConfig {
 
     public static double downedHeadMultiplier() {
         return v().downedHeadMultiplier;
+    }
+
+    public static boolean hitReactions() {
+        return v().hitReactions;
+    }
+
+    public static double staggerThreshold() {
+        return v().staggerThreshold;
+    }
+
+    public static double staggerDecayPerSecond() {
+        return v().staggerDecayPerSecond;
+    }
+
+    public static double staggerSlow() {
+        return v().staggerSlow;
     }
 
     /** The wound ceiling multiplier, or 1 before the config is loaded (pure unit tests). */

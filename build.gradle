@@ -218,6 +218,11 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
     maven {
+        name = 'KosmX'
+        url = 'https://maven.kosmx.dev/'
+        content { includeGroup 'dev.kosmx.player-anim' }
+    }
+    maven {
         name = 'Modrinth'
         url = 'https://api.modrinth.com/maven'
         content { includeGroup 'maven.modrinth' }
@@ -266,6 +271,8 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     implementation "com.norwood:ahf-1.21.1-neoforge:${ahf_version}-SNAPSHOT"
+    // Hit-reaction body animation layer; the mod is a hard dependency of AHF, so it is on every real client.
+    compileOnly "dev.kosmx.player-anim:player-animation-lib-forge:${playeranimator_version}"
 
     implementation "com.wf.wflib:wflib:${wflib_version}-SNAPSHOT"
     // Pin the optional integration to the shipped APIs; neither third-party mod is bundled.

@@ -85,6 +85,10 @@ Client (`wfmedical-client.toml`, `[stress]`): `shakeStrength` (1.0; 0 disables),
 | `downedFinishEnergy` | `14.0` | Energy that gets through armour into a downed casualty before they die (head hits count `downedHeadMultiplier` times). 0 = downed casualties are immune to hits. Ignored if `finishDownedOnHit` is true. |
 | `resolveHealthFraction` | `0.65` | A ballistic hit that would kill a casualty at or above this fraction of full health downs them instead (STALKER GAMMA's "resolve"). 0 = off. |
 | `downedHeadMultiplier` | `3.0` | How much more a head hit counts toward `downedFinishEnergy`. |
+| `hitReactions` | `true` | Hits flinch the victim's body and can stagger them (see Hit reactions in mechanics.md). `false` = none. |
+| `staggerThreshold` | `0.35` | Stagger meter level that triggers a stagger. Lower = staggers more often. |
+| `staggerDecayPerSecond` | `0.25` | How fast the meter drains. Bursts stack, spaced single shots do not. |
+| `staggerSlow` | `0.55` | Share of walking speed lost while staggered (legs +0.3, cap 0.9). |
 | `finishDownedOnHit` | `false` | If true, any real damage to an already UNCONSCIOUS player kills them outright. Off by default: a downed player instead dies once `downedFinishEnergy` has gone through. |
 | `maxTraumaPerLimb` | `6` | Hard cap on distinct trauma objects per limb; excess is merged. |
 | `maxLacerationsPerLimb` | `2` | Most lacerations (small + large) on one limb; a further one is folded into the worst existing laceration. 0 = no limit. |
