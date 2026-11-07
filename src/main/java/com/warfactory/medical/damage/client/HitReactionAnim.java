@@ -78,6 +78,13 @@ public final class HitReactionAnim {
     private static final float FLINCH_GAIN = 1.5F;
     private static final float MAX_WEIGHT = 1.6F;
     private static final float MAX_BEND = 1.05F;
+    /** The clip is a stalker skeleton collapsing; the player model has no spine, neck or knees to follow it that far. */
+    private static final java.util.Map<String, Float> MAX_TURN = java.util.Map.of(
+            "torso", (float) Math.toRadians(60), "head", (float) Math.toRadians(55), "rightArm", (float) Math.toRadians(75),
+            "leftArm", (float) Math.toRadians(75), "rightLeg", (float) Math.toRadians(45), "leftLeg", (float) Math.toRadians(45));
+    /** Blocks the hips may drop (y, down) and drift (x, z) in a stagger. */
+    private static final float MAX_DROP = 0.32F;
+    private static final float MAX_DRIFT = 0.12F;
     /** Share of a clip's end it eases out over, so a clip that finishes off-rest still lands back at the pose. */
     private static final float EASE_OUT = 0.12F;
 
@@ -167,6 +174,12 @@ public final class HitReactionAnim {
                     offset[i] += (p0[i] + (p1[i] - p0[i]) * a) * w;
                 }
             }
+            for (String part : PARTS) {
+                hold(rotation.get(part), MAX_TURN.get(part));
+            }
+            offset[0] = Math.max(-MAX_DRIFT, Math.min(MAX_DRIFT, offset[0] * 0.5F));
+            offset[1] = Math.max(-0.05F, Math.min(MAX_DROP, offset[1]));
+            offset[2] = Math.max(-MAX_DRIFT, Math.min(MAX_DRIFT, offset[2] * 0.5F));
             // PlayerAnimator leans the whole upper body about the waist as a "bend" (head and arms ride in it) and turns
             // the torso part about the spine; so split the torso's world rotation into a tilt and a twist.
             Quaternionf torso = rotation.get("torso");
@@ -181,6 +194,14 @@ public final class HitReactionAnim {
             Quaternionf inverse = new Quaternionf(swing).invert();
             for (String part : new String[] {"head", "rightArm", "leftArm"}) {
                 rotation.put(part, new Quaternionf(inverse).mul(rotation.get(part)));
+            }
+        }
+
+        /** {@code q} turned no further than {@code max} radians from rest. */
+        private static void hold(Quaternionf q, float max) {
+            float angle = 2.0F * (float) Math.acos(Math.min(1.0F, Math.abs(q.w)));
+            if (angle > max) {
+                q.set(new Quaternionf().slerp(q.w < 0 ? new Quaternionf(-q.x, -q.y, -q.z, -q.w) : q, max / angle));
             }
         }
 
