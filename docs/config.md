@@ -77,12 +77,13 @@ Client (`wfmedical-client.toml`, `[stress]`): `shakeStrength` (1.0; 0 disables),
 | `lethality.majorTraumaFractionUnarmed` | `3.0` | Instant-kill fraction for `UNARMED` – effectively disabled. |
 | `lethality.majorTraumaFractionFall` | `1.5` | Instant-kill fraction for `FALL` – only catastrophic falls. |
 | `lethality.majorTraumaLimbMultiplier` | `1.5` | `BALLISTIC` into arm/leg: kill only at this × ballistic fraction; between => limb wrecked, downed (latched UNCONSCIOUS, bleed-out). Head/torso unaffected. `1.0` = old behaviour. Bleed-out off => ignored. |
-| `woundSeverityScale` | `2.2` | Multiplier on the size of every ballistic/explosive wound (energy -> severity). The main lethality dial. |
+| `woundSeverityScale` | `1.7` | Multiplier on the size of every ballistic/explosive wound (energy -> severity). The main lethality dial. |
 | `woundCeilingMultiplier` | `3.0` | Raises the severity ceiling of puncture/laceration/crush/burn wounds so repeated hits to one limb keep adding instead of saturating. |
-| `woundZoneHead` / `woundZoneTorso` / `woundZoneLimb` | `1.5` / `0.9` / `1.0` | Wound size by hit zone. |
+| `woundZoneHead` / `woundZoneTorso` / `woundZoneLimb` | `1.25` / `0.75` / `0.85` | Wound size by hit zone. |
 | `armorSpallFraction` | `0.35` | Share of the energy a damaged-but-not-stopped (REDUCED) armour absorbed that still wounds. 0 = unpierced armour is immunity; higher = plate buys shots. |
 | `behindArmorBlunt` | `0.045` | Blunt-trauma severity per point of energy the armour absorbed (self-healing current-health damage; capped at 0.6 per hit). |
 | `downedFinishEnergy` | `14.0` | Energy that gets through armour into a downed casualty before they die (head hits count `downedHeadMultiplier` times). 0 = downed casualties are immune to hits. Ignored if `finishDownedOnHit` is true. |
+| `resolveHealthFraction` | `0.65` | A ballistic hit that would kill a casualty at or above this fraction of full health downs them instead (STALKER GAMMA's "resolve"). 0 = off. |
 | `downedHeadMultiplier` | `3.0` | How much more a head hit counts toward `downedFinishEnergy`. |
 | `finishDownedOnHit` | `false` | If true, any real damage to an already UNCONSCIOUS player kills them outright. Off by default: a downed player instead dies once `downedFinishEnergy` has gone through. |
 | `maxTraumaPerLimb` | `6` | Hard cap on distinct trauma objects per limb; excess is merged. |

@@ -2,7 +2,7 @@
 """Summarise [balance] telemetry (/wfmedical balance on) from a latest.log: shots to down / to death per life."""
 import re, sys, collections
 log = sys.argv[1]
-hit = re.compile(r'\[balance\] tick=(\d+) victim=(\S+) by=(\S+) cat=(\S+) in=([\d.]+) limbs=(\S*) armor=(\S+) through=([\d.]+) lethal=([\d.]+) limbDown=(\S+) wasDowned=(\S+) finish=(\S+) instakill=(\S+) state=(\S+) blood=(\d+)')
+hit = re.compile(r'\[balance\] tick=(\d+) victim=(\S+) by=(\S+) src=(\S+) cat=(\S+) in=([\d.]+) limbs=(\S*) armor=(\S+) through=([\d.]+) lethal=([\d.]+) limbDown=(\S+) wasDowned=(\S+) finish=(\S+) instakill=(\S+) state=(\S+) blood=(\d+)')
 tr = re.compile(r'\[balance\] tick=(\d+) victim=(\S+) transition (\S+) -> (\S+) blood=(\d+)')
 class Life:
     def __init__(s): s.hits=[]; s.down=None; s.dead=None; s.start=None; s.expl=0
@@ -15,7 +15,7 @@ def get(v, t):
 for line in open(log, errors="replace"):
     m = hit.search(line)
     if m:
-        t, v, by, cat, amt, limbs, armor, thr, lethal, ld, wd, fin, ik, st, blood = m.groups()
+        t, v, by, srcid, cat, amt, limbs, armor, thr, lethal, ld, wd, fin, ik, st, blood = m.groups()
         t = int(t)
         if float(amt) > 1000:      # the engine's own kill() call, not a hit
             continue

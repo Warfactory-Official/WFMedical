@@ -80,16 +80,18 @@ Each limb holds at most `maxTraumaPerLimb` (default 8) distinct `Trauma` objects
 
 ## Lethality
 
-Tuned against `BalanceTargetsTest` (a deterministic shots-to-kill table; `./gradlew test --tests '*BalanceTargetsTest*' -i` prints it) and live soldier fights (`/wfmedical balance on` logs one `[balance]` line per hit and per state change; `tools/balance_report.py <latest.log>` turns that into hits-to-down/death per life).
+Calibrated against STALKER GAMMA's Body Health System (limb HP head 11 / torso 11 / arm and leg 5, so a rifle round wrecks a limb in ~2 hits, a head in 2-3 and a torso in 4-6; limb hits never kill by themselves; "resolve" stops a healthy actor being one-tapped; bleeding is a roll, not a certainty) and xray-monolith's per-bone damage factor with a residual fraction through non-penetrated armour.
+
+Tuned with `BalanceTargetsTest` (a deterministic shots-to-kill table, printed by `./gradlew test --tests '*BalanceTargetsTest*' -i`) and live soldier fights (`/wfmedical balance on` logs one `[balance]` line per hit and per state change; `tools/balance_report.py <latest.log>` turns that into hits-to-down/death per life).
 
 For the reference rifle round (~10.7 energy through, unarmoured):
 
 | | head | torso | arm / leg |
 |---|---|---|---|
-| shots to down | dies | 2 | limb disabled in 1 |
-| shots to die | 1 | 4 (2 to down + 2 into the downed casualty) | |
+| hits to down | 2 | 3 | limb disabled in 2 |
+| hits to die | 3 | 5 | |
 
-A plate carrier turns a rifle round into spall plus blunt trauma, so a torso takes ~5 hits to down; an AP round through plate takes ~3. Wound size is `woundSeverityScale` x zone multiplier x energy; the ceiling is raised so hits keep adding. A destroyed head kills (`headDepletionInstakill`). A downed casualty is helpless, not immune: energy that gets through armour accumulates and past `downedFinishEnergy` the next hit kills (a head hit counts triple), while the bleed-out itself is slow (`bleedingRateMultiplier`, ~4 minutes from a torso downing) so a medic still has a window if nobody keeps shooting.
+Centre-mass fire downs in ~5 rounds and kills in ~7. A plate carrier turns a rifle round into spall plus blunt trauma (~6 torso hits to down); an AP round through plate takes ~4. Wound size is `woundSeverityScale` x zone multiplier x energy; the severity ceiling is raised so hits keep adding. **Resolve:** a hit that would kill a casualty at or above `resolveHealthFraction` of full health downs them instead, so the *next* hit is the lethal one. A downed casualty is helpless, not immune: only hits an attacker landed count, the energy that gets through armour accumulates (a head hit triple), and past `downedFinishEnergy` the next hit kills. The bleed-out itself is slow (`bleedingRateMultiplier`, ~4 minutes from a torso downing) so a medic has a window if nobody keeps shooting.
 
 ## Pain
 

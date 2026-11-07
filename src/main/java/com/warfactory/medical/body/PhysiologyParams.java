@@ -131,12 +131,12 @@ public record PhysiologyParams(
                 0.30F,      // stimulantSpeedBonus
                 0.35F,      // healthShareHead
                 0.55F,      // healthShareTorso
-                0.12F,      // healthShareArm
-                0.18F,      // healthShareLeg
+                0.25F,      // healthShareArm
+                0.25F,      // healthShareLeg
                 0.20F,      // tourniquetBleedMultiplier
                 0.85F,      // tourniquetLegSpeedMultiplier
                 0.95F,      // tourniquetArmSpeedMultiplier
-                true,       // headDepletionInstakill
+                false,      // headDepletionInstakill
                 false,      // torsoDepletionInstakill
                 0.50D,      // bleedingRateMultiplier
                 true,       // cardiacOutputEnabled

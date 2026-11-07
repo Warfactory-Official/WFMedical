@@ -309,9 +309,9 @@ class PhysiologyTest {
 
         @Test
         void aLimbCannotDrainMoreThanItsConfiguredShare() {
-            // internal_bleeding is 5.0/severity on a max-1.0 severity, so a fully-severe arm asks for 5.0
-            // points; the arm's share is 0.12 * 30 = 3.6. The cap is what stops one limb ending a player.
-            Fixtures.wound(profile, registry, LimbType.LEFT_ARM, "internal_bleeding", 1.0F);
+            // A fully-severe laceration_large is 4.0 per severity up to a ceiling of 3.0x, so one arm asks for far
+            // more than its share (0.25 * 30 = 7.5). The cap is what stops one limb ending a player.
+            Fixtures.wound(profile, registry, LimbType.LEFT_ARM, "laceration_large", 3.0F);
             float cap = params.healthShareArm() * params.maxHealthPoints();
             assertEquals(cap, compute().healthModifier(), EPS);
         }

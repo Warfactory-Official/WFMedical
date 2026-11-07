@@ -43,6 +43,7 @@ public final class MedicalConfig {
     private static final ModConfigSpec.DoubleValue WOUND_ZONE_LIMB;
     private static final ModConfigSpec.DoubleValue BEHIND_ARMOR_BLUNT;
     private static final ModConfigSpec.DoubleValue ARMOR_SPALL_FRACTION;
+    private static final ModConfigSpec.DoubleValue RESOLVE_HEALTH_FRACTION;
     private static final ModConfigSpec.DoubleValue DOWNED_FINISH_ENERGY;
     private static final ModConfigSpec.DoubleValue DOWNED_HEAD_MULTIPLIER;
     private static final ModConfigSpec.BooleanValue EFFECT_IMMUNE_IN_CREATIVE;
@@ -256,11 +257,11 @@ public final class MedicalConfig {
                 .comment("Max SHARE of the FULL health bar a fully-destroyed ARM can remove (per arm). Small: an arm "
                         + "cannot cost your life directly, but a drained arm is disabled and overflows into bleeding. "
                         + "Default 0.12.")
-                .defineInRange("healthShareArm", 0.12D, 0.0D, 1.0D);
+                .defineInRange("healthShareArm", 0.25D, 0.0D, 1.0D);
         HEALTH_SHARE_LEG = b
                 .comment("Max SHARE of the FULL health bar a fully-destroyed LEG can remove (per leg). A drained leg "
                         + "is disabled; both legs drained forces a crawl. Default 0.18.")
-                .defineInRange("healthShareLeg", 0.18D, 0.0D, 1.0D);
+                .defineInRange("healthShareLeg", 0.25D, 0.0D, 1.0D);
         BLEEDING_RATE_MULTIPLIER = b
                 .comment("Global multiplier on ALL wound bleeding rates -- i.e. how fast blood (and thus life) "
                         + "drains from every wound at once. 1.0 = raw per-wound rates; 0.5 = bleed out half as fast. "
@@ -510,7 +511,7 @@ public final class MedicalConfig {
         ENABLE_BLEEDING = b.comment("Master toggle for bleeding / blood loss.").define("enableBleeding", true);
         ENABLE_PAIN = b.comment("Master toggle for the pain system.").define("enablePain", true);
         ENABLE_BLEEDOUT = b.comment("If true, lethal conditions render the player unconscious (bleed-out) instead of instant death.").define("enableBleedout", true);
-        HEAD_DEPLETION_INSTAKILL = b.comment("If true, fully depleting the HEAD's health kills the player OUTRIGHT (bypasses bleed-out/downing). Default true -> a destroyed head is a kill; false -> it downs the player.").define("headDepletionInstakill", true);
+        HEAD_DEPLETION_INSTAKILL = b.comment("If true, fully depleting the HEAD's health kills the player OUTRIGHT (bypasses bleed-out/downing). Default false -> a destroyed head downs the player (the next hit finishes them, see downedFinishEnergy); true -> it kills outright.").define("headDepletionInstakill", false);
         TORSO_DEPLETION_INSTAKILL = b.comment("If true, fully depleting the TORSO's health kills the player OUTRIGHT (bypasses bleed-out/downing). Default false -> a destroyed torso downs the player.").define("torsoDepletionInstakill", false);
         ENABLE_GIVE_UP = b.comment("If true, a downed (unconscious / bleeding-out) player may HOLD the 'Give Up' key to die instantly and reach the respawn screen.").define("enableGiveUp", true);
         GIVE_UP_HOLD_TICKS = b.comment("How long (ticks) a downed player must HOLD the 'Give Up' key before dying (20 ticks = 1 second). Default 40 (2 seconds).").defineInRange("giveUpHoldTicks", 40, 1, 1200);
@@ -578,19 +579,24 @@ public final class MedicalConfig {
                 .define("finishDownedOnHit", false);
         WOUND_SEVERITY_SCALE = b
                 .comment("Multiplier on the severity of every ballistic and explosive wound (energy -> wound size). Raise it to make each hit that gets past armour cut deeper. Pairs with woundCeilingMultiplier.")
-                .defineInRange("woundSeverityScale", 2.2D, 0.1D, 20.0D);
+                .defineInRange("woundSeverityScale", 1.7D, 0.1D, 20.0D);
         WOUND_CEILING_MULTIPLIER = b
                 .comment("Multiplier on the severity ceiling (a trauma type's maxSeverity) of puncture, laceration, crush and burn wounds, so repeated hits to one limb keep adding instead of saturating at one wound's worth.")
                 .defineInRange("woundCeilingMultiplier", 3.0D, 1.0D, 20.0D);
         WOUND_ZONE_HEAD = b
                 .comment("Extra wound severity for hits to the head (ballistic/explosive). 1.0 = same as a limb.")
-                .defineInRange("woundZoneHead", 1.5D, 0.0D, 10.0D);
+                .defineInRange("woundZoneHead", 1.25D, 0.0D, 10.0D);
         WOUND_ZONE_TORSO = b
                 .comment("Wound severity multiplier for hits to the torso.")
-                .defineInRange("woundZoneTorso", 0.9D, 0.0D, 10.0D);
+                .defineInRange("woundZoneTorso", 0.75D, 0.0D, 10.0D);
         WOUND_ZONE_LIMB = b
                 .comment("Wound severity multiplier for hits to an arm or leg.")
-                .defineInRange("woundZoneLimb", 1.0D, 0.0D, 10.0D);
+                .defineInRange("woundZoneLimb", 0.85D, 0.0D, 10.0D);
+        RESOLVE_HEALTH_FRACTION = b
+                .comment("\"Resolve\" (from STALKER GAMMA): a single ballistic hit cannot kill a casualty whose health is at or above this "
+                        + "fraction of full; it downs them instead, so the next hit (not the first) is the lethal one. "
+                        + "0 disables it. Needs bleed-out enabled.")
+                .defineInRange("resolveHealthFraction", 0.65D, 0.0D, 1.0D);
         ARMOR_SPALL_FRACTION = b
                 .comment("Share of the energy a damaged-but-not-stopped armour absorbs that still reaches the body as wound energy "
                         + "(spall, deformation, the round's remaining shove). 0 = armour that is not pierced protects completely; "
@@ -824,6 +830,7 @@ public final class MedicalConfig {
         final double woundZoneLimb = WOUND_ZONE_LIMB.get();
         final double behindArmorBlunt = BEHIND_ARMOR_BLUNT.get();
         final double armorSpallFraction = ARMOR_SPALL_FRACTION.get();
+        final double resolveHealthFraction = RESOLVE_HEALTH_FRACTION.get();
         final double downedFinishEnergy = DOWNED_FINISH_ENERGY.get();
         final double downedHeadMultiplier = DOWNED_HEAD_MULTIPLIER.get();
         final boolean effectImmuneInCreative = EFFECT_IMMUNE_IN_CREATIVE.get();
@@ -1353,6 +1360,10 @@ public final class MedicalConfig {
 
     public static double woundZoneLimb() {
         return v().woundZoneLimb;
+    }
+
+    public static double resolveHealthFraction() {
+        return v().resolveHealthFraction;
     }
 
     public static double armorSpallFraction() {

@@ -58,10 +58,10 @@ public final class BalanceLog {
             }
             wounds.append("] ");
         }
-        WFMedical.LOGGER.info("[balance] tick={} victim={} by={} cat={} in={} limbs={} armor={} through={} lethal={} "
+        WFMedical.LOGGER.info("[balance] tick={} victim={} by={} src={} cat={} in={} limbs={} armor={} through={} lethal={} "
                         + "limbDown={} wasDowned={} finish={} instakill={} state={} blood={} bleed={} effMax={} effCur={} pain={} wounds={}",
                 victim.level().getGameTime(), victim.getName().getString(),
-                src.getEntity() == null ? "-" : src.getEntity().getName().getString(), cat,
+                src.getEntity() == null ? "-" : src.getEntity().getName().getString(), src.getMsgId(), cat,
                 f(amount), limbs, outcome, f(through), f(lethal), limbDowned, wasDowned, finishedOff, instakill,
                 s.state(), (int) profile.getBloodMl(), f((float) s.totalBleeding()), f(s.effectiveMaxHealth()),
                 f(s.effectiveCurrentHealth()), f(s.systemicPain()), wounds.toString().trim());

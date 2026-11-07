@@ -223,18 +223,34 @@ class BalanceTargetsTest {
         return sum / 60;
     }
 
+    /** GAMMA-like: ~2 hits wreck a head or a limb, ~4 a torso, ~6 to finish a downed torso. */
     @Test
-    void headShotKillsAndTorsoDownsInAFewHits() {
-        assertTrue(mean(ZONES[0], ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, true) <= 1.01, "one unarmoured head hit kills");
-        assertTrue(mean(ZONES[1], ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, false) <= 3.0, "torso downs in 3 or fewer");
-        assertTrue(mean(ZONES[1], ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, true) <= 5.0, "a few more hits finish a downed torso");
+    void headDownsFastAndTheNextHitFinishesIt() {
+        assertTrue(mean(ZONES[0], ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, false) <= 2.0, "a head hit or two downs");
+        assertTrue(mean(ZONES[0], ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, true) <= 3.0, "and one more finishes");
     }
 
     @Test
-    void aDownedCasualtyIsNotImmune() {
-        assertTrue(mean(ZONES[1], ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, true)
-                < mean(ZONES[1], ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, false) + 3.0,
-                "two more rounds into a downed torso end it");
+    void torsoTakesAFewHitsAndADownedCasualtyIsNotImmune() {
+        double down = mean(ZONES[1], ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, false);
+        double dead = mean(ZONES[1], ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, true);
+        assertTrue(down >= 2.5 && down <= 5.0, "torso downs in 3-5 hits, was " + down);
+        assertTrue(dead > down && dead <= down + 3.0, "a few more rounds into the downed torso kill, was " + dead);
+    }
+
+    @Test
+    void limbsAreWreckedInAboutTwoHits() {
+        for (LimbType lt : new LimbType[]{LimbType.LEFT_ARM, LimbType.LEFT_LEG}) {
+            MedicalProfile p = fresh();
+            boolean[] dead = {false};
+            float cap = MedicalConfig.healthShare(lt) * MedicalConfig.maxHealthPoints();
+            int n = 0;
+            do {
+                n++;
+                hit(p, lt, ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, Fixtures.rand(3), dead);
+            } while (p.limb(lt).getCachedHealthReduction() < cap && n < 20);
+            assertTrue(n >= 1 && n <= 3, lt + " disabled in " + n);
+        }
     }
 
     @Test
@@ -242,8 +258,8 @@ class BalanceTargetsTest {
         double plate = mean(ZONES[1], ArmorOutcome.REDUCED, PLATE_THROUGH, PLATE_ABSORBED, false);
         double ap = mean(ZONES[1], ArmorOutcome.REDUCED, AP_THROUGH, AP_ABSORBED, false);
         double bare = mean(ZONES[1], ArmorOutcome.THROUGH, RIFLE, RIFLE_ABSORBED, false);
-        assertTrue(plate >= 4 && plate <= 10, "plate vs rifle torso: " + plate);
-        assertTrue(ap >= 2.5 && ap <= 4.5, "AP vs plate torso: " + ap);
+        assertTrue(plate >= 6 && plate <= 14, "plate vs rifle torso: " + plate);
+        assertTrue(ap >= 3.5 && ap <= 6.5, "AP vs plate torso: " + ap);
         assertTrue(plate > ap && ap > bare, "bare < AP-through-plate < rifle-on-plate");
     }
 

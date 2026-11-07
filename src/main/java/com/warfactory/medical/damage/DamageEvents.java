@@ -109,7 +109,8 @@ public final class DamageEvents {
         boolean finishDowned = alreadyDowned && MedicalConfig.finishDownedOnHit();
 
         HurtResolution res = finishDowned ? null : resolveHit(player, src, amount, profile);
-        if (alreadyDowned && res != null && !res.majorTrauma()) {
+        // Only an attacker finishes a downed casualty: crawling into a wall or a tick of environment must not.
+        if (alreadyDowned && res != null && !res.majorTrauma() && src != null && src.getEntity() != null) {
             finishDowned = finishesDowned(profile, res);
         }
         if (BalanceLog.on()) {
@@ -189,9 +190,14 @@ public final class DamageEvents {
         boolean majorTrauma = primaryOutcome != ArmorOutcome.STOPPED
                 && DamageConfig.canInstakillOnImpact(cat)
                 && throughEnergy >= lethal;
-        boolean limbDowned = majorTrauma && cat == DamageCategory.BALLISTIC && !primary.isVital()
+        // Resolve (STALKER GAMMA): a healthy casualty is downed by a hit that would kill, not killed by it.
+        boolean resolve = majorTrauma && cat == DamageCategory.BALLISTIC && MedicalConfig.enableBleedout()
+                && MedicalConfig.resolveHealthFraction() > 0.0D
+                && profile.cached().effectiveCurrentHealth()
+                >= MedicalConfig.maxHealthPoints() * (float) MedicalConfig.resolveHealthFraction();
+        boolean limbDowned = resolve || (majorTrauma && cat == DamageCategory.BALLISTIC && !primary.isVital()
                 && MedicalConfig.enableBleedout()
-                && throughEnergy < lethal * (float) MedicalConfig.majorTraumaLimbMultiplier();
+                && throughEnergy < lethal * (float) MedicalConfig.majorTraumaLimbMultiplier());
         if (BalanceLog.on()) {
             StringBuilder names = new StringBuilder();
             for (LimbType lt : limbs) {
