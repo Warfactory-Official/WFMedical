@@ -43,4 +43,10 @@ versionRange = "[1.8.38,2)"
 ordering = "AFTER"
 side = "BOTH"
 
-
+# Dead bodies: the Corpse mod stores a dead player's or soldier's kit in a corpse entity (keepInventory off).
+[[dependencies.${ mod_id }]]
+modId = "corpse"
+type = "optional"
+versionRange = "[1.21.1-1.1.13,1.21.1-1.2)"
+ordering = "AFTER"
+side = "BOTH"
