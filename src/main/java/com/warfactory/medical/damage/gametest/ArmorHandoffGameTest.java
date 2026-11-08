@@ -166,6 +166,33 @@ public class ArmorHandoffGameTest {
         helper.succeed();
     }
 
+    /**
+     * A uniform (no flat threshold, just a share of every hit) on a body the engine kills: the kill is a hit of
+     * {@code Float.MAX_VALUE}, a tenth of which is a lot of wear, and a piece worn to nothing is destroyed by vanilla's
+     * own armour pass (with the break sound) even though this mod zeroes that pass's damage.
+     */
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
+    public static void aUniformSurvivesTheHitThatKillsItsWearer(GameTestHelper helper) {
+        for (var key : java.util.List.of(com.warfactory.medical.body.DamageTypes.BLEEDING_OUT,
+                com.warfactory.medical.body.DamageTypes.GIVING_UP, com.warfactory.medical.body.DamageTypes.ASPHYXIATION,
+                com.warfactory.medical.body.DamageTypes.OVERDOSE)) {
+            TestBodies.Victim victim = TestBodies.victim(helper);
+            ItemStack suit = new ItemStack(net.minecraft.world.item.Items.LEATHER_CHESTPLATE);   // wflib derives a share-of-every-hit profile from it
+            victim.setItemSlot(EquipmentSlot.CHEST, suit);
+            Holder<DamageType> type = helper.getLevel().registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).getOrThrow(key);
+            victim.hurt(new DamageSource(type), Float.MAX_VALUE);
+            if (!victim.isDeadOrDying()) {
+                helper.fail(key.location() + " did not kill the body");
+                return;
+            }
+            if (suit.isEmpty() || suit.getDamageValue() != 0) {
+                helper.fail(key.location() + " ruined the garment: " + (suit.isEmpty() ? "destroyed" : suit.getDamageValue() + "/" + suit.getMaxDamage()));
+                return;
+            }
+        }
+        helper.succeed();
+    }
+
     // --- fixtures ---------------------------------------------------------------------------------
 
     private static boolean outcomeIs(GameTestHelper helper, TestBodies.Victim victim, DamageSource source,

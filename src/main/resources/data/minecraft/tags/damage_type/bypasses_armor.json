@@ -1,0 +1,8 @@
+{
+  "values": [
+    "wfmedical:bleeding_out",
+    "wfmedical:giving_up",
+    "wfmedical:asphyxiation",
+    "wfmedical:overdose"
+  ]
+}

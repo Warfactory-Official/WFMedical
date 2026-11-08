@@ -23,6 +23,12 @@ public class DamageSources {
         return source(level, DamageTypes.OVERDOSE);
     }
 
+    /** The engine's own kills: the end of a body, not a blow to it, so no armour, wound model or vanilla armour wear answers for them. */
+    public static boolean isEngineKill(DamageSource source) {
+        return source != null && (source.is(DamageTypes.BLEEDING_OUT) || source.is(DamageTypes.GIVING_UP)
+                || source.is(DamageTypes.ASPHYXIATION) || source.is(DamageTypes.OVERDOSE));
+    }
+
     private static DamageSource source(Level level, ResourceKey<DamageType> key) {
         return new DamageSource(
             level.registryAccess()

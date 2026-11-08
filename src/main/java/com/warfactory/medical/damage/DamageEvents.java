@@ -70,7 +70,7 @@ public final class DamageEvents {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
-        if (player.level().isClientSide) {
+        if (player.level().isClientSide || com.warfactory.medical.body.DamageSources.isEngineKill(event.getSource())) {
             return;
         }
         if (!handleMedicalHit(event, player)) {
