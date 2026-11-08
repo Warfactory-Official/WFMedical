@@ -128,6 +128,44 @@ public class ArmorHandoffGameTest {
         helper.succeed();
     }
 
+    /**
+     * The engine's own kill (bled out, gave up, asphyxiated, overdosed) is a hit of {@code Float.MAX_VALUE}. It is the end
+     * of the body, not a blow to it: no worn piece, managed or vanilla, may lose condition to it.
+     */
+    @GameTest(templateNamespace = WFMedical.MOD_ID, template = TEMPLATE)
+    public static void theHitThatKillsABodyDoesNotWearItsArmour(GameTestHelper helper) {
+        for (var key : java.util.List.of(com.warfactory.medical.body.DamageTypes.BLEEDING_OUT,
+                com.warfactory.medical.body.DamageTypes.GIVING_UP, com.warfactory.medical.body.DamageTypes.ASPHYXIATION,
+                com.warfactory.medical.body.DamageTypes.OVERDOSE)) {
+            TestBodies.Victim victim = TestBodies.victim(helper);
+            ItemStack helmet = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.fromNamespaceAndPath(BALLISTICS, "combat_helmet")));
+            ItemStack vest = carrier(helper);
+            ItemStack plain = new ItemStack(net.minecraft.world.item.Items.IRON_BOOTS);
+            victim.setItemSlot(EquipmentSlot.HEAD, helmet);
+            victim.setItemSlot(EquipmentSlot.CHEST, vest);
+            victim.setItemSlot(EquipmentSlot.FEET, plain);
+            Holder<DamageType> type = helper.getLevel().registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).getOrThrow(key);
+            victim.hurt(new DamageSource(type), Float.MAX_VALUE);
+            if (!victim.isDeadOrDying()) {
+                helper.fail(key.location() + " did not kill the body");
+                return;
+            }
+            // The stacks themselves: dying empties the slots, but the pieces go on as the dropped loot.
+            if (plain.getDamageValue() != 0) {
+                helper.fail(key.location() + " wore a vanilla piece: " + plain.getDamageValue() + "/" + plain.getMaxDamage());
+                return;
+            }
+            for (ItemStack worn : new ItemStack[]{helmet, vest}) {
+                if (com.wf.wflib.armor.api.ArmorStacks.conditionFraction(worn) < 1.0D) {
+                    helper.fail(key.location() + " wore the " + worn.getItem() + ": condition "
+                            + com.wf.wflib.armor.api.ArmorStacks.conditionFraction(worn));
+                    return;
+                }
+            }
+        }
+        helper.succeed();
+    }
+
     // --- fixtures ---------------------------------------------------------------------------------
 
     private static boolean outcomeIs(GameTestHelper helper, TestBodies.Victim victim, DamageSource source,
