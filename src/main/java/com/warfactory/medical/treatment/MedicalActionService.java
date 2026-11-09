@@ -1,5 +1,6 @@
 package com.warfactory.medical.treatment;
 
+import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.body.api.MedicalState;
 import com.warfactory.medical.body.attachment.IMedicalData;
 import com.warfactory.medical.body.attachment.MedicalAttachments;
@@ -252,6 +253,9 @@ public final class MedicalActionService {
         if (!profile.hasActiveTreatment()) {
             return;
         }
+        WFMedical.LOGGER.info("[medical-action] tick={} actor={} item={} cancelled={} elapsed={}/{}",
+                player.level().getGameTime(), player.getName().getString(), profile.getActiveItemId(), reason,
+                player.level().getGameTime() - profile.getActiveStartGameTime(), profile.getActiveTotalTicks());
         profile.clearActiveTreatment();
         TreatmentNetwork.sendActiveTreatment(player, ActiveTreatmentPacket.inactive());
     }

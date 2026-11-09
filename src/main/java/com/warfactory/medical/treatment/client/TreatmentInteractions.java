@@ -35,6 +35,7 @@ public final class TreatmentInteractions {
 
     private static int lockedSlot = -1;
     private static boolean wasActive;
+    private static boolean useClaimed;
 
     private TreatmentInteractions() {
     }
@@ -57,10 +58,26 @@ public final class TreatmentInteractions {
         event.setSwingHand(false);
         event.setCanceled(true);
 
+        // Vanilla repeats use while held; a completed injection must not silently start another dose.
+        if (!claimUsePress()) {
+            return;
+        }
         if (MedicalState.isHandsDisabled(player) || ClientTreatmentCache.hasActiveTreatment()) {
             return;
         }
         beginTreatment(mc, player, held);
+    }
+
+    static boolean claimUsePress() {
+        if (useClaimed) {
+            return false;
+        }
+        useClaimed = true;
+        return true;
+    }
+
+    static void releaseUsePress() {
+        useClaimed = false;
     }
 
     private static void beginTreatment(Minecraft mc, LocalPlayer player, ItemStack held) {
@@ -201,6 +218,9 @@ public final class TreatmentInteractions {
     public static void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
+        if (player == null || !mc.options.keyUse.isDown()) {
+            releaseUsePress();
+        }
         boolean active = player != null && ClientTreatmentCache.hasActiveTreatment();
         if (active) {
             if (lockedSlot < 0) {

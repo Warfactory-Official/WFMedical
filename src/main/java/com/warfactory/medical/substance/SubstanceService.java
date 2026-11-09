@@ -1,5 +1,6 @@
 package com.warfactory.medical.substance;
 
+import com.warfactory.medical.WFMedical;
 import com.warfactory.medical.body.attachment.IMedicalData;
 import com.warfactory.medical.body.attachment.MedicalAttachments;
 import com.warfactory.medical.body.MedicalConfig;
@@ -50,6 +51,8 @@ public final class SubstanceService {
         }
         MedicalProfile profile = targetData.getProfile();
         long now = target.level().getGameTime();
+        float loadBefore = profile.getDrugLoad();
+        HealthState stateBefore = profile.getState();
 
         if (substance.antidote()) {
             profile.setDrugLoad(Math.max(0.0F, profile.getDrugLoad() - substance.reversalAmount()));
@@ -105,6 +108,12 @@ public final class SubstanceService {
 
         PhysiologyParams params = MedicalConfig.toPhysiologyParams();
         DerivedStats stats = profile.recompute(params);
+        WFMedical.LOGGER.info("[medical-dose] tick={} actor={} target={} item={} load={}->{} overdoseThreshold={} "
+                        + "state={}->{} blood={} overdose={} asphyxia={} latched={}",
+                now, actor.getName().getString(), target.getName().getString(), substance.itemId(),
+                loadBefore, profile.getDrugLoad(), substance.overdoseThreshold(), stateBefore, stats.state(),
+                profile.getBloodMl(), profile.isOverdoseUnconscious(),
+                profile.isAsphyxiating() || profile.isAsphyxiaUnconscious(), profile.isUnconsciousLatched());
         if (target instanceof ServerPlayer tp) {
             if (!((tp.isCreative() || tp.isSpectator()) && MedicalConfig.effectImmuneInCreative())) {
                 MedicalEffects.apply(tp, stats, MedicalConfig.manageNaturalRegen());
